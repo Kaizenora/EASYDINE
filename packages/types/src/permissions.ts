@@ -53,7 +53,7 @@ export const PERMISSION_IMPLIES: Partial<Record<PermissionKey, PermissionKey[]>>
 
 /** True when `held` satisfies `required`, directly or through PERMISSION_IMPLIES. */
 export function permissionSatisfied(held: readonly string[], required: string): boolean {
-  if (held.includes(required)) return true;
+  if (held.includes("*") || held.includes(required)) return true;
   return Object.entries(PERMISSION_IMPLIES).some(
     ([owner, implied]) => held.includes(owner) && (implied as string[]).includes(required),
   );

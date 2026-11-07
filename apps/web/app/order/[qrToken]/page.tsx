@@ -14,6 +14,7 @@ import {
   Mic,
   MicOff,
   Minus,
+  Phone,
   Plus,
   Receipt,
   Search,
@@ -21,10 +22,11 @@ import {
   ShoppingBag,
   Sparkles,
   Star,
+  User,
   UtensilsCrossed,
   X,
 } from "lucide-react";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
@@ -74,7 +76,7 @@ interface PublicMenuItem {
 }
 
 interface CartLine {
-  key: string;
+  id: string; // unique cart line ID so items with different instructions remain separate
   menuItemId: string;
   name: string;
   imageUrl?: string;
@@ -124,11 +126,16 @@ export default function ZomatoStyleCustomerMenu({
 }) {
   const { qrToken } = use(params);
   const nameStorageKey = `qr-guest-name:${qrToken}`;
+  const phoneStorageKey = `qr-guest-phone:${qrToken}`;
   const queryClient = useQueryClient();
 
-  // State
+  // Customer identity
   const [guestName, setGuestName] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
   const [nameDraft, setNameDraft] = useState("");
+  const [phoneDraft, setPhoneDraft] = useState("");
+
+  // Cart
   const [cart, setCart] = useState<CartLine[]>([]);
   const [placed, setPlaced] = useState<{ orderNumber: string } | null>(null);
 
@@ -144,16 +151,19 @@ export default function ZomatoStyleCustomerMenu({
   const [isListeningMic, setIsListeningMic] = useState(false);
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [showCartDrawer, setShowCartDrawer] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   // Bookmarked items simulation
   const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({});
 
-  // Load guest name
+  // Load customer credentials
   useEffect(() => {
-    const saved = sessionStorage.getItem(nameStorageKey);
-    if (saved) setGuestName(saved);
-  }, [nameStorageKey]);
+    const savedName = sessionStorage.getItem(nameStorageKey);
+    const savedPhone = sessionStorage.getItem(phoneStorageKey);
+    if (savedName) setGuestName(savedName);
+    if (savedPhone) setGuestPhone(savedPhone);
+  }, [nameStorageKey, phoneStorageKey]);
 
   useEffect(() => {
     if (placed) {
@@ -173,7 +183,7 @@ export default function ZomatoStyleCustomerMenu({
   const { data: status } = useQuery({
     queryKey: ["public-status", qrToken],
     queryFn: () => api.get<PublicStatus>(`/public/menu/${qrToken}/status`),
-    refetchInterval: 6000,
+    refetchInterval: 5000,
     enabled: !!data,
   });
 
@@ -187,7 +197,7 @@ export default function ZomatoStyleCustomerMenu({
   const placeOrder = useMutation({
     mutationFn: () =>
       api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
-        guestName,
+        guestName: guestPhone ? `${guestName} (${guestPhone})` : guestName,
         items: cart.map((l) => ({
           menuItemId: l.menuItemId,
           quantity: l.quantity,
@@ -198,16 +208,20 @@ export default function ZomatoStyleCustomerMenu({
     onSuccess: (order) => {
       setPlaced(order);
       setCart([]);
+      setShowConfirmModal(false);
       setShowCartDrawer(false);
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
     },
   });
 
-  const confirmName = () => {
-    const trimmed = nameDraft.trim();
-    if (!trimmed) return;
-    sessionStorage.setItem(nameStorageKey, trimmed);
-    setGuestName(trimmed);
+  const confirmCheckIn = () => {
+    const trimmedName = nameDraft.trim();
+    const trimmedPhone = phoneDraft.trim();
+    if (!trimmedName) return;
+    sessionStorage.setItem(nameStorageKey, trimmedName);
+    sessionStorage.setItem(phoneStorageKey, trimmedPhone);
+    setGuestName(trimmedName);
+    setGuestPhone(trimmedPhone);
   };
 
   // Cart calculations
@@ -228,7 +242,7 @@ export default function ZomatoStyleCustomerMenu({
     setIsListeningMic(false);
   };
 
-  // Add line to cart
+  // Add line to cart — each distinct cooking note creates its own separate line!
   const commitAddToCart = () => {
     if (!customizingItem) return;
     const { item, categoryName } = customizingItem;
@@ -240,45 +254,53 @@ export default function ZomatoStyleCustomerMenu({
       g.modifierGroup.modifiers.filter((m) => selectedModifiers.includes(m.id)).map((m) => m.name)
     ).join(", ");
 
-    const key = `${item.id}:${[...selectedModifiers].sort().join(",")}:${cookingNote.trim()}`;
+    const trimmedNote = cookingNote.trim();
     const unitPrice = Number(item.price) + extraPrice;
     const imageUrl = getDishImage(item, categoryName);
 
     setCart((prev) => {
-      const existing = prev.find((l) => l.key === key);
-      if (existing) {
-        return prev.map((l) => (l.key === key ? { ...l, quantity: l.quantity + customizingQty } : l));
+      // Find if an item exists with the exact same modifiers AND exact same note
+      const existingIdx = prev.findIndex(
+        (l) =>
+          l.menuItemId === item.id &&
+          l.modifierIds.slice().sort().join(",") === selectedModifiers.slice().sort().join(",") &&
+          l.cookingNote === trimmedNote
+      );
+
+      if (existingIdx >= 0) {
+        // Same note -> increment that specific line
+        return prev.map((l, idx) => (idx === existingIdx ? { ...l, quantity: l.quantity + customizingQty } : l));
       }
-      return [
-        ...prev,
-        {
-          key,
-          menuItemId: item.id,
-          name: item.name,
-          imageUrl,
-          isVeg: item.isVeg,
-          modifierIds: selectedModifiers,
-          modifierLabel: modLabels,
-          unitPrice,
-          quantity: customizingQty,
-          cookingNote: cookingNote.trim(),
-        },
-      ];
+
+      // Different note or new -> create a separate distinct cart line!
+      const newLine: CartLine = {
+        id: `cart-line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        menuItemId: item.id,
+        name: item.name,
+        imageUrl,
+        isVeg: item.isVeg,
+        modifierIds: selectedModifiers,
+        modifierLabel: modLabels,
+        unitPrice,
+        quantity: customizingQty,
+        cookingNote: trimmedNote,
+      };
+      return [...prev, newLine];
     });
 
     setCustomizingItem(null);
   };
 
-  const removeOneFromCart = (key: string) => {
+  const removeOneFromCart = (lineId: string) => {
     setCart((prev) =>
       prev
-        .map((l) => (l.key === key ? { ...l, quantity: l.quantity - 1 } : l))
+        .map((l) => (l.id === lineId ? { ...l, quantity: l.quantity - 1 } : l))
         .filter((l) => l.quantity > 0)
     );
   };
 
-  const addOneToCart = (key: string) => {
-    setCart((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: l.quantity + 1 } : l)));
+  const addOneToCart = (lineId: string) => {
+    setCart((prev) => prev.map((l) => (l.id === lineId ? { ...l, quantity: l.quantity + 1 } : l)));
   };
 
   // Web Speech API for voice instructions
@@ -335,7 +357,6 @@ export default function ZomatoStyleCustomerMenu({
       .filter((cat) => cat.items.length > 0);
   }, [data?.categories, dietFilter, searchQuery]);
 
-  // Total items in menu
   const totalItemCount = useMemo(() => {
     return (data?.categories ?? []).reduce((acc, c) => acc + c.items.length, 0);
   }, [data?.categories]);
@@ -353,31 +374,32 @@ export default function ZomatoStyleCustomerMenu({
     );
   }
 
-  // Guest Check-In Screen
+  // 1. GUEST CHECK-IN SCREEN (Full Name + Mobile Number)
   if (!guestName) {
     return (
       <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0d0d0f] px-6 text-center text-white">
         <div className="absolute inset-0 bg-gradient-to-b from-rose-950/20 via-transparent to-black pointer-events-none" />
         <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 shadow-xl shadow-rose-600/30">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 shadow-xl shadow-rose-600/30">
             <UtensilsCrossed className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white">{data?.branchName ?? "EasyDine"}</h1>
-          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-800/80 px-3 py-1 text-xs font-medium text-rose-300 border border-neutral-700">
+          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-800/80 px-3 py-1 text-xs font-semibold text-rose-300 border border-neutral-700">
             <MapPin className="h-3 w-3" />
             {data?.tableName ?? "Table Order"}
           </div>
 
           <form
-            className="mt-8 flex w-full flex-col gap-3"
+            className="mt-6 flex w-full flex-col gap-3 text-left"
             onSubmit={(e) => {
               e.preventDefault();
-              confirmName();
+              confirmCheckIn();
             }}
           >
-            <div className="text-left">
-              <label htmlFor="guest-name" className="text-xs font-semibold text-neutral-300">
-                Please enter your name to view menu & order
+            <div>
+              <label htmlFor="guest-name" className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-rose-400" />
+                Full Name
               </label>
               <input
                 id="guest-name"
@@ -385,14 +407,34 @@ export default function ZomatoStyleCustomerMenu({
                 onChange={(e) => setNameDraft(e.target.value)}
                 placeholder="e.g. Rahul Sharma"
                 autoFocus
+                required
                 maxLength={60}
-                className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                className="mt-1.5 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none"
               />
             </div>
+
+            <div>
+              <label htmlFor="guest-phone" className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-rose-400" />
+                Mobile Number
+              </label>
+              <input
+                id="guest-phone"
+                type="tel"
+                value={phoneDraft}
+                onChange={(e) => setPhoneDraft(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="10-digit mobile number"
+                required
+                maxLength={10}
+                className="mt-1.5 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none"
+              />
+              <p className="mt-1 text-[11px] text-neutral-500">For order notifications and table service</p>
+            </div>
+
             <button
               type="submit"
-              disabled={!nameDraft.trim()}
-              className="mt-2 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-bold text-white shadow-lg shadow-rose-600/30 transition hover:brightness-110 disabled:opacity-50"
+              disabled={!nameDraft.trim() || phoneDraft.length < 10}
+              className="mt-3 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-extrabold text-white shadow-lg shadow-rose-600/30 transition hover:brightness-110 active:scale-95 disabled:opacity-50"
             >
               Continue to Menu
             </button>
@@ -404,13 +446,13 @@ export default function ZomatoStyleCustomerMenu({
 
   return (
     <div className="relative min-h-screen bg-[#0d0d0f] text-neutral-100 pb-36 font-sans">
-      {/* 1. TOP HEADER (Zomato Style) */}
+      {/* 2. TOP HEADER (Zomato Style) */}
       <header className="sticky top-0 z-30 border-b border-neutral-800/80 bg-[#0d0d0f]/95 backdrop-blur-md px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <button
             onClick={() => setGuestName("")}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-800/80 text-neutral-300 hover:text-white"
-            title="Change name"
+            title="Change name/number"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -450,14 +492,14 @@ export default function ZomatoStyleCustomerMenu({
                 <Info className="h-4 w-4 text-neutral-400" />
               </div>
               <p className="mt-0.5 text-xs text-neutral-400 flex items-center gap-1">
-                <MapPin className="h-3 w-3 text-rose-400" /> Dine-in Experience · Guest: <strong className="text-neutral-200">{guestName}</strong>
+                <MapPin className="h-3 w-3 text-rose-400" /> Dine-in · Guest: <strong className="text-neutral-200">{guestName}</strong>
               </p>
               <div className="mt-1.5 flex items-center gap-2 text-[11px] text-neutral-400">
                 <span className="flex items-center gap-1 text-emerald-400 font-semibold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
                   <Clock className="h-3 w-3" /> 15-20 mins prep
                 </span>
                 <span>·</span>
-                <span className="text-neutral-300">Fresh Clay Oven & Wok</span>
+                <span className="text-neutral-300">Fresh Kitchen & Tandoor</span>
               </div>
             </div>
 
@@ -476,7 +518,7 @@ export default function ZomatoStyleCustomerMenu({
             <button
               onClick={() => requestService.mutate("WAITER")}
               disabled={requestService.isPending || status?.openRequests.includes("WAITER")}
-              className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-rose-500 hover:text-white transition disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 px-3.5 py-1.5 text-xs font-semibold text-neutral-200 hover:border-rose-500 hover:text-white transition disabled:opacity-60"
             >
               <BellRing className="h-3.5 w-3.5 text-amber-400" />
               {status?.openRequests.includes("WAITER") ? "Waiter Alerted" : "Call Waiter"}
@@ -486,7 +528,7 @@ export default function ZomatoStyleCustomerMenu({
               <button
                 onClick={() => requestService.mutate("BILL")}
                 disabled={requestService.isPending || status?.openRequests.includes("BILL")}
-                className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-emerald-500 hover:text-white transition disabled:opacity-60"
+                className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 px-3.5 py-1.5 text-xs font-semibold text-neutral-200 hover:border-emerald-500 hover:text-white transition disabled:opacity-60"
               >
                 <Receipt className="h-3.5 w-3.5 text-emerald-400" />
                 {status?.openRequests.includes("BILL") ? "Bill Requested" : "Request Bill"}
@@ -534,7 +576,7 @@ export default function ZomatoStyleCustomerMenu({
         </div>
       </header>
 
-      {/* 2. LIVE ORDER STATUS BANNER (if placed) */}
+      {/* 3. LIVE ORDER STATUS BANNER */}
       {status?.order && (
         <div className="mx-4 mt-3 overflow-hidden rounded-2xl border border-rose-900/50 bg-gradient-to-r from-rose-950/40 via-neutral-900 to-neutral-900 p-4 shadow-lg">
           <div className="flex items-center justify-between">
@@ -557,7 +599,7 @@ export default function ZomatoStyleCustomerMenu({
               <div key={it.id} className="flex justify-between items-center">
                 <span>
                   {it.quantity} × {it.nameSnapshot}
-                  {it.kitchenNote && <span className="text-[10px] text-amber-300/80 ml-1">({it.kitchenNote})</span>}
+                  {it.kitchenNote && <span className="text-[10px] text-amber-300/90 ml-1.5 font-medium bg-amber-950/50 px-1 py-0.5 rounded">Note: {it.kitchenNote}</span>}
                 </span>
                 <span className="text-[10px] text-neutral-400 uppercase font-medium">{it.status}</span>
               </div>
@@ -566,7 +608,7 @@ export default function ZomatoStyleCustomerMenu({
         </div>
       )}
 
-      {/* 3. MENU DISH SECTIONS */}
+      {/* 4. DISH SECTIONS */}
       <main className="px-4 py-4 space-y-8">
         {isLoading ? (
           <div className="space-y-4">
@@ -577,7 +619,7 @@ export default function ZomatoStyleCustomerMenu({
         ) : filteredCategories.length === 0 ? (
           <div className="py-16 text-center text-neutral-400">
             <UtensilsCrossed className="mx-auto h-10 w-10 text-neutral-600 mb-2" />
-            <p className="text-sm font-medium">No dishes match your search or filter</p>
+            <p className="text-sm font-medium">No dishes match your search</p>
           </div>
         ) : (
           filteredCategories.map((category) => {
@@ -600,7 +642,7 @@ export default function ZomatoStyleCustomerMenu({
                   />
                 </button>
 
-                {/* Dish Cards List */}
+                {/* Dish Cards */}
                 {!isCollapsed && (
                   <div className="divide-y divide-neutral-800/80">
                     {category.items.map((item) => {
@@ -637,14 +679,14 @@ export default function ZomatoStyleCustomerMenu({
                               </span>
                             </div>
 
-                            {/* Description */}
+                            {/* Description / Specifications */}
                             {item.description && (
                               <p className="mt-1 text-xs text-neutral-400 line-clamp-2 leading-relaxed">
                                 {item.description}
                               </p>
                             )}
 
-                            {/* Bookmark / Share Action Icons */}
+                            {/* Action Icons */}
                             <div className="mt-2.5 flex items-center gap-3 text-neutral-500">
                               <button
                                 onClick={() => setBookmarked((prev) => ({ ...prev, [item.id]: !isItemBookmarked }))}
@@ -665,7 +707,7 @@ export default function ZomatoStyleCustomerMenu({
                             </div>
                           </div>
 
-                          {/* Right: Photo + Floating ADD button */}
+                          {/* Right: Photo + ADD button */}
                           <div className="relative shrink-0 flex flex-col items-center">
                             <div className="h-28 w-28 overflow-hidden rounded-2xl bg-neutral-800 shadow-md">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -677,24 +719,25 @@ export default function ZomatoStyleCustomerMenu({
                               />
                             </div>
 
-                            {/* ADD button floating on bottom of image */}
+                            {/* Floating ADD button on dish card */}
                             <div className="-mt-4 z-10 flex flex-col items-center">
-                              {qtyInCart > 0 ? (
-                                <button
-                                  onClick={() => handleOpenCustomize(item, category.name)}
-                                  className="flex h-8 items-center justify-center gap-1 rounded-lg bg-rose-600 px-3 text-xs font-black uppercase text-white shadow-lg shadow-rose-600/30 hover:bg-rose-500"
-                                >
-                                  <span>{qtyInCart} in Cart</span>
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleOpenCustomize(item, category.name)}
-                                  className="flex h-8 min-w-[80px] items-center justify-center rounded-lg border border-rose-500/80 bg-neutral-900/95 px-4 text-xs font-extrabold uppercase text-rose-400 shadow-md backdrop-blur hover:bg-rose-600 hover:text-white transition active:scale-95"
-                                >
-                                  ADD +
-                                </button>
-                              )}
+                              <button
+                                onClick={() => handleOpenCustomize(item, category.name)}
+                                className={`flex h-8 items-center justify-center gap-1 rounded-lg px-3.5 text-xs font-extrabold uppercase shadow-md transition active:scale-95 ${
+                                  qtyInCart > 0
+                                    ? "bg-rose-600 text-white shadow-rose-600/30"
+                                    : "border border-rose-500/80 bg-neutral-900/95 text-rose-400 hover:bg-rose-600 hover:text-white"
+                                }`}
+                              >
+                                {qtyInCart > 0 ? (
+                                  <>
+                                    <span>{qtyInCart} in Cart</span>
+                                    <Plus className="h-3 w-3" />
+                                  </>
+                                ) : (
+                                  <span>ADD +</span>
+                                )}
+                              </button>
                               <span className="mt-0.5 text-[9px] font-semibold text-neutral-400">customisable</span>
                             </div>
                           </div>
@@ -709,7 +752,7 @@ export default function ZomatoStyleCustomerMenu({
         )}
       </main>
 
-      {/* 4. FLOATING "🍽 MENU" PILL (Bottom Right) */}
+      {/* 5. FLOATING "🍽 MENU" PILL */}
       <div className="fixed bottom-20 right-4 z-20">
         <button
           onClick={() => setShowCategorySheet(true)}
@@ -720,7 +763,7 @@ export default function ZomatoStyleCustomerMenu({
         </button>
       </div>
 
-      {/* 5. FLOATING VIEW CART BAR (Zomato Style) */}
+      {/* 6. FLOATING VIEW CART BAR */}
       {cartCount > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-neutral-800 bg-[#121214]/95 backdrop-blur-lg px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.7)]">
           <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
@@ -742,7 +785,7 @@ export default function ZomatoStyleCustomerMenu({
         </div>
       )}
 
-      {/* 6. MODAL: ITEM CUSTOMIZATION & COOKING REQUEST (Image 3) */}
+      {/* 7. CUSTOMISATION & COOKING REQUEST MODAL (Supports distinct notes per portion) */}
       {customizingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center p-0 sm:p-4 animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -784,7 +827,7 @@ export default function ZomatoStyleCustomerMenu({
               </button>
             </div>
 
-            {/* Modifiers / Add-ons List */}
+            {/* Modifiers List */}
             {(customizingItem.item.modifierGroups ?? []).length > 0 && (
               <div className="mt-4 space-y-4">
                 {customizingItem.item.modifierGroups!.map(({ modifierGroup }) => (
@@ -838,12 +881,12 @@ export default function ZomatoStyleCustomerMenu({
               </div>
             )}
 
-            {/* Cooking Request with Speech-To-Text Mic Button */}
+            {/* Cooking Request for THIS portion */}
             <div className="mt-5 rounded-2xl border border-neutral-800/80 bg-neutral-900/60 p-3.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                  Add a cooking request (optional)
+                  Cooking instruction for this item:
                 </span>
                 <button
                   type="button"
@@ -856,12 +899,12 @@ export default function ZomatoStyleCustomerMenu({
                   title="Speak instruction"
                 >
                   {isListeningMic ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-                  {isListeningMic ? "Listening..." : "Speak Note"}
+                  {isListeningMic ? "Listening..." : "Speak"}
                 </button>
               </div>
 
-              <p className="mt-1 text-[10px] text-neutral-400 leading-normal">
-                The restaurant will try its best to fulfill your instructions (e.g. &quot;Less spicy&quot;, &quot;No onions&quot;).
+              <p className="mt-1 text-[10px] text-neutral-400">
+                Want this one spicy, crispy, or mild? Type or speak note for this item.
               </p>
 
               <textarea
@@ -869,7 +912,7 @@ export default function ZomatoStyleCustomerMenu({
                 maxLength={100}
                 value={cookingNote}
                 onChange={(e) => setCookingNote(e.target.value)}
-                placeholder="e.g. Don't make it too spicy, extra green chutney"
+                placeholder='e.g. "Spicy", "No butter", or "Extra crispy"'
                 className="mt-2.5 w-full rounded-xl border border-neutral-800 bg-[#111113] p-2.5 text-xs text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none"
               />
               <div className="text-right text-[10px] text-neutral-500">{cookingNote.length}/100</div>
@@ -877,7 +920,6 @@ export default function ZomatoStyleCustomerMenu({
 
             {/* Modal Bottom Bar: Stepper + Add Button */}
             <div className="mt-5 flex items-center gap-3">
-              {/* Stepper */}
               <div className="flex items-center rounded-xl border border-rose-500/60 bg-neutral-900 px-2 py-1">
                 <button
                   type="button"
@@ -896,7 +938,6 @@ export default function ZomatoStyleCustomerMenu({
                 </button>
               </div>
 
-              {/* Commit Button */}
               <button
                 type="button"
                 onClick={commitAddToCart}
@@ -914,7 +955,7 @@ export default function ZomatoStyleCustomerMenu({
         </div>
       )}
 
-      {/* 7. BOTTOM SHEET: CATEGORY QUICK JUMP (Image 2) */}
+      {/* 8. CATEGORY QUICK JUMP SHEET */}
       {showCategorySheet && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-t-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl max-h-[80vh] flex flex-col">
@@ -957,7 +998,7 @@ export default function ZomatoStyleCustomerMenu({
         </div>
       )}
 
-      {/* 8. CART DRAWER (Image 3 McDonald's / Zomato Cart) */}
+      {/* 9. CART DRAWER (With Separate Lines for Different Instructions!) */}
       {showCartDrawer && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-t-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl max-h-[90vh] flex flex-col">
@@ -978,7 +1019,7 @@ export default function ZomatoStyleCustomerMenu({
             {/* Cart Items List */}
             <div className="flex-1 overflow-y-auto py-3 divide-y divide-neutral-800/80 space-y-2">
               {cart.map((line) => (
-                <div key={line.key} className="flex items-start justify-between gap-3 pt-2">
+                <div key={line.id} className="flex items-start justify-between gap-3 pt-2">
                   <div className="flex items-start gap-3 flex-1">
                     {line.imageUrl && (
                       <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-800 shrink-0">
@@ -1004,10 +1045,13 @@ export default function ZomatoStyleCustomerMenu({
                         <p className="text-[11px] text-neutral-400 mt-0.5">{line.modifierLabel}</p>
                       )}
 
-                      {line.cookingNote && (
-                        <p className="text-[10px] text-amber-300 font-medium mt-0.5 bg-amber-950/40 px-1.5 py-0.5 rounded inline-block">
+                      {/* Display cooking note for this line */}
+                      {line.cookingNote ? (
+                        <p className="text-[10px] text-amber-300 font-semibold mt-1 bg-amber-950/60 px-2 py-0.5 rounded inline-block border border-amber-800/50">
                           Note: &quot;{line.cookingNote}&quot;
                         </p>
+                      ) : (
+                        <p className="text-[10px] text-neutral-500 mt-0.5 italic">Standard preparation</p>
                       )}
 
                       <p className="text-xs font-bold text-neutral-200 mt-1">
@@ -1020,7 +1064,7 @@ export default function ZomatoStyleCustomerMenu({
                   <div className="flex items-center rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1">
                     <button
                       type="button"
-                      onClick={() => removeOneFromCart(line.key)}
+                      onClick={() => removeOneFromCart(line.id)}
                       className="p-1 text-neutral-400 hover:text-white"
                     >
                       <Minus className="h-3 w-3" />
@@ -1028,7 +1072,7 @@ export default function ZomatoStyleCustomerMenu({
                     <span className="w-6 text-center text-xs font-bold text-white">{line.quantity}</span>
                     <button
                       type="button"
-                      onClick={() => addOneToCart(line.key)}
+                      onClick={() => addOneToCart(line.id)}
                       className="p-1 text-neutral-400 hover:text-white"
                     >
                       <Plus className="h-3 w-3" />
@@ -1054,14 +1098,67 @@ export default function ZomatoStyleCustomerMenu({
               </div>
             </div>
 
-            {/* Place Order Button */}
+            {/* PLACE ORDER BUTTON -> OPENS ONCE CONFIRMATION MODAL */}
             <div className="mt-4 pt-2">
               <button
                 disabled={placeOrder.isPending || cart.length === 0}
-                onClick={() => placeOrder.mutate()}
+                onClick={() => setShowConfirmModal(true)}
                 className="flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-extrabold text-white shadow-lg shadow-rose-600/40 hover:brightness-110 active:scale-95 transition disabled:opacity-50"
               >
-                {placeOrder.isPending ? "Sending to Cashier..." : `Send Order to Kitchen (${formatCurrency(cartTotal)})`}
+                Place Order ({formatCurrency(cartTotal)})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. ONCE CONFIRMATION MODAL BEFORE PLACING ORDER */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl text-center">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-400">
+              <UtensilsCrossed className="h-7 w-7" />
+            </div>
+
+            <h3 className="text-lg font-black text-white">Confirm Your Order?</h3>
+            <p className="mt-1 text-xs text-neutral-400">
+              Table: <strong className="text-neutral-200">{data?.tableName}</strong> · Guest: <strong className="text-neutral-200">{guestName}</strong>
+            </p>
+
+            <div className="my-4 max-h-40 overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-left text-xs space-y-1.5 divide-y divide-neutral-800/60">
+              {cart.map((line) => (
+                <div key={line.id} className="pt-1.5 first:pt-0 flex justify-between items-start">
+                  <div>
+                    <span className="font-semibold text-white">{line.quantity} × {line.name}</span>
+                    {line.cookingNote && (
+                      <p className="text-[10px] text-amber-300 font-medium">({line.cookingNote})</p>
+                    )}
+                  </div>
+                  <span className="font-bold text-neutral-200">{formatCurrency(line.unitPrice * line.quantity)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center px-1 mb-4 text-xs font-bold text-neutral-300">
+              <span>Total Payable Amount</span>
+              <span className="text-sm font-extrabold text-white">{formatCurrency(cartTotal)}</span>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 h-11 rounded-xl border border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-300 hover:bg-neutral-700 transition"
+              >
+                Modify
+              </button>
+              <button
+                type="button"
+                disabled={placeOrder.isPending}
+                onClick={() => placeOrder.mutate()}
+                className="flex-[2] h-11 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-xs font-black uppercase text-white shadow-lg shadow-rose-600/40 hover:brightness-110 active:scale-95 transition disabled:opacity-50"
+              >
+                {placeOrder.isPending ? "Placing..." : "Confirm & Place Order"}
               </button>
             </div>
           </div>

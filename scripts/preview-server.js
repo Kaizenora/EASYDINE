@@ -8,7 +8,16 @@ const demoUser = {
   name: "Restaurant Owner / Cashier",
   roleId: "role-admin",
   roleName: "ADMIN",
-  permissions: ["*"],
+  permissions: [
+    "*",
+    "sales.view", "dashboard.sales.view", "orders.create", "orders.edit", "orders.cancel", "orders.accept",
+    "discounts.apply", "discounts.unlimited", "refunds.process", "orders.delete", "bills.print",
+    "tables.view", "tables.manage", "menu.view", "menu.manage", "inventory.manage", "reports.access",
+    "users.manage", "reports.financial.view", "data.export", "kds.manage", "reservations.manage",
+    "settings.manage", "customers.manage", "audit_log.view", "roles.manage", "backup.manage",
+    "attendance.manage", "delivery.manage", "delivery.rider", "staff.manage", "accounting.manage",
+    "marketing.manage", "operations.manage", "system.update"
+  ],
 };
 
 const demoBranch = {
