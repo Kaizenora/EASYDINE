@@ -170,44 +170,55 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
       </div>
 
       <div className="flex flex-col gap-2.5">
-        {/* Stages: Ordered -> Preparing -> Ready to Serve -> Served */}
-        <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/40 p-1">
-          <Button
+        {/* Status Pipeline: 1. Ordered -> 2. Preparing -> 3. Ready */}
+        <div className="flex items-center justify-between rounded-xl border border-border/80 bg-muted/40 p-1 text-xs font-medium">
+          <button
             type="button"
-            size="sm"
-            variant={ticket.status === "NEW" || ticket.status === "ACCEPTED" ? "default" : "ghost"}
-            className="h-8 text-xs font-semibold"
             disabled={updateStatus.isPending}
             onClick={() => updateStatus.mutate({ id: ticket.id, status: "ACCEPTED" })}
+            className={cn(
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all",
+              ticket.status === "NEW" || ticket.status === "ACCEPTED"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            )}
           >
-            Ordered
-          </Button>
-          <Button
+            1. Ordered
+          </button>
+          <span className="px-1 text-muted-foreground/40 font-bold">→</span>
+          <button
             type="button"
-            size="sm"
-            variant={ticket.status === "PREPARING" ? "default" : "ghost"}
-            className="h-8 text-xs font-semibold"
             disabled={updateStatus.isPending}
             onClick={() => updateStatus.mutate({ id: ticket.id, status: "PREPARING" })}
+            className={cn(
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all",
+              ticket.status === "PREPARING"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            )}
           >
-            Preparing
-          </Button>
-          <Button
+            2. Preparing
+          </button>
+          <span className="px-1 text-muted-foreground/40 font-bold">→</span>
+          <button
             type="button"
-            size="sm"
-            variant={ticket.status === "READY" ? "default" : "ghost"}
-            className="h-8 text-xs font-semibold"
             disabled={updateStatus.isPending}
             onClick={() => updateStatus.mutate({ id: ticket.id, status: "READY" })}
+            className={cn(
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all",
+              ticket.status === "READY"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            )}
           >
-            Ready to Serve
-          </Button>
+            3. Ready
+          </button>
         </div>
 
         {/* Primary Step Action Button */}
         {ticket.status !== "READY" ? (
           <Button
-            className="h-11 w-full text-sm font-semibold"
+            className="h-10 w-full text-sm font-semibold"
             disabled={updateStatus.isPending}
             onClick={() => {
               const target = (ticket.status === "NEW" || ticket.status === "ACCEPTED") ? "PREPARING" : "READY";
@@ -222,7 +233,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           </Button>
         ) : (
           <Button
-            className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
+            className="h-10 w-full bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
             disabled={updateStatus.isPending}
             onClick={() => updateStatus.mutate({ id: ticket.id, status: "SERVED" })}
           >
@@ -234,7 +245,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         {canReject && (
           <Button
             variant="destructive"
-            className="h-10 min-w-0 flex-1 px-3 text-xs"
+            className="h-9 min-w-0 flex-1 px-3 text-xs"
             onClick={() => setRejectOpen(true)}
             aria-label={`Reject ticket for order ${ticket.order.orderNumber}`}
           >
@@ -245,7 +256,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         <Button
           variant="outline"
           size="icon"
-          className="h-10 w-10 shrink-0"
+          className="h-9 w-9 shrink-0"
           title={ticket.isPriority ? "Unmark priority" : "Mark priority"}
           aria-label={ticket.isPriority ? "Unmark priority" : "Mark priority"}
           disabled={setPriority.isPending}
@@ -258,7 +269,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         <Button
           variant="outline"
           size="icon"
-          className="h-10 w-10 shrink-0"
+          className="h-9 w-9 shrink-0"
           title={ticket.printedCount > 0 ? "Reprint ticket (marked REPRINT)" : "Print ticket"}
           aria-label={ticket.printedCount > 0 ? "Reprint ticket" : "Print ticket"}
           disabled={reprint.isPending}

@@ -215,6 +215,67 @@ let demoFloors = [
 ];
 
 let openServiceRequests = [];
+let demoCoupons = [
+  {
+    id: "cpn-1",
+    code: "EASY50",
+    kind: "PERCENT",
+    value: "50",
+    minOrderAmount: "200",
+    maxDiscount: "100",
+    validUntil: null,
+    usageLimit: 100,
+    usedCount: 14,
+    isActive: true,
+  },
+  {
+    id: "cpn-2",
+    code: "FLAT100",
+    kind: "FLAT",
+    value: "100",
+    minOrderAmount: "500",
+    maxDiscount: null,
+    validUntil: null,
+    usageLimit: 50,
+    usedCount: 8,
+    isActive: true,
+  },
+];
+
+let demoCampaigns = [
+  {
+    id: "cmp-1",
+    name: "Weekend Special Discount",
+    channel: "WHATSAPP",
+    segment: "ALL",
+    message: "Enjoy 20% off on your favorite dishes at EasyDine this weekend! Show code WEEKEND20 at the counter.",
+    lastSentAt: new Date(Date.now() - 48 * 3600000).toISOString(),
+    lastSentCount: 42,
+  },
+  {
+    id: "cmp-2",
+    name: "Loyal Customers Treat",
+    channel: "SMS",
+    segment: "LOYAL",
+    message: "Thank you for being our loyal guest! Enjoy a complimentary dessert on your next visit.",
+    lastSentAt: null,
+    lastSentCount: null,
+  },
+];
+
+let demoPromotions = [
+  {
+    id: "pro-1",
+    name: "Evening Happy Hours (4 PM - 7 PM)",
+    kind: "PERCENT",
+    value: "15",
+    daysOfWeek: [1, 2, 3, 4, 5],
+    startTime: "16:00",
+    endTime: "19:00",
+    isActive: true,
+  },
+];
+
 let demoTickets = [
   {
     id: "kot-1",
@@ -356,6 +417,222 @@ const server = http.createServer((req, res) => {
 
   if (pathname.includes("/branches")) {
     return send([demoBranch]);
+  }
+
+  // --- Dashboard preferences ---
+  if (pathname.includes("/dashboard/preferences")) {
+    return send({
+      topOrder: ["kpis", "attention", "charts"],
+      cardOrder: ["tables", "kitchen", "recent", "channels"],
+      hidden: [],
+      trendDays: 14,
+    });
+  }
+
+  // --- Settings General ---
+  if (pathname === "/api/v1/settings" || pathname === "/settings") {
+    return send({
+      restaurant: restaurantSettings,
+      branch: branchSettings,
+    });
+  }
+
+  // --- Restaurant logo upload ---
+  if (pathname.includes("/settings/restaurant/logo")) {
+    const url = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300&auto=format&fit=crop&q=80";
+    restaurantSettings.logoUrl = url;
+    return send({ url });
+  }
+
+  // --- Table Status Update ---
+  if (pathname.includes("/tables/") && pathname.includes("/status")) {
+    const parts = pathname.split("/");
+    const tIndex = parts.indexOf("tables");
+    const tableId = tIndex !== -1 && parts[tIndex + 1] ? parts[tIndex + 1].split("?")[0] : null;
+    return getBody().then((b) => {
+      for (const floor of demoFloors) {
+        const table = floor.tables.find((t) => t.id === tableId);
+        if (table) {
+          table.status = b.status;
+          table.statusSince = new Date().toISOString();
+          return send(table);
+        }
+      }
+      return send({ success: true });
+    });
+  }
+
+  // --- Bill Preview & Coupon Discounts ---
+  if (pathname.includes("/bill-preview")) {
+    return getBody().then((b) => {
+      const subtotal = 700;
+      let discountAmount = 0;
+      let couponCode = b.couponCode ? String(b.couponCode).toUpperCase() : null;
+      let matchedCoupon = null;
+
+      if (couponCode) {
+        matchedCoupon = demoCoupons.find((c) => c.code.toUpperCase() === couponCode && c.isActive);
+        if (matchedCoupon) {
+          discountAmount = matchedCoupon.kind === "PERCENT"
+            ? (subtotal * Number(matchedCoupon.value)) / 100
+            : Number(matchedCoupon.value);
+        } else {
+          discountAmount = 50; // generic preview fallback
+        }
+      } else if (b.discountPercent) {
+        discountAmount = (subtotal * b.discountPercent) / 100;
+      } else if (b.discountFlat) {
+        discountAmount = b.discountFlat;
+      }
+
+      const taxAmount = Math.max(0, (subtotal - discountAmount) * 0.05);
+      const totalDue = Math.max(0, subtotal - discountAmount + taxAmount + (b.tipAmount || 0));
+
+      return send({
+        locked: false,
+        status: "OPEN",
+        subtotal: subtotal,
+        discountAmount: discountAmount,
+        discountPercent: matchedCoupon?.kind === "PERCENT" ? Number(matchedCoupon.value) : (b.discountPercent || 0),
+        discountType: matchedCoupon?.kind || (b.discountPercent ? "PERCENT" : (b.discountFlat ? "FIXED" : null)),
+        discountValue: discountAmount,
+        couponCode: couponCode,
+        promotionName: null,
+        taxAmount: taxAmount,
+        loyaltyPointsRedeemed: b.loyaltyPointsToRedeem || 0,
+        loyaltyDiscountAmount: (b.loyaltyPointsToRedeem || 0) * 1,
+        tipAmount: b.tipAmount || 0,
+        deliveryFee: 0,
+        totalDue: totalDue,
+        amountPaid: 0,
+        balanceDue: totalDue,
+      });
+    });
+  }
+
+  // --- Marketing: Coupons ---
+  if (pathname.includes("/marketing/coupons")) {
+    const parts = pathname.split("/");
+    const cIndex = parts.indexOf("coupons");
+    const couponId = cIndex !== -1 && parts[cIndex + 1] ? parts[cIndex + 1].split("?")[0] : null;
+
+    if (req.method === "POST") {
+      return getBody().then((b) => {
+        const newCpn = {
+          id: `cpn-${Date.now()}`,
+          code: String(b.code || "DISCOUNT").toUpperCase(),
+          kind: b.kind || "PERCENT",
+          value: String(b.value || "10"),
+          minOrderAmount: String(b.minOrderAmount || "0"),
+          maxDiscount: null,
+          validUntil: null,
+          usageLimit: b.usageLimit ? Number(b.usageLimit) : null,
+          usedCount: 0,
+          isActive: true,
+        };
+        demoCoupons.unshift(newCpn);
+        return send(newCpn, 201);
+      });
+    }
+
+    if (couponId && req.method === "PATCH") {
+      return getBody().then((b) => {
+        const found = demoCoupons.find((c) => c.id === couponId);
+        if (found) {
+          if (b.isActive !== undefined) found.isActive = b.isActive;
+        }
+        return send(found || { success: true });
+      });
+    }
+
+    if (couponId && req.method === "DELETE") {
+      demoCoupons = demoCoupons.filter((c) => c.id !== couponId);
+      return send({ success: true });
+    }
+
+    return send(demoCoupons);
+  }
+
+  // --- Marketing: Campaigns (SMS, WhatsApp, Email) ---
+  if (pathname.includes("/marketing/campaigns")) {
+    const parts = pathname.split("/");
+    const cIndex = parts.indexOf("campaigns");
+    const campaignId = cIndex !== -1 && parts[cIndex + 1] ? parts[cIndex + 1].split("?")[0] : null;
+
+    if (pathname.includes("/audience")) {
+      return send({ count: 48 });
+    }
+
+    if (campaignId && pathname.includes("/send")) {
+      const found = demoCampaigns.find((c) => c.id === campaignId);
+      if (found) {
+        found.lastSentAt = new Date().toISOString();
+        found.lastSentCount = 48;
+      }
+      return send({ sent: 48, failed: 0 });
+    }
+
+    if (req.method === "POST") {
+      return getBody().then((b) => {
+        const newCmp = {
+          id: `cmp-${Date.now()}`,
+          name: b.name || "Special Campaign",
+          channel: b.channel || "WHATSAPP",
+          segment: b.segment || "ALL",
+          message: b.message || "",
+          lastSentAt: null,
+          lastSentCount: null,
+        };
+        demoCampaigns.unshift(newCmp);
+        return send(newCmp, 201);
+      });
+    }
+
+    if (campaignId && req.method === "DELETE") {
+      demoCampaigns = demoCampaigns.filter((c) => c.id !== campaignId);
+      return send({ success: true });
+    }
+
+    return send(demoCampaigns);
+  }
+
+  // --- Marketing: Promotions (Happy Hour) ---
+  if (pathname.includes("/marketing/promotions")) {
+    const parts = pathname.split("/");
+    const pIndex = parts.indexOf("promotions");
+    const promoId = pIndex !== -1 && parts[pIndex + 1] ? parts[pIndex + 1].split("?")[0] : null;
+
+    if (req.method === "POST") {
+      return getBody().then((b) => {
+        const newPromo = {
+          id: `pro-${Date.now()}`,
+          name: b.name || "Happy Hour",
+          kind: b.kind || "PERCENT",
+          value: String(b.value || "10"),
+          daysOfWeek: b.daysOfWeek || [1, 2, 3, 4, 5],
+          startTime: b.startTime || "16:00",
+          endTime: b.endTime || "19:00",
+          isActive: true,
+        };
+        demoPromotions.push(newPromo);
+        return send(newPromo, 201);
+      });
+    }
+
+    if (promoId && req.method === "PATCH") {
+      return getBody().then((b) => {
+        const found = demoPromotions.find((p) => p.id === promoId);
+        if (found && b.isActive !== undefined) found.isActive = b.isActive;
+        return send(found || { success: true });
+      });
+    }
+
+    if (promoId && req.method === "DELETE") {
+      demoPromotions = demoPromotions.filter((p) => p.id !== promoId);
+      return send({ success: true });
+    }
+
+    return send(demoPromotions);
   }
 
   // Dashboard endpoints

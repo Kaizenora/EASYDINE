@@ -156,7 +156,7 @@ export default function KdsPage() {
           retrying={tickets.isFetching}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto sm:grid sm:snap-none sm:grid-cols-2 sm:gap-4 sm:overflow-hidden xl:grid-cols-4">
+        <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
           {COLUMNS.map((col) => (
             <div key={col.status} className="flex w-[85%] shrink-0 snap-center flex-col gap-3 overflow-hidden rounded-2xl bg-secondary/40 p-3 sm:w-auto sm:shrink">
               <div className="flex items-center justify-between px-1">

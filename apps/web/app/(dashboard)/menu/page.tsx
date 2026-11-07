@@ -225,13 +225,21 @@ export default function MenuPage() {
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                        {item.isVeg && <Leaf className="h-3.5 w-3.5 shrink-0 text-success" />}
+                        {item.isVeg ? (
+  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-emerald-600 p-[1.5px]" title="Vegetarian">
+    <span className="h-2 w-2 rounded-full bg-emerald-600" />
+  </span>
+) : (
+  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-amber-800 p-[1.5px]" title="Non-Vegetarian">
+    <span className="h-0 w-0 border-x-[3.5px] border-b-[6px] border-x-transparent border-b-amber-800" />
+  </span>
+)}
                         <span className="min-w-0 break-words">{item.name}</span>
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {item.category.name}
                         {item.station ? ` · ${item.station.name}` : ""}
-                        {` · ${Number(item.taxRatePercent)}% tax`}
+                        ` · ${(Number(item.taxRatePercent) || 5)}% tax`
                       </p>
                     </div>
                     <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatCurrency(item.price)}</p>
@@ -286,7 +294,15 @@ export default function MenuPage() {
                         ) : (
                           <div className="h-9 w-9 shrink-0 rounded-md bg-secondary" />
                         )}
-                        {item.isVeg && <Leaf className="h-3.5 w-3.5 shrink-0 text-success" />}
+                        {item.isVeg ? (
+  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-emerald-600 p-[1.5px]" title="Vegetarian">
+    <span className="h-2 w-2 rounded-full bg-emerald-600" />
+  </span>
+) : (
+  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-amber-800 p-[1.5px]" title="Non-Vegetarian">
+    <span className="h-0 w-0 border-x-[3.5px] border-b-[6px] border-x-transparent border-b-amber-800" />
+  </span>
+)}
                         <span className="min-w-0 max-w-[28ch] [overflow-wrap:anywhere]" title={item.name}>
                           {item.name}
                         </span>
@@ -306,7 +322,7 @@ export default function MenuPage() {
                       {formatCurrency(item.price)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {Number(item.taxRatePercent)}%
+                      {(Number(item.taxRatePercent) || 5)}%
                     </TableCell>
                     <TableCell>
                       {canManage && (

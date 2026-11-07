@@ -127,7 +127,7 @@ export default function DashboardPage() {
   const { branchId } = useBranch();
   const { data, isLoading } = useDashboardSummary(branchId);
   const { data: prefsData } = useDashboardPrefs();
-  const prefs = prefsData ?? DEFAULT_DASHBOARD_PREFS;
+  const prefs = (prefsData && !Array.isArray(prefsData) && Array.isArray(prefsData.topOrder)) ? prefsData : DEFAULT_DASHBOARD_PREFS;
   const savePrefs = useSaveDashboardPrefs();
   const { data: trends, isLoading: trendsLoading } = useDashboardTrends(branchId, prefs.trendDays);
   const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
