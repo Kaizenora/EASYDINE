@@ -48,7 +48,7 @@ export function useBackups(enabled = true) {
     // poll gently while the list is on screen so the status column updates
     // itself instead of requiring a manual refresh.
     refetchInterval: (query) =>
-      query.state.data?.some((b) => b.status === "PENDING") ? 5000 : false,
+      Array.isArray(query.state.data) && query.state.data.some((b) => b.status === "PENDING") ? 5000 : false,
   });
 }
 

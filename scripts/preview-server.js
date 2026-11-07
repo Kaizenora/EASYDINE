@@ -549,6 +549,19 @@ const server = http.createServer((req, res) => {
   }
 
   // Fallbacks
+  if (pathname.includes("/backups")) {
+    if (pathname.includes("/status")) {
+      return send({ configured: false, autoBackupsEnabled: false, lastRun: null });
+    }
+    return send([]);
+  }
+  if (pathname.includes("/inventory")) return send([]);
+  if (pathname.includes("/attendance")) return send([]);
+  if (pathname.includes("/delivery")) return send([]);
+  if (pathname.includes("/accounting")) return send([]);
+  if (pathname.includes("/reports")) return send([]);
+  if (pathname.includes("/marketing")) return send([]);
+  if (pathname.includes("/operations")) return send([]);
   if (pathname.includes("/reservations")) return send([]);
   if (pathname.includes("/waitlist")) return send([]);
   if (pathname.includes("/roles")) return send([{ id: "role-admin", name: "Administrator", permissions: ["*"] }]);
