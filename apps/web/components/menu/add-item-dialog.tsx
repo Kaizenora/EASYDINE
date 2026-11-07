@@ -40,6 +40,7 @@ export function AddItemDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string>("");
   const [stationId, setStationId] = useState<string>("");
   const [price, setPrice] = useState("");
@@ -59,6 +60,7 @@ export function AddItemDialog({
 
   const reset = () => {
     setName("");
+    setDescription("");
     setCategoryId("");
     setStationId("");
     setPrice("");
@@ -91,6 +93,7 @@ export function AddItemDialog({
     createItem.mutate(
       {
         name,
+        description: description.trim() || undefined,
         categoryId,
         stationId: stationId || undefined,
         price: Number(price),
@@ -191,6 +194,17 @@ export function AddItemDialog({
               placeholder="e.g. Margherita Pizza"
               required
               autoFocus
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="item-add-desc">Description / Specifications</Label>
+            <textarea
+              id="item-add-desc"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Fresh ingredients, chef recommendations, portion specs"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
 

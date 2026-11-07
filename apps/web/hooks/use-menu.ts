@@ -39,6 +39,7 @@ export interface MenuItem {
   categoryId: string;
   stationId: string | null;
   name: string;
+  description?: string | null;
   imageUrl: string | null;
   price: string;
   halfPrice: string | null;

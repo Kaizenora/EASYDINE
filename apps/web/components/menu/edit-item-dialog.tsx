@@ -47,6 +47,7 @@ export function EditItemDialog({
   onClose: () => void;
 }) {
   const [name, setName] = useState(item.name);
+  const [description, setDescription] = useState(item.description ?? "");
   const [categoryId, setCategoryId] = useState(item.categoryId);
   const [stationId, setStationId] = useState(item.stationId ?? "");
   const [price, setPrice] = useState(item.price);
@@ -89,6 +90,7 @@ export function EditItemDialog({
         id: item.id,
         dto: {
           name,
+          description: description.trim() || undefined,
           categoryId,
           stationId: stationId || undefined,
           price: Number(price),
@@ -168,6 +170,17 @@ export function EditItemDialog({
               placeholder="e.g. Margherita Pizza"
               required
               autoFocus
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="item-edit-desc">Description / Specifications</Label>
+            <textarea
+              id="item-edit-desc"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Aromatic spices, slow-cooked gravy, portion size details"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
 
