@@ -93,7 +93,7 @@ function DeliveryCard({ order, branchId }: { order: DeliveryOrder; branchId: str
             className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
           >
             <option value="">Assign driver…</option>
-            {drivers?.map((d) => (
+            {Array.isArray(drivers) && drivers.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.riderOnline ? "● Online" : "○ Offline"} · {d.name}
                 {d.activeDeliveries > 0 ? ` (${d.activeDeliveries} active)` : ""}

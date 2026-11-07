@@ -83,7 +83,7 @@ export default function TransfersPage() {
               <label htmlFor="tr-ing" className="text-xs text-muted-foreground">Ingredient (this branch)</label>
               <select id="tr-ing" className={selectCls} value={ingredientId} onChange={(e) => setIngredient(e.target.value)}>
                 <option value="">Choose…</option>
-                {ingredients?.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.currentStock} {i.unit})</option>)}
+                {Array.isArray(ingredients) && ingredients.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.currentStock} {i.unit})</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">

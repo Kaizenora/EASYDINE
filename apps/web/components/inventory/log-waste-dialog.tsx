@@ -71,7 +71,7 @@ export function LogWasteDialog({ branchId }: { branchId: string | null }) {
                 <SelectValue placeholder="Select an ingredient" />
               </SelectTrigger>
               <SelectContent>
-                {ingredients?.map((i) => (
+                {Array.isArray(ingredients) && ingredients.map((i) => (
                   <SelectItem key={i.id} value={i.id}>
                     {i.name} ({i.currentStock} {i.unit} in stock)
                   </SelectItem>

@@ -196,7 +196,7 @@ function ProviderCard({ p, onConfigure }: { p: IntegrationProviderInfo; onConfig
         <ul className="flex max-h-48 flex-col divide-y divide-border overflow-y-auto rounded-lg border border-border text-xs">
           {logs.isLoading && <li className="p-2 text-muted-foreground">Loading…</li>}
           {logs.data?.length === 0 && <li className="p-2 text-muted-foreground">No activity yet.</li>}
-          {logs.data?.map((l) => (
+          {Array.isArray(logs?.data) && logs.data.map((l) => (
             <li key={l.id} className="flex gap-2 p-2">
               <span className="shrink-0 text-muted-foreground">{new Date(l.createdAt).toLocaleString()}</span>
               <Badge variant="secondary" className="shrink-0">{l.level}</Badge>

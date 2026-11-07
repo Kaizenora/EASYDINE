@@ -84,7 +84,7 @@ export default function WebhooksPage() {
           <Input placeholder="https://example.com/easydine-hook" value={url} onChange={(e) => setUrl(e.target.value)} />
           <Input placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
           <div className="flex flex-wrap gap-1.5">
-            {allEvents?.map((e) => (
+            {Array.isArray(allEvents) && allEvents.map((e) => (
               <button
                 key={e}
                 type="button"

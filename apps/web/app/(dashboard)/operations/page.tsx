@@ -100,7 +100,7 @@ function DocumentsTab({ branchId }: { branchId: string | null }) {
     <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
       <Card className="flex flex-col gap-1 p-2">
         <Button size="sm" className="m-2" onClick={startNew}>New document</Button>
-        {isLoading ? <Skeleton className="m-2 h-10" /> : data?.map((d) => (
+        {isLoading ? <Skeleton className="m-2 h-10" /> : Array.isArray(data) && data.map((d) => (
           <button key={d.id} type="button" onClick={() => { setOpenId(d.id); setDraft(null); }} className={cn("rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary", openId === d.id && "bg-secondary")}>
             <span className="block font-medium text-foreground">{d.title}</span>
             <span className="text-xs text-muted-foreground">{d.category.toLowerCase()}</span>

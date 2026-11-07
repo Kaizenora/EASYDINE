@@ -548,26 +548,294 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // Fallbacks
+  // ==========================================
+  // Comprehensive EasyDine Module Endpoints
+  // ==========================================
+
+  // --- 1. Inventory & Recipes ---
+  if (pathname.includes("/inventory/menu-items/") && pathname.includes("/recipe")) {
+    if (req.method === "PATCH") {
+      return getBody().then((b) => send({ lines: b.lines || [], totalCost: 0 }));
+    }
+    return send({ lines: [], totalCost: 0 });
+  }
+
+  if (pathname.includes("/inventory/menu-items/") && pathname.includes("/tracking")) {
+    if (req.method === "PATCH") {
+      return getBody().then((b) => send({
+        id: "trk-1",
+        inventoryTracking: b.inventoryTracking || "NONE",
+        stockIngredientId: b.stockIngredientId || null,
+        stockQuantityPerSale: b.stockQuantityPerSale || 1,
+        isCombo: false,
+      }));
+    }
+    return send({
+      id: "trk-1",
+      inventoryTracking: "NONE",
+      stockIngredientId: null,
+      stockQuantityPerSale: 1,
+      isCombo: false,
+    });
+  }
+
+  if (pathname.includes("/inventory/tracking-status")) {
+    return send({ tracked: demoMenuItems.length, untracked: 0, problems: [] });
+  }
+
+  if (pathname.includes("/inventory/ingredients")) {
+    return send([
+      { id: "ing-1", name: "Paneer (Fresh Farm)", unit: "KG", currentStock: 15, minimumStock: 5, costPerUnit: 350 },
+      { id: "ing-2", name: "Basmati Rice (Royal)", unit: "KG", currentStock: 40, minimumStock: 10, costPerUnit: 120 },
+      { id: "ing-3", name: "Butter (Amul)", unit: "KG", currentStock: 8, minimumStock: 2, costPerUnit: 520 },
+      { id: "ing-4", name: "Chicken Breast", unit: "KG", currentStock: 25, minimumStock: 8, costPerUnit: 280 },
+    ]);
+  }
+
+  if (pathname.includes("/inventory/suppliers")) {
+    return send([
+      { id: "sup-1", name: "Metro Cash & Carry", phone: "9876543201", email: "orders@metro.com", active: true },
+      { id: "sup-2", name: "Dairy Fresh Farms", phone: "9876543202", email: "sales@dairyfresh.com", active: true },
+    ]);
+  }
+
+  if (pathname.includes("/inventory")) {
+    return send([]);
+  }
+
+  // --- 2. HR, Team & Shifts ---
+  if (pathname.includes("/hr")) {
+    if (pathname.includes("/pay")) {
+      return send([
+        {
+          userId: "u-admin",
+          name: "Restaurant Owner",
+          basePay: 50000,
+          frequency: "MONTHLY",
+          hourlyRate: 300,
+          salaryMonthly: 50000,
+        },
+        {
+          userId: "u-cashier",
+          name: "Lead Cashier",
+          basePay: 25000,
+          frequency: "MONTHLY",
+          hourlyRate: 150,
+          salaryMonthly: 25000,
+        },
+      ]);
+    }
+    if (pathname.includes("/shifts")) {
+      return send([
+        {
+          id: "shift-1",
+          userId: "u-cashier",
+          user: { id: "u-cashier", name: "Lead Cashier" },
+          startsAt: new Date().toISOString(),
+          endsAt: new Date(Date.now() + 8 * 3600000).toISOString(),
+        },
+      ]);
+    }
+    if (pathname.includes("/leave")) return send([]);
+    if (pathname.includes("/payroll")) return send([]);
+    if (pathname.includes("/performance")) return send([]);
+    return send([]);
+  }
+
+  // --- 3. Reports & Analytics ---
+  if (pathname === "/api/v1/reports" || pathname === "/reports") {
+    return send([
+      { key: "sales-daily", title: "Daily Sales Summary", group: "Sales" },
+      { key: "item-sales", title: "Dish Sales & Mix", group: "Sales" },
+      { key: "inventory-consumption", title: "Stock Consumption", group: "Inventory" },
+    ]);
+  }
+
+  if (pathname.startsWith("/api/v1/reports/") || pathname.startsWith("/reports/")) {
+    return send({
+      key: "sales-daily",
+      title: "Daily Sales Summary",
+      columns: ["Date", "Orders", "Gross Sales", "Net Sales"],
+      rows: [
+        [new Date().toISOString().slice(0, 10), 42, "₹24,580.00", "₹22,122.00"],
+      ],
+    });
+  }
+
+  // --- 4. Accounting & Finance ---
+  if (pathname.includes("/accounting")) {
+    if (pathname.includes("/branches")) {
+      return send([{ id: "br-1", name: "Main Branch" }]);
+    }
+    if (pathname.includes("/closing/preview")) {
+      return send({ totalCash: 12450, totalCard: 8900, totalUpi: 3230, expectedTotal: 24580 });
+    }
+    if (pathname.includes("/closing")) return send([]);
+    if (pathname.includes("/gst")) {
+      return send({ totalTaxable: 21066, cgst: 1053.3, sgst: 1053.3, igst: 0, totalTax: 2106.6 });
+    }
+    if (pathname.includes("/profit-loss")) {
+      return send({ revenue: 24580, cogs: 7374, grossProfit: 17206, expenses: 5400, netProfit: 11806 });
+    }
+    return send([]);
+  }
+
+  // --- 5. Customers ---
+  if (pathname.includes("/customers")) {
+    return send([
+      {
+        id: "cust-1",
+        name: "Rahul Sharma",
+        phone: "9876543210",
+        email: "rahul@example.com",
+        totalOrders: 5,
+        totalSpent: "3450.00",
+        loyaltyPoints: 345,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "cust-2",
+        name: "Ananya Deshmukh",
+        phone: "9823456789",
+        email: "ananya@example.com",
+        totalOrders: 3,
+        totalSpent: "1890.00",
+        loyaltyPoints: 189,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  // --- 6. Delivery & Riders ---
+  if (pathname.includes("/delivery")) {
+    if (pathname.includes("/drivers")) {
+      return send([
+        { id: "drv-1", name: "Amit Kumar", phone: "9876501234", status: "AVAILABLE" },
+        { id: "drv-2", name: "Suresh Patil", phone: "9876505678", status: "ON_DELIVERY" },
+      ]);
+    }
+    if (pathname.includes("/zones")) {
+      return send([
+        { id: "zn-1", name: "Within 5km (Downtown)", fee: "30.00", minOrder: "200.00" },
+      ]);
+    }
+    return send([]);
+  }
+
+  if (pathname.includes("/rider")) {
+    if (pathname.includes("/me")) {
+      return send({ id: "drv-1", name: "Amit Kumar", isAvailable: true });
+    }
+    return send([]);
+  }
+
+  // --- 7. Reservations & Waitlist ---
+  if (pathname.includes("/reservations")) {
+    return send([
+      {
+        id: "res-1",
+        customerName: "Priya Patel",
+        phone: "9812345678",
+        partySize: 4,
+        reservedAt: new Date(Date.now() + 2 * 3600000).toISOString(),
+        status: "CONFIRMED",
+        table: { number: "4", name: "Table 4" },
+      },
+    ]);
+  }
+
+  if (pathname.includes("/waitlist")) {
+    return send([]);
+  }
+
+  // --- 8. Marketing & Coupons ---
+  if (pathname.includes("/marketing")) {
+    if (pathname.includes("/coupons")) {
+      return send([
+        {
+          id: "cpn-1",
+          code: "EASY50",
+          discountType: "PERCENTAGE",
+          discountValue: "50.00",
+          minOrderValue: "199.00",
+          isActive: true,
+        },
+      ]);
+    }
+    return send([]);
+  }
+
+  // --- 9. Operations & Documents ---
+  if (pathname.includes("/operations")) {
+    return send([]);
+  }
+
+  // --- 10. System, Settings, Backups, Sync ---
   if (pathname.includes("/backups")) {
     if (pathname.includes("/status")) {
       return send({ configured: false, autoBackupsEnabled: false, lastRun: null });
     }
     return send([]);
   }
-  if (pathname.includes("/inventory")) return send([]);
-  if (pathname.includes("/attendance")) return send([]);
-  if (pathname.includes("/delivery")) return send([]);
-  if (pathname.includes("/accounting")) return send([]);
-  if (pathname.includes("/reports")) return send([]);
-  if (pathname.includes("/marketing")) return send([]);
-  if (pathname.includes("/operations")) return send([]);
-  if (pathname.includes("/reservations")) return send([]);
-  if (pathname.includes("/waitlist")) return send([]);
-  if (pathname.includes("/roles")) return send([{ id: "role-admin", name: "Administrator", permissions: ["*"] }]);
-  if (pathname.includes("/staff")) return send([{ id: "u-admin", name: "Restaurant Owner", email: "admin@easydine.com", roleName: "ADMIN", isActive: true }]);
-  if (pathname.includes("/customers")) return send([]);
-  if (pathname.includes("/orders")) return send([]);
+
+  if (pathname.includes("/sync/status")) {
+    return send({ status: "SYNCED", pendingCount: 0 });
+  }
+
+  if (pathname.includes("/system/update/check")) {
+    return send({ updateAvailable: false });
+  }
+
+  if (pathname.includes("/auth/2fa/status")) {
+    return send({ enabled: false });
+  }
+
+  if (pathname.includes("/auth/setup-status")) {
+    return send({ setupComplete: true });
+  }
+
+  if (pathname.includes("/audit-logs")) {
+    if (pathname.includes("/entities")) {
+      return send(["Order", "MenuItem", "Table", "Staff", "Inventory"]);
+    }
+    return send({ data: [], total: 0 });
+  }
+
+  if (pathname.includes("/webhooks")) {
+    if (pathname.includes("/events")) {
+      return send(["order.created", "order.completed", "table.occupied", "inventory.low"]);
+    }
+    return send([]);
+  }
+
+  if (pathname.includes("/integration-hub") || pathname.includes("/integration-api-keys") || pathname.includes("/staff-api-keys")) {
+    return send([]);
+  }
+
+  if (pathname.includes("/payment-gateways")) {
+    return send([]);
+  }
+
+  if (pathname.includes("/roles")) {
+    return send([{ id: "role-admin", name: "Administrator", permissions: ["*"] }]);
+  }
+
+  if (pathname.includes("/staff") || pathname.includes("/users")) {
+    return send([
+      { id: "u-admin", name: "Restaurant Owner", email: "admin@easydine.com", roleName: "ADMIN", isActive: true },
+      { id: "u-cashier", name: "Lead Cashier", email: "cashier@easydine.com", roleName: "CASHIER", isActive: true },
+    ]);
+  }
+
+  if (pathname.includes("/attendance")) {
+    if (pathname.includes("/me")) return send(null);
+    return send([]);
+  }
+
+  // If method is GET and path asks for list or collection, return array to prevent client crashes
+  if (req.method === "GET") {
+    return send([]);
+  }
 
   send({ status: "ok" });
 });

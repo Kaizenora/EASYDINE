@@ -93,7 +93,7 @@ export function CreatePoDialog({ branchId }: { branchId: string | null }) {
                 <SelectValue placeholder="Select a supplier" />
               </SelectTrigger>
               <SelectContent>
-                {suppliers?.map((s) => (
+                {Array.isArray(suppliers) && suppliers.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
                   </SelectItem>
@@ -115,7 +115,7 @@ export function CreatePoDialog({ branchId }: { branchId: string | null }) {
                       <SelectValue placeholder="Ingredient" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ingredients?.map((i) => (
+                      {Array.isArray(ingredients) && ingredients.map((i) => (
                         <SelectItem key={i.id} value={i.id}>
                           {i.name} ({i.unit})
                         </SelectItem>

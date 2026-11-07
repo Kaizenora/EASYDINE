@@ -75,7 +75,7 @@ export default function AuditLogPage() {
               active={!filters.entity}
               onClick={() => setEntityFilter(undefined)}
             />
-            {entities?.map((entity) => (
+            {Array.isArray(entities) && entities.map((entity) => (
               <EntityChip
                 key={entity}
                 label={entity}

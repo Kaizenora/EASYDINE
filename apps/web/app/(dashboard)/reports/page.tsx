@@ -49,7 +49,7 @@ export default function ReportsPage() {
     retry: false,
   });
 
-  const groups = [...new Set(catalog?.map((c) => c.group))];
+  const groups = [...new Set(Array.isArray(catalog) ? catalog.map((c) => c.group) : [])];
 
   return (
     <div className="flex flex-col gap-6">

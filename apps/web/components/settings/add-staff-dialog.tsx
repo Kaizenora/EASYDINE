@@ -131,7 +131,7 @@ export function AddStaffDialog() {
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
               <SelectContent>
-                {roles?.map((role) => (
+                {Array.isArray(roles) && roles.map((role) => (
                   <SelectItem key={role.id} value={role.id}>
                     {role.label}
                   </SelectItem>

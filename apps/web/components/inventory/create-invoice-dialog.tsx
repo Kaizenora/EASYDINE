@@ -131,7 +131,7 @@ export function CreateInvoiceDialog({ branchId }: { branchId: string | null }) {
                 <SelectValue placeholder="Select a supplier" />
               </SelectTrigger>
               <SelectContent>
-                {suppliers?.map((s) => (
+                {Array.isArray(suppliers) && suppliers.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
                   </SelectItem>

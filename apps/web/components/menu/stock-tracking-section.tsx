@@ -44,16 +44,21 @@ export function StockTrackingSection({ branchId, itemId, isCombo }: { branchId: 
       </p>
     );
   }
-  if (!tracking || !recipe) return null;
+  const trackingMode = tracking?.inventoryTracking ?? "NONE";
+  const directId = tracking?.stockIngredientId ?? "";
+  const directQty = String(tracking?.stockQuantityPerSale ?? 1);
+  const lines = Array.isArray(recipe?.lines)
+    ? recipe.lines.map((l) => ({ ingredientId: l.ingredientId, quantity: String(l.quantity) }))
+    : [];
   return (
     <TrackingForm
       key={itemId}
       branchId={branchId}
       itemId={itemId}
-      initialMode={tracking.inventoryTracking}
-      initialDirectId={tracking.stockIngredientId ?? ""}
-      initialDirectQty={String(tracking.stockQuantityPerSale)}
-      initialLines={recipe.lines.map((l) => ({ ingredientId: l.ingredientId, quantity: String(l.quantity) }))}
+      initialMode={trackingMode}
+      initialDirectId={directId}
+      initialDirectQty={directQty}
+      initialLines={lines}
     />
   );
 }
@@ -137,7 +142,7 @@ function TrackingForm({
             <Label htmlFor="direct-ingredient">Stock item</Label>
             <select id="direct-ingredient" className={selectClass} value={directId} onChange={(e) => setDirectId(e.target.value)}>
               <option value="">Choose…</option>
-              {ingredients?.map((i) => (
+              {Array.isArray(ingredients) && ingredients.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.name}
                 </option>
@@ -162,7 +167,7 @@ function TrackingForm({
                 onChange={(e) => setLines(lines.map((l, i) => (i === idx ? { ...l, ingredientId: e.target.value } : l)))}
               >
                 <option value="">Ingredient…</option>
-                {ingredients?.map((i) => (
+                {Array.isArray(ingredients) && ingredients.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.name}
                   </option>

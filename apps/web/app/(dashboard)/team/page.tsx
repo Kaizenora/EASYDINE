@@ -61,7 +61,7 @@ function Schedule({ branchId }: { branchId: string | null }) {
           className="rounded-lg border border-border bg-background px-2 py-2 text-sm"
         >
           <option value="">Staff…</option>
-          {staff?.map((s) => (
+          {Array.isArray(staff) && staff.map((s) => (
             <option key={s.userId} value={s.userId}>
               {s.name}
             </option>
@@ -80,7 +80,7 @@ function Schedule({ branchId }: { branchId: string | null }) {
       <Card className="flex flex-col divide-y divide-border p-2">
         {isLoading ? (
           <Skeleton className="m-4 h-12" />
-        ) : shifts && shifts.length > 0 ? (
+        ) : Array.isArray(shifts) && shifts.length > 0 ? (
           shifts.map((s) => (
             <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
               <span className="font-medium text-foreground">{s.user.name}</span>
@@ -231,7 +231,7 @@ function Payroll({ branchId }: { branchId: string | null }) {
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col gap-3 p-4">
         <p className="text-sm font-medium text-foreground">Pay rates</p>
-        {pay?.map((p) => {
+        {Array.isArray(pay) && pay.map((p) => {
           const d = draft[p.userId] ?? { payType: p.payType ?? "MONTHLY", rate: String(p.rate ?? "") };
           return (
             <div key={p.userId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -289,7 +289,7 @@ function Payroll({ branchId }: { branchId: string | null }) {
           Uses clocked hours from Attendance, approved unpaid leave, and splits the period&rsquo;s tips by hours worked.
         </p>
       </Card>
-      {runs?.map((r) => (
+      {Array.isArray(runs) && runs.map((r) => (
         <div key={r.id} className="flex flex-col gap-2">
           <button
             type="button"
@@ -324,7 +324,7 @@ function Performance({ branchId }: { branchId: string | null }) {
               <tr><th className="py-1">Staff</th><th>Orders</th><th>Sales</th><th>Tips</th><th>Hours</th><th className="text-right">Sales / hour</th></tr>
             </thead>
             <tbody>
-              {data?.map((r) => (
+              {Array.isArray(data) && data.map((r) => (
                 <tr key={r.userId} className="border-t border-border">
                   <td className="py-1.5">{r.name}</td>
                   <td>{r.orders}</td>

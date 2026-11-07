@@ -274,7 +274,7 @@ function BranchesTab() {
             <tr><th className="py-1">Branch</th><th>Orders</th><th>Sales</th><th>Open</th><th>Low stock</th><th className="text-right">Inventory value</th></tr>
           </thead>
           <tbody>
-            {data?.map((b) => (
+            {Array.isArray(data) && data.map((b) => (
               <tr key={b.branchId} className="border-t border-border">
                 <td className="py-1.5">{b.name}</td>
                 <td>{b.orders}</td>

@@ -274,7 +274,7 @@ export function BankTab({ branchId }: { branchId: string | null }) {
                       <div className="mt-2 flex flex-col gap-1 rounded-lg border border-border bg-card p-2 text-left">
                         {candidates.isLoading && <span className="text-muted-foreground">Looking…</span>}
                         {candidates.data?.length === 0 && <span className="text-muted-foreground">No unmatched expenses nearby</span>}
-                        {candidates.data?.map((c) => (
+                        {Array.isArray(candidates?.data) && candidates.data.map((c) => (
                           <button key={c.id} type="button" className="rounded px-2 py-1 text-left hover:bg-secondary" onClick={() => match.mutate({ id: t.id, expenseId: c.id })}>
                             {c.spentOn.slice(0, 10)} · {c.category} · {formatCurrency(Number(c.amount))}
                           </button>

@@ -331,7 +331,7 @@ function PosPageInner() {
                 isSubmitting={createOrder.isPending || addOrderItems.isPending}
                 existingOrderNumber={existingOrder?.orderNumber}
                 onViewExistingOrder={existingOrder ? viewExistingOrder : undefined}
-                openBills={existingOrders?.map((o) => ({ id: o.id, orderNumber: o.orderNumber }))}
+                openBills={Array.isArray(existingOrders) ? existingOrders.map((o) => ({ id: o.id, orderNumber: o.orderNumber })) : []}
                 selectedBillId={existingOrder?.id ?? null}
                 onSelectBill={setSelectedBillId}
                 checkingTable={checkingTable}

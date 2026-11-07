@@ -85,7 +85,7 @@ export function CreatePurchaseRequestDialog({ branchId }: { branchId: string | n
                       <SelectValue placeholder="Ingredient" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ingredients?.map((i) => (
+                      {Array.isArray(ingredients) && ingredients.map((i) => (
                         <SelectItem key={i.id} value={i.id}>
                           {i.name} ({i.unit})
                         </SelectItem>
