@@ -98,7 +98,7 @@ export function SchedulesPanel({
         <Input aria-label="Recipients" className="min-w-64 flex-1" placeholder="owner@cafe.com, accountant@firm.com" value={recipients} onChange={(e) => setRecipients(e.target.value)} />
         <Button disabled={!recipients.trim() || create.isPending} onClick={() => create.mutate()}>Schedule</Button>
       </div>
-      {data && data.schedules.length > 0 && (
+      {data && Array.isArray(data.schedules) && data.schedules.length > 0 && (
         <ul className="flex flex-col divide-y divide-border">
           {data.schedules.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">

@@ -87,7 +87,7 @@ export default function CustomersPage() {
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-primary"
                     title="Edit customer"
-                    onClick={(e) => {
+                    onClick={(e: any) => {
                       e.preventDefault();
                       e.stopPropagation();
                       setEditingCustomer(c);
@@ -100,7 +100,7 @@ export default function CustomersPage() {
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
                     title="Delete customer"
-                    onClick={(e) => onDelete(e, c)}
+                    onClick={(e: any) => onDelete(e, c)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

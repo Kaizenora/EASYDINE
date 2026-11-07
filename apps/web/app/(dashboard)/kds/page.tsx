@@ -23,10 +23,9 @@ import { resolveStation } from "@/lib/kds-station";
 import { cn } from "@/lib/utils";
 
 const COLUMNS: { status: KotStatusDto; label: string }[] = [
-  { status: "NEW", label: "New" },
-  { status: "ACCEPTED", label: "Accepted" },
+  { status: "NEW", label: "Ordered" },
   { status: "PREPARING", label: "Preparing" },
-  { status: "READY", label: "Ready" },
+  { status: "READY", label: "Ready to Serve" },
 ];
 
 export default function KdsPage() {
@@ -49,7 +48,7 @@ export default function KdsPage() {
   const refused = useSyncExternalStore(outbox.subscribe, () => outbox.refused().join("\n"), () => "");
   // Fetching failed but an earlier copy is on screen: say how old it is.
   const showingSaved = tickets.isError && !!tickets.data;
-  const byStatus = (status: KotStatusDto): KotTicket[] => shown.filter((t) => t.status === status);
+  const byStatus = (status: KotStatusDto): KotTicket[] => shown.filter((t) => status === "NEW" ? (t.status === "NEW" || t.status === "ACCEPTED") : t.status === status);
   const pendingOrders = incoming.data ?? [];
 
   return (

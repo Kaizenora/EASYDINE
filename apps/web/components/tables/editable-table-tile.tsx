@@ -98,7 +98,7 @@ export function EditableTableTile({
           variant="secondary"
           size="icon"
           className="h-6 w-6 shadow"
-          onClick={(e) => {
+          onClick={(e: any) => {
             e.stopPropagation();
             onEdit();
           }}

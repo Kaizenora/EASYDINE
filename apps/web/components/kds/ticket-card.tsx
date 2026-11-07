@@ -169,47 +169,83 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         ))}
       </div>
 
-      <div className="flex flex-col gap-2">
-        {nextStatus && (
+      <div className="flex flex-col gap-2.5">
+        {/* Stages: Ordered -> Preparing -> Ready to Serve -> Served */}
+        <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/40 p-1">
           <Button
-            className="h-12 w-full text-base"
+            type="button"
+            size="sm"
+            variant={ticket.status === "NEW" || ticket.status === "ACCEPTED" ? "default" : "ghost"}
+            className="h-8 text-xs font-semibold"
             disabled={updateStatus.isPending}
-            onClick={() =>
-              updateStatus.mutate(
-                { id: ticket.id, status: nextStatus },
-                {
-                  onError: (err) =>
-                    toast.error(
-                      err instanceof ApiError
-                        ? err.message
-                        : "Could not update the ticket. Check the connection and try again.",
-                    ),
-                  onSuccess: (res) => {
-                    if (res === null) toast.success("Saved on this phone - it will be sent when the connection is back");
-                  },
-                },
-              )
-            }
+            onClick={() => updateStatus.mutate({ id: ticket.id, status: "ACCEPTED" })}
           >
-            {updateStatus.isPending ? "Updating…" : STATUS_LABEL[ticket.status]}
+            Ordered
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={ticket.status === "PREPARING" ? "default" : "ghost"}
+            className="h-8 text-xs font-semibold"
+            disabled={updateStatus.isPending}
+            onClick={() => updateStatus.mutate({ id: ticket.id, status: "PREPARING" })}
+          >
+            Preparing
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={ticket.status === "READY" ? "default" : "ghost"}
+            className="h-8 text-xs font-semibold"
+            disabled={updateStatus.isPending}
+            onClick={() => updateStatus.mutate({ id: ticket.id, status: "READY" })}
+          >
+            Ready to Serve
+          </Button>
+        </div>
+
+        {/* Primary Step Action Button */}
+        {ticket.status !== "READY" ? (
+          <Button
+            className="h-11 w-full text-sm font-semibold"
+            disabled={updateStatus.isPending}
+            onClick={() => {
+              const target = (ticket.status === "NEW" || ticket.status === "ACCEPTED") ? "PREPARING" : "READY";
+              updateStatus.mutate({ id: ticket.id, status: target });
+            }}
+          >
+            {updateStatus.isPending
+              ? "Updating…"
+              : (ticket.status === "NEW" || ticket.status === "ACCEPTED")
+                ? "Start Preparing"
+                : "Mark Ready to Serve"}
+          </Button>
+        ) : (
+          <Button
+            className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
+            disabled={updateStatus.isPending}
+            onClick={() => updateStatus.mutate({ id: ticket.id, status: "SERVED" })}
+          >
+            {updateStatus.isPending ? "Updating…" : "✓ Served & Delivered"}
           </Button>
         )}
+
         <div className="flex items-center gap-2">
         {canReject && (
           <Button
             variant="destructive"
-            className="h-12 min-w-0 flex-1 px-4"
+            className="h-10 min-w-0 flex-1 px-3 text-xs"
             onClick={() => setRejectOpen(true)}
             aria-label={`Reject ticket for order ${ticket.order.orderNumber}`}
           >
-            <X className="h-5 w-5" aria-hidden />
+            <X className="h-4 w-4" aria-hidden />
             Reject
           </Button>
         )}
         <Button
           variant="outline"
           size="icon"
-          className="h-12 w-12 shrink-0"
+          className="h-10 w-10 shrink-0"
           title={ticket.isPriority ? "Unmark priority" : "Mark priority"}
           aria-label={ticket.isPriority ? "Unmark priority" : "Mark priority"}
           disabled={setPriority.isPending}
@@ -217,12 +253,12 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             setPriority.mutate({ id: ticket.id, isPriority: !ticket.isPriority })
           }
         >
-          <Star className={cn("h-5 w-5", ticket.isPriority && "fill-warning text-warning")} />
+          <Star className={cn("h-4 w-4", ticket.isPriority && "fill-warning text-warning")} />
         </Button>
         <Button
           variant="outline"
           size="icon"
-          className="h-12 w-12 shrink-0"
+          className="h-10 w-10 shrink-0"
           title={ticket.printedCount > 0 ? "Reprint ticket (marked REPRINT)" : "Print ticket"}
           aria-label={ticket.printedCount > 0 ? "Reprint ticket" : "Print ticket"}
           disabled={reprint.isPending}
@@ -242,7 +278,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             )
           }
         >
-          <Printer className="h-5 w-5" />
+          <Printer className="h-4 w-4" />
         </Button>
         </div>
       </div>

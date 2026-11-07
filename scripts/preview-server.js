@@ -215,6 +215,91 @@ let demoFloors = [
 ];
 
 let openServiceRequests = [];
+let demoTickets = [
+  {
+    id: "kot-1",
+    orderId: "ord-1",
+    stationId: "station-1",
+    ticketNumber: "KOT-1042-1",
+    status: "PREPARING",
+    isPriority: false,
+    printedCount: 1,
+    lastPrintError: null,
+    createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
+    station: { id: "station-1", name: "Main Kitchen" },
+    order: {
+      orderNumber: "1042",
+      type: "DINE_IN",
+      channel: "ONLINE",
+      notes: "Customer at Table 1: Please hurry, kids are hungry",
+      table: { number: "1", name: "Table 1 (Window)" },
+      guestName: "Rahul Sharma",
+      customer: null,
+    },
+    items: [
+      {
+        id: "koti-1",
+        orderItem: {
+          nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
+          quantity: 2,
+          kitchenNote: "Extra spicy, crisp charred edges",
+          modifiers: [{ nameSnapshot: "Extra Spicy" }],
+        },
+      },
+      {
+        id: "koti-2",
+        orderItem: {
+          nameSnapshot: "Dal Makhani (Slow Cooked 24h)",
+          quantity: 1,
+          kitchenNote: "Less butter on top",
+          modifiers: [],
+        },
+      },
+    ],
+  },
+  {
+    id: "kot-2",
+    orderId: "ord-2",
+    stationId: "station-1",
+    ticketNumber: "KOT-1043-1",
+    status: "NEW",
+    isPriority: false,
+    printedCount: 0,
+    lastPrintError: null,
+    createdAt: new Date(Date.now() - 3 * 60000).toISOString(),
+    station: { id: "station-1", name: "Main Kitchen" },
+    order: {
+      orderNumber: "1043",
+      type: "DINE_IN",
+      channel: "ONLINE",
+      notes: null,
+      table: { number: "3", name: "Table 3" },
+      guestName: "Ananya Deshmukh",
+      customer: null,
+    },
+    items: [
+      {
+        id: "koti-3",
+        orderItem: {
+          nameSnapshot: "Veg Biryani (Clay Handi)",
+          quantity: 1,
+          kitchenNote: "Mild spicy",
+          modifiers: [],
+        },
+      },
+      {
+        id: "koti-4",
+        orderItem: {
+          nameSnapshot: "Butter Roti / Garlic Naan",
+          quantity: 2,
+          kitchenNote: "Extra butter",
+          modifiers: [],
+        },
+      },
+    ],
+  },
+];
+
 let demoNotifications = [];
 let activeCustomerOrder = {
   orderNumber: "1042",
@@ -282,7 +367,7 @@ const server = http.createServer((req, res) => {
       tables: { available: 4, occupied: 2, reserved: 1, cleaning: 0, outOfService: 0 },
       kitchenQueue: { new: 2, accepted: 3, preparing: 4, ready: 1 },
       pendingPayments: { count: openServiceRequests.includes("BILL") ? 1 : 0, balance: 1480 },
-      lowStock: 2,
+      lowStock: null,
       customers: 41,
       employees: 8,
       unpaidPayrollRuns: 0,
@@ -392,49 +477,47 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname.includes("/kds/tickets")) {
-    return send([
-      {
-        id: "kot-1",
-        orderId: "ord-1",
-        stationId: "station-1",
-        ticketNumber: "KOT-1042-1",
-        status: "PREPARING",
-        isPriority: false,
-        printedCount: 1,
-        lastPrintError: null,
-        createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
-        station: { id: "station-1", name: "Main Kitchen" },
-        order: {
-          orderNumber: "1042",
-          type: "DINE_IN",
-          channel: "ONLINE",
-          notes: "Customer at Table 1: Please hurry, kids are hungry",
-          table: { number: "1", name: "Table 1 (Window)" },
-          guestName: "Rahul Sharma",
-          customer: null,
-        },
-        items: [
-          {
-            id: "koti-1",
-            orderItem: {
-              nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
-              quantity: 2,
-              kitchenNote: "Extra spicy, crisp charred edges",
-              modifiers: [{ nameSnapshot: "Extra Spicy" }],
-            },
-          },
-          {
-            id: "koti-2",
-            orderItem: {
-              nameSnapshot: "Dal Makhani (Slow Cooked 24h)",
-              quantity: 1,
-              kitchenNote: "Less butter on top",
-              modifiers: [],
-            },
-          },
-        ],
-      },
-    ]);
+    const parts = pathname.split("/");
+    const tIndex = parts.indexOf("tickets");
+    const ticketId = tIndex !== -1 && parts[tIndex + 1] ? parts[tIndex + 1].split("?")[0] : null;
+
+    if (ticketId && req.method === "PATCH" && pathname.includes("/status")) {
+      return getBody().then((b) => {
+        const found = demoTickets.find((t) => t.id === ticketId);
+        if (found) {
+          found.status = b.status;
+        }
+        return send(found || { success: true });
+      });
+    }
+
+    if (ticketId && req.method === "PATCH" && pathname.includes("/priority")) {
+      return getBody().then((b) => {
+        const found = demoTickets.find((t) => t.id === ticketId);
+        if (found) {
+          found.isPriority = b.isPriority;
+        }
+        return send(found || { success: true });
+      });
+    }
+
+    if (ticketId && req.method === "POST" && (pathname.includes("/print") || pathname.includes("/reprint"))) {
+      const found = demoTickets.find((t) => t.id === ticketId);
+      if (found) {
+        found.printedCount = (found.printedCount || 0) + 1;
+      }
+      return send({ success: true, printedCount: found ? found.printedCount : 1 });
+    }
+
+    if (ticketId && req.method === "POST" && pathname.includes("/reject")) {
+      const found = demoTickets.find((t) => t.id === ticketId);
+      if (found) {
+        found.status = "REJECTED";
+      }
+      return send({ success: true });
+    }
+
+    return send(demoTickets.filter((t) => t.status !== "SERVED" && t.status !== "REJECTED" && t.status !== "CANCELLED"));
   }
 
   // Notifications (Call Waiter / Bill Alert to Cashier)
@@ -649,6 +732,10 @@ const server = http.createServer((req, res) => {
       { key: "item-sales", title: "Dish Sales & Mix", group: "Sales" },
       { key: "inventory-consumption", title: "Stock Consumption", group: "Inventory" },
     ]);
+  }
+
+  if (pathname.includes("/report-schedules")) {
+    return send({ emailConfigured: true, schedules: [] });
   }
 
   if (pathname.startsWith("/api/v1/reports/") || pathname.startsWith("/reports/")) {
