@@ -63,7 +63,7 @@ export default function KdsPage() {
 
       <LiveStatus />
 
-      {stations && stations.length > 0 && (
+      {Array.isArray(stations) && stations.length > 0 && (
         <div role="group" aria-label="Station" className="flex flex-wrap gap-2">
           {[{ id: "", name: "All stations" }, ...stations].map((s) => (
             <button

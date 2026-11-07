@@ -64,7 +64,7 @@ export function resolveStation(
 ): ResolvedStation {
   if (!saved) return { active: "", stale: false, ready: true };
   if (listFailed && !stations) return { active: saved, stale: false, ready: true };
-  if (!stations) return { active: "", stale: false, ready: false };
+  if (!stations || !Array.isArray(stations)) return { active: "", stale: false, ready: false };
   if (stations.some((s) => s.id === saved)) return { active: saved, stale: false, ready: true };
   return { active: "", stale: true, ready: true };
 }

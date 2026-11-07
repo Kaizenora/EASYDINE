@@ -275,7 +275,7 @@ export function AddItemDialog({
                 <SelectValue placeholder="None" />
               </SelectTrigger>
               <SelectContent>
-                {stations?.map((s) => (
+                {Array.isArray(stations) && stations.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
                   </SelectItem>

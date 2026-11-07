@@ -384,7 +384,7 @@ const server = http.createServer((req, res) => {
   }
 
   // Kitchen Stations & Tickets
-  if (pathname.includes("/kds/stations")) {
+  if (pathname.includes("/stations")) {
     return send([
       { id: "station-1", name: "Main Kitchen / Tandoor" },
       { id: "station-2", name: "Bar & Beverages" },
@@ -473,7 +473,7 @@ const server = http.createServer((req, res) => {
   }
 
   // Upload image
-  if (pathname.includes("/uploads/image")) {
+  if (pathname.includes("/upload")) {
     return send({ url: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80" });
   }
 
