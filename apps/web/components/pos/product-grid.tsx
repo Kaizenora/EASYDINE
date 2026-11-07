@@ -93,9 +93,15 @@ export function ProductGrid({
             onClick={() => onSelect(item)}
             className="flex min-h-24 min-w-0 flex-col items-start gap-2 rounded-2xl border border-border bg-card p-3 text-left sm:p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-[0.97] active:translate-y-0 lg:min-h-32 lg:justify-between lg:p-4 lg:hover:border-primary/50"
           >
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${item.isVeg ? "bg-success" : "bg-destructive"}`}
-            />
+            {item.isVeg ? (
+              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-emerald-500 p-[1px]" title="Vegetarian">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+            ) : (
+              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-rose-500 p-[1px]" title="Non-Vegetarian">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+              </span>
+            )}
             <span className="line-clamp-3 w-full min-w-0 [overflow-wrap:anywhere] text-sm font-medium leading-tight text-foreground lg:text-[15px]">
               {item.name}
             </span>

@@ -214,7 +214,15 @@ let demoFloors = [
   },
 ];
 
-let openServiceRequests = [];
+let activeTableRequests = [
+  {
+    id: "req-1",
+    type: "WAITER",
+    createdAt: new Date(Date.now() - 3 * 60000).toISOString(),
+    table: { id: "tbl-1", number: "1", name: "Table 1 (Window)" },
+  },
+];
+let openServiceRequests = ["WAITER"];
 let demoCoupons = [
   {
     id: "cpn-1",
@@ -460,6 +468,111 @@ const server = http.createServer((req, res) => {
       }
       return send({ success: true });
     });
+  }
+
+  // --- Table Layout updates (drag-and-drop posX, posY persistence) ---
+  if (pathname.includes("/tables/layout") && req.method === "PATCH") {
+    return getBody().then((updates) => {
+      const list = Array.isArray(updates) ? updates : [updates];
+      for (const u of list) {
+        for (const floor of demoFloors) {
+          const table = floor.tables.find((t) => t.id === u.id);
+          if (table) {
+            if (u.posX !== undefined) table.posX = u.posX;
+            if (u.posY !== undefined) table.posY = u.posY;
+            if (u.width !== undefined) table.width = u.width;
+            if (u.height !== undefined) table.height = u.height;
+            if (u.rotation !== undefined) table.rotation = u.rotation;
+          }
+        }
+      }
+      return send({ success: true, count: list.length });
+    });
+  }
+
+  // --- Table QR Token rotation / generation ---
+  if (pathname.includes("/tables/") && pathname.includes("/qr-token") && req.method === "POST") {
+    const parts = pathname.split("/");
+    const tIndex = parts.indexOf("tables");
+    const tableId = tIndex !== -1 && parts[tIndex + 1] ? parts[tIndex + 1].split("?")[0] : null;
+    for (const floor of demoFloors) {
+      const table = floor.tables.find((t) => t.id === tableId);
+      if (table) {
+        table.qrToken = `table-${table.number.toLowerCase()}-${Date.now().toString(36)}`;
+        return send(table);
+      }
+    }
+    return send({ id: tableId, qrToken: `table-${Date.now().toString(36)}` });
+  }
+
+  // --- Table Service Requests (Call Waiter / Request Bill) ---
+  if (pathname.includes("/tables/requests")) {
+    if (pathname.includes("/resolve") && req.method === "PATCH") {
+      const parts = pathname.split("/");
+      const rIndex = parts.indexOf("requests");
+      const reqId = rIndex !== -1 && parts[rIndex + 1] ? parts[rIndex + 1].split("?")[0] : null;
+      activeTableRequests = activeTableRequests.filter((r) => r.id !== reqId);
+      if (!activeTableRequests.some((r) => r.type === "WAITER")) {
+        openServiceRequests = openServiceRequests.filter((t) => t !== "WAITER");
+      }
+      if (!activeTableRequests.some((r) => r.type === "BILL")) {
+        openServiceRequests = openServiceRequests.filter((t) => t !== "BILL");
+      }
+      return send({ success: true });
+    }
+    return send(activeTableRequests);
+  }
+
+  // --- Table CRUD ---
+  if (pathname.startsWith("/api/v1/tables") && !pathname.includes("/floors") && !pathname.includes("/requests") && !pathname.includes("/layout")) {
+    const parts = pathname.split("/");
+    const tIndex = parts.indexOf("tables");
+    const tableId = tIndex !== -1 && parts[tIndex + 1] ? parts[tIndex + 1].split("?")[0] : null;
+
+    if (req.method === "POST" && !tableId) {
+      return getBody().then((b) => {
+        const floor = demoFloors.find((f) => f.id === b.floorId) || demoFloors[0];
+        const newTable = {
+          id: `tbl-${Date.now()}`,
+          floorId: floor.id,
+          number: String(b.number || floor.tables.length + 1),
+          name: b.name || `Table ${floor.tables.length + 1}`,
+          capacity: Number(b.capacity || 4),
+          status: "FREE",
+          statusSince: new Date().toISOString(),
+          posX: b.posX || 100,
+          posY: b.posY || 100,
+          width: b.width || 80,
+          height: b.height || 80,
+          rotation: 0,
+          shape: b.shape || "square",
+          qrToken: `table-${Date.now().toString(36)}`,
+          assignedWaiter: null,
+        };
+        floor.tables.push(newTable);
+        return send(newTable, 201);
+      });
+    }
+
+    if (tableId && req.method === "PATCH" && !pathname.includes("/status")) {
+      return getBody().then((b) => {
+        for (const floor of demoFloors) {
+          const table = floor.tables.find((t) => t.id === tableId);
+          if (table) {
+            Object.assign(table, b);
+            return send(table);
+          }
+        }
+        return send({ error: "Table not found" }, 404);
+      });
+    }
+
+    if (tableId && req.method === "DELETE") {
+      for (const floor of demoFloors) {
+        floor.tables = floor.tables.filter((t) => t.id !== tableId);
+      }
+      return send({ success: true });
+    }
   }
 
   // --- Bill Preview & Coupon Discounts ---
@@ -884,6 +997,12 @@ const server = http.createServer((req, res) => {
         if (!openServiceRequests.includes(type)) {
           openServiceRequests.push(type);
         }
+        activeTableRequests.unshift({
+          id: `req-${Date.now()}`,
+          type,
+          createdAt: new Date().toISOString(),
+          table: { id: "tbl-1", number: "1", name: "Table 1 (Window)" },
+        });
         demoNotifications.unshift({
           id: `notif-${Date.now()}`,
           entity: "ServiceRequest",
@@ -906,6 +1025,34 @@ const server = http.createServer((req, res) => {
         items: demoMenuItems.filter((i) => i.categoryId === c.id && i.isActive),
       })),
     });
+  }
+
+  // --- Thermal & Kitchen Printer Services ---
+  if (pathname.includes("/orders/print/diagnostics")) {
+    return send({
+      connection: "USB",
+      network: null,
+      lpDevices: ["USB-POS-Thermal-80mm"],
+      libusbPrinter: { vendorId: 1155, productId: 22304, id: "POS-80" },
+      canPrint: true,
+      notes: ["Thermal receipt printer ready and connected via USB/Bluetooth."],
+    });
+  }
+
+  if (pathname.includes("/orders/print/test") || pathname.includes("/printer/test")) {
+    return send({ ok: true, escpos: ["1b40", "1b6101", "4561737944696e652054657374", "0a", "1d5600"] });
+  }
+
+  if (pathname.includes("/printer/test-kot")) {
+    return send({ ok: true, escpos: ["1b40", "1b6101", "4b4f542054657374", "0a", "1d5600"] });
+  }
+
+  if (pathname.includes("/orders/print/drawer")) {
+    return send({ ok: true });
+  }
+
+  if (pathname.includes("/print/usb")) {
+    return send({ ok: true, unsupportedChars: [] });
   }
 
   // ==========================================

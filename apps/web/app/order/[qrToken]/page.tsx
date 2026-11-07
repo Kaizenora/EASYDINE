@@ -149,6 +149,7 @@ export default function ZomatoStyleCustomerMenu({
   const [cookingNote, setCookingNote] = useState("");
   const [customizingQty, setCustomizingQty] = useState(1);
   const [isListeningMic, setIsListeningMic] = useState(false);
+  const [isListeningSearchMic, setIsListeningSearchMic] = useState(false);
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -186,6 +187,13 @@ export default function ZomatoStyleCustomerMenu({
     refetchInterval: 5000,
     enabled: !!data,
   });
+
+  // Gating rule: "when food is ordered and confirmed then only open the option of bill requested"
+  const isFoodOrderedAndConfirmed = Boolean(
+    status?.order &&
+      status.order.status !== "NEW" &&
+      ["ACCEPTED", "PREPARING", "READY", "SERVED", "COMPLETED"].includes(status.order.status)
+  );
 
   // Call Waiter / Request Bill
   const requestService = useMutation({
@@ -338,6 +346,63 @@ export default function ZomatoStyleCustomerMenu({
     }
   };
 
+  // Web Speech API for Search Voice Input
+  const startSearchVoiceInput = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as unknown as { SpeechRecognition?: any }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: any }).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Voice search is not supported on this browser.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      recognition.onstart = () => setIsListeningSearchMic(true);
+      recognition.onend = () => setIsListeningSearchMic(false);
+      recognition.onerror = () => setIsListeningSearchMic(false);
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join(" ");
+        setSearchQuery(transcript);
+      };
+
+      recognition.start();
+    } catch {
+      setIsListeningSearchMic(false);
+    }
+  };
+
+  const PREFERENCE_CHIPS = [
+    "🌶️ Extra Spicy",
+    "🌿 Mild / Less Spicy",
+    "🧅 No Onion & Garlic",
+    "🧈 Less Butter / Oil",
+    "✨ Extra Crispy",
+    "🥣 Extra Gravy",
+    "👶 Kids Friendly",
+    "🥗 Extra Chutney & Salad",
+  ];
+
+  const togglePreferenceChip = (chip: string) => {
+    setCookingNote((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) return chip;
+      if (trimmed.includes(chip)) {
+        return trimmed.replace(chip, "").replace(/,\s*,/g, ",").replace(/^,\s*|,\s*$/g, "").trim();
+      }
+      return `${trimmed}, ${chip}`;
+    });
+  };
+
   // Filtered categories and dishes
   const filteredCategories = useMemo(() => {
     if (!data?.categories) return [];
@@ -457,24 +522,41 @@ export default function ZomatoStyleCustomerMenu({
             <ArrowLeft className="h-5 w-5" />
           </button>
 
-          {/* Search bar */}
+          {/* Search bar with Voice Mic */}
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <input
               type="text"
-              placeholder='Search "dal", "paneer", "biryani"...'
+              placeholder={isListeningSearchMic ? "Listening... Speak dish name..." : 'Search "dal", "paneer", "biryani"...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-full border border-neutral-800 bg-neutral-900 pl-10 pr-4 text-xs text-white placeholder-neutral-400 focus:border-rose-500 focus:outline-none"
+              className={`h-10 w-full rounded-full border bg-neutral-900 pl-10 pr-16 text-xs text-white placeholder-neutral-400 focus:outline-none transition ${
+                isListeningSearchMic ? "border-rose-500 ring-2 ring-rose-500/30" : "border-neutral-800 focus:border-rose-500"
+              }`}
             />
-            {searchQuery && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="p-1 text-neutral-400 hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
+                type="button"
+                onClick={startSearchVoiceInput}
+                className={`flex h-7 w-7 items-center justify-center rounded-full transition ${
+                  isListeningSearchMic
+                    ? "bg-rose-600 text-white animate-pulse"
+                    : "text-neutral-400 hover:bg-neutral-800 hover:text-rose-400"
+                }`}
+                title="Search menu by voice"
               >
-                <X className="h-3.5 w-3.5" />
+                <Mic className="h-3.5 w-3.5" />
               </button>
-            )}
+            </div>
           </div>
 
           {/* Table Badge */}
@@ -524,11 +606,16 @@ export default function ZomatoStyleCustomerMenu({
               {status?.openRequests.includes("WAITER") ? "Waiter Alerted" : "Call Waiter"}
             </button>
 
-            {status?.order && (
+            {/* Bill Requested is ONLY opened when food is ordered and confirmed by kitchen/cashier */}
+            {isFoodOrderedAndConfirmed && (
               <button
                 onClick={() => requestService.mutate("BILL")}
                 disabled={requestService.isPending || status?.openRequests.includes("BILL")}
-                className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 px-3.5 py-1.5 text-xs font-semibold text-neutral-200 hover:border-emerald-500 hover:text-white transition disabled:opacity-60"
+                className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition disabled:opacity-60 ${
+                  status?.openRequests.includes("BILL")
+                    ? "border-emerald-600/80 bg-emerald-950/60 text-emerald-300 shadow-sm"
+                    : "border-neutral-700 bg-neutral-900/90 text-neutral-200 hover:border-emerald-500 hover:text-white"
+                }`}
               >
                 <Receipt className="h-3.5 w-3.5 text-emerald-400" />
                 {status?.openRequests.includes("BILL") ? "Bill Requested" : "Request Bill"}
@@ -721,24 +808,49 @@ export default function ZomatoStyleCustomerMenu({
 
                             {/* Floating ADD button on dish card */}
                             <div className="-mt-4 z-10 flex flex-col items-center">
-                              <button
+                              {qtyInCart > 0 ? (
+                                <div className="flex h-8 items-center justify-between rounded-lg bg-rose-600 px-2 text-xs font-black text-white shadow-lg shadow-rose-600/30 min-w-[86px]">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const matchingLine = [...cart].reverse().find((l) => l.menuItemId === item.id);
+                                      if (matchingLine) removeOneFromCart(matchingLine.id);
+                                    }}
+                                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-black/20 active:scale-90"
+                                    title="Decrease quantity"
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <span className="px-1.5 text-xs font-black">{qtyInCart}</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenCustomize(item, category.name);
+                                    }}
+                                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-black/20 active:scale-90"
+                                    title="Add more / customize"
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCustomize(item, category.name)}
+                                  className="flex h-8 items-center justify-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900/95 px-5 text-xs font-black uppercase text-rose-500 shadow-md transition hover:border-rose-500 hover:bg-rose-600 hover:text-white active:scale-95"
+                                >
+                                  <span>ADD</span>
+                                  <span className="text-[11px] font-bold -mt-0.5">+</span>
+                                </button>
+                              )}
+                              <span
+                                className="mt-0.5 text-[9px] font-semibold text-neutral-400 cursor-pointer hover:text-rose-400"
                                 onClick={() => handleOpenCustomize(item, category.name)}
-                                className={`flex h-8 items-center justify-center gap-1 rounded-lg px-3.5 text-xs font-extrabold uppercase shadow-md transition active:scale-95 ${
-                                  qtyInCart > 0
-                                    ? "bg-rose-600 text-white shadow-rose-600/30"
-                                    : "border border-rose-500/80 bg-neutral-900/95 text-rose-400 hover:bg-rose-600 hover:text-white"
-                                }`}
                               >
-                                {qtyInCart > 0 ? (
-                                  <>
-                                    <span>{qtyInCart} in Cart</span>
-                                    <Plus className="h-3 w-3" />
-                                  </>
-                                ) : (
-                                  <span>ADD +</span>
-                                )}
-                              </button>
-                              <span className="mt-0.5 text-[9px] font-semibold text-neutral-400">customisable</span>
+                                customisable
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -904,8 +1016,29 @@ export default function ZomatoStyleCustomerMenu({
               </div>
 
               <p className="mt-1 text-[10px] text-neutral-400">
-                Want this one spicy, crispy, or mild? Type or speak note for this item.
+                Want this one spicy, crispy, or mild? Select quick preferences or speak:
               </p>
+
+              {/* Quick Preferences Chips */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {PREFERENCE_CHIPS.map((chip) => {
+                  const isSelected = cookingNote.includes(chip);
+                  return (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => togglePreferenceChip(chip)}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition ${
+                        isSelected
+                          ? "border-rose-500 bg-rose-950/40 text-rose-300 font-bold"
+                          : "border-neutral-800 bg-neutral-900/80 text-neutral-300 hover:border-neutral-700"
+                      }`}
+                    >
+                      {chip}
+                    </button>
+                  );
+                })}
+              </div>
 
               <textarea
                 rows={2}

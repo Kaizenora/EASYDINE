@@ -107,7 +107,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           <div>
             <p className="text-xs text-muted-foreground">Gift cards</p>
             <p className="text-xl font-semibold tabular-nums text-foreground">
-              {customer.giftCards.length}
+              {customer.giftCards?.length ?? 0}
             </p>
           </div>
         </Card>
@@ -125,7 +125,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       <RewardsCard branchId={branchId} customerId={customer.id} />
       <AddressesCard branchId={branchId} customerId={customer.id} addresses={customer.addresses ?? []} />
 
-      {customer.giftCards.length > 0 && (
+      {Array.isArray(customer.giftCards) && customer.giftCards.length > 0 && (
         <Card className="flex flex-col gap-3 p-5">
           <h2 className="text-[18px] font-medium text-foreground">Gift cards</h2>
           <div className="flex flex-col divide-y divide-border">
@@ -143,7 +143,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       <Card className="flex flex-col gap-3 p-5">
         <h2 className="text-[18px] font-medium text-foreground">Order history</h2>
-        {customer.orders.length > 0 ? (
+        {Array.isArray(customer.orders) && customer.orders.length > 0 ? (
           <div className="flex flex-col divide-y divide-border">
             {customer.orders.map((o) => (
               <div key={o.id} className="flex items-center justify-between py-2.5 text-sm">

@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronLeft, MonitorSmartphone, ShoppingCart } from "lucide-react";
+import { ChevronLeft, Maximize, MonitorSmartphone, ShoppingCart } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { TableRequestsBar } from "@/components/tables/table-requests-bar";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { publishDisplay } from "@/lib/customer-display";
 import { BranchNotice } from "@/components/layout/branch-notice";
@@ -258,20 +259,40 @@ function PosPageInner() {
   return (
     <div className="flex h-[calc(100dvh-10rem)] flex-col gap-4 lg:h-[calc(100dvh-8rem)]">
       <StatusNote note={note} onClear={clearNote} />
+      <TableRequestsBar branchId={branchId} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <KitchenProgressWidget branchId={branchId} />
         </div>
-        <a
-          href="/customer-display"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          title="Opens the customer-facing screen in a new window — drag it to the second monitor"
-        >
-          <MonitorSmartphone className="h-3.5 w-3.5" />
-          Customer display
-        </a>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof document !== "undefined") {
+                if (!document.fullscreenElement) {
+                  document.documentElement.requestFullscreen().catch(() => {});
+                } else {
+                  document.exitFullscreen().catch(() => {});
+                }
+              }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            title="Toggle Fullscreen Desktop POS App"
+          >
+            <Maximize className="h-3.5 w-3.5" />
+            POS App Mode
+          </button>
+          <a
+            href="/customer-display"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            title="Opens the customer-facing screen in a new window — drag it to the second monitor"
+          >
+            <MonitorSmartphone className="h-3.5 w-3.5" />
+            Customer display
+          </a>
+        </div>
       </div>
 
       <BranchNotice />
