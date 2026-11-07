@@ -64,7 +64,7 @@ export function EditItemDialog({
   const updateItem = useUpdateMenuItem(branchId);
   const uploadImage = useUploadItemImage();
   const priceLabel =
-    settings?.branch.taxMode === "EXCLUSIVE" ? "Price (excl. tax)" : "Price (incl. tax)";
+    settings?.branch?.taxMode === "EXCLUSIVE" ? "Price (excl. tax)" : "Price (incl. tax)";
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

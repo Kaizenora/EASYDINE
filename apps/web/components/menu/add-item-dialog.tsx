@@ -56,7 +56,7 @@ export function AddItemDialog({
   const createItem = useCreateMenuItem(branchId);
   const uploadImage = useUploadItemImage();
   const priceLabel =
-    settings?.branch.taxMode === "EXCLUSIVE" ? "Price (excl. tax)" : "Price (incl. tax)";
+    settings?.branch?.taxMode === "EXCLUSIVE" ? "Price (excl. tax)" : "Price (incl. tax)";
 
   const reset = () => {
     setName("");

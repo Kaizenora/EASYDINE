@@ -442,6 +442,14 @@ const server = http.createServer((req, res) => {
     return send({ data: demoNotifications, unreadCount: demoNotifications.filter((n) => !n.readAt).length });
   }
 
+  // Display settings (Restaurant + Branch for UI headers, menus, dialogs)
+  if (pathname.includes("/settings/display")) {
+    return send({
+      restaurant: restaurantSettings,
+      branch: branchSettings,
+    });
+  }
+
   // Restaurant Settings
   if (pathname.includes("/settings/restaurant")) {
     if (req.method === "PUT" || req.method === "PATCH") {
