@@ -2,6 +2,6 @@
 set -e
 systemctl daemon-reload >/dev/null 2>&1 || true
 if [ "$1" = purge ]; then
-  echo "nodedr-orderrestro: your data stays in Docker volumes (nodedr-orderrestro_pg_data, nodedr-orderrestro_uploads_data, nodedr-orderrestro_state) and your settings and generated passwords in /etc/nodedr-orderrestro/nodedr-orderrestro.env, so a later reinstall picks up where you left off. To delete everything for good: sudo docker compose --project-name nodedr-orderrestro down -v ; sudo rm -rf /etc/nodedr-orderrestro" >&2
+  echo "easy-dine: your data stays in Docker volumes (easy-dine_pg_data, easy-dine_uploads_data, easy-dine_state) and your settings and generated passwords in /etc/easy-dine/easy-dine.env, so a later reinstall picks up where you left off. To delete everything for good: sudo docker compose --project-name easy-dine down -v ; sudo rm -rf /etc/easy-dine" >&2
 fi
 exit 0

@@ -1,6 +1,6 @@
 {
-  "appId": "com.nodedr.orderrestro",
-  "appName": "OrderRestro",
+  "appId": "com.easydine.easydine",
+  "appName": "EasyDine",
   "webDir": "www",
   "backgroundColor": "#ffffff",
   "server": {

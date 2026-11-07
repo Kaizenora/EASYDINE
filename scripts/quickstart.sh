@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Nodedr OrderRestro quickstart — macOS & Linux.
+# Easy Dine quickstart — macOS & Linux.
 #
 # Checks whether Docker is installed and running; installs it if not
 # (Docker Desktop via Homebrew on macOS, installing Homebrew first if needed, Docker Engine via the official
 # get.docker.com script on Linux). Does the same for git (Homebrew on macOS,
 # the system package manager on Linux) if it's missing too. Then clones (or
-# updates) nodedr-restaurant-pos into ./nodedr-restaurant-pos and runs its
+# updates) easy-dine-pos into ./easy-dine-pos and runs its
 # installer (which generates a .env with random secrets on first run).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Raktim94/nodedr-restaurant-pos/master/scripts/quickstart.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/scripts/quickstart.sh | bash
 #
 # Safe to re-run: every step only acts if the previous one didn't already
-# succeed, and an existing ./nodedr-restaurant-pos checkout is updated in
+# succeed, and an existing ./easy-dine-pos checkout is updated in
 # place rather than clobbered.
 set -euo pipefail
 
-REPO_URL="https://github.com/Raktim94/nodedr-restaurant-pos.git"
-REPO_DIR="nodedr-restaurant-pos"
+REPO_URL="https://github.com/Raktim94/easy-dine-pos.git"
+REPO_DIR="easy-dine-pos"
 SUDO=""
 
 install_docker_linux() {
@@ -152,7 +152,7 @@ case "$(uname -s)" in
     ;;
 esac
 
-echo "==> Getting nodedr-restaurant-pos..."
+echo "==> Getting easy-dine-pos..."
 if [ -d "$REPO_DIR/.git" ]; then
   echo "Existing checkout found in ./$REPO_DIR — updating it instead of re-cloning."
   git -C "$REPO_DIR" pull --ff-only
@@ -161,5 +161,5 @@ else
 fi
 
 cd "$REPO_DIR"
-echo "==> Installing and starting Nodedr OrderRestro..."
+echo "==> Installing and starting Easy Dine..."
 $SUDO ./install.sh <"$TTY_IN"

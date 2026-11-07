@@ -7,7 +7,7 @@ import type {
   MenuCategoryDto,
   MenuItemDto,
   ModifierGroupDto,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 

@@ -1,7 +1,7 @@
-# Nodedr OrderRestro on CasaOS / ZimaOS
+# Easy Dine on CasaOS / ZimaOS
 
-This directory holds the app store manifest and assets that let Nodedr
-OrderRestro install as a one-click app on [CasaOS](https://casaos.io) and
+This directory holds the app store manifest and assets that let EasyDine
+EasyDine install as a one-click app on [CasaOS](https://casaos.io) and
 [ZimaOS](https://zimaspace.com) (ZimaOS uses the identical `x-casaos`
 compose schema).
 
@@ -21,7 +21,7 @@ don't need to wait for this to land in the official app store:
 2. Paste this URL (or the raw file contents):
 
    ```
-   https://raw.githubusercontent.com/Raktim94/nodedr-restaurant-pos/master/casaos/docker-compose.yml
+   https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/casaos/docker-compose.yml
    ```
 
 3. **Before starting the app**, change the two placeholder secrets in the
@@ -30,7 +30,7 @@ don't need to wait for this to land in the official app store:
    `POSTGRES_PASSWORD` and the `backend` service's `DATABASE_URL`). Leaving
    the shipped placeholders is not safe beyond a quick local trial.
 4. Install. CasaOS pulls the pre-built
-   `ghcr.io/raktim94/nodedr-restaurant-pos-backend` and `...-web` images —
+   `ghcr.io/raktim94/easy-dine-pos-backend` and `...-web` images —
    there is no build step, so it works even though CasaOS never touches
    this repo's source.
 5. Open it from the CasaOS dashboard, or go straight to
@@ -38,18 +38,18 @@ don't need to wait for this to land in the official app store:
    restaurant account via `/signup` — no manual configuration needed.
 
 Your data (Postgres database + uploaded images) persists at
-`/DATA/AppData/nodedr-restaurant-pos/` on the CasaOS box, following the same
+`/DATA/AppData/easy-dine-pos/` on the CasaOS box, following the same
 convention CasaOS's own backup/restore UI expects for every other app.
 
 ## Why three containers
 
-Unlike sibling project [nodedr-pos](https://github.com/Raktim94/nodedr-pos)
+Unlike sibling project [easydine-pos](https://github.com/Raktim94/easydine-pos)
 (SQLite, two containers), this app uses Postgres for concurrency across
 500+ tables/100+ staff — see the main [ARCHITECTURE.md](../ARCHITECTURE.md).
 The manifest declares `main: web` since that's the browsable service;
 `postgres` and `backend` are helper containers CasaOS never opens directly.
 
-Unlike nodedr-pos, this app has **no built-in secret auto-generation** —
+Unlike easydine-pos, this app has **no built-in secret auto-generation** —
 `JWT_SECRET` and the Postgres password must be set explicitly (the
 repo-root `docker-compose.yml` enforces this the same way, via a hard
 `:?required` failure if unset). The CasaOS manifest ships obvious
@@ -72,10 +72,10 @@ not `:latest`, tags). To publish a new version:
    **and** `linux/arm64` (a lot of CasaOS/ZimaOS boxes are ARM SBCs) and
    pushes them to **GHCR**, authenticated with the automatic
    `secrets.GITHUB_TOKEN` — no manually-created registry credential needed,
-   same as sibling project nodedr-pos.
+   same as sibling project easydine-pos.
 3. Confirm both new tags exist at
-   `ghcr.io/raktim94/nodedr-restaurant-pos-backend` and
-   `ghcr.io/raktim94/nodedr-restaurant-pos-web` before updating this file —
+   `ghcr.io/raktim94/easy-dine-pos-backend` and
+   `ghcr.io/raktim94/easy-dine-pos-web` before updating this file —
    CasaOS installs will fail outright if the pinned tag doesn't exist yet.
 4. **First publish only:** GHCR packages default to private even when
    pushed from a public repo — a CasaOS install on someone else's box would
@@ -95,7 +95,7 @@ manifest, since it's a one-way action against someone else's public repo.
 When you're ready:
 
 1. Fork `IceWhaleTech/CasaOS-AppStore` and add a new
-   `Apps/Nodedr-OrderRestro/` directory containing this directory's
+   `Apps/EasyDine-EasyDine/` directory containing this directory's
    `docker-compose.yml`, `icon.png`, `thumbnail.png`, and the
    `screenshot-*.png` files.
 2. Update the `icon:`, `thumbnail:`, and `screenshot_link:` URLs in the
@@ -103,7 +103,7 @@ When you're ready:
    of this one, following the same jsdelivr CDN pattern every other app in
    that store uses:
    ```
-   https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Nodedr-OrderRestro/icon.png
+   https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/EasyDine-EasyDine/icon.png
    ```
 3. Open the PR against `IceWhaleTech/CasaOS-AppStore`. Their own
    `CONTRIBUTING.md` documents the current review checklist — re-check it

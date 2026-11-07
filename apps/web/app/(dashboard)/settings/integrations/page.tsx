@@ -90,8 +90,8 @@ function WebhookDetails({ p }: { p: IntegrationProviderInfo }) {
           <CopyButton text={url} label="webhook URL" />
         </div>
         <p>
-          Send <code>POST</code> JSON with headers <code>X-OrderRestro-Timestamp</code> (unix seconds) and{" "}
-          <code>X-OrderRestro-Signature: sha256=HMAC_SHA256(secret, timestamp + &quot;.&quot; + body)</code>. Items are matched by
+          Send <code>POST</code> JSON with headers <code>X-EasyDine-Timestamp</code> (unix seconds) and{" "}
+          <code>X-EasyDine-Signature: sha256=HMAC_SHA256(secret, timestamp + &quot;.&quot; + body)</code>. Items are matched by
           menu item name or id; prices always come from your menu. Send <code>{`{"event":"ping"}`}</code> to test —
           this card turns Connected only when a correctly signed event arrives.
         </p>
@@ -316,7 +316,7 @@ export default function IntegrationsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-[32px] font-semibold tracking-tight text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground">Connect OrderRestro to the platforms you use</p>
+        <p className="text-sm text-muted-foreground">Connect EasyDine to the platforms you use</p>
       </div>
       <SettingsTabs />
 

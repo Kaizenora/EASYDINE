@@ -5,7 +5,7 @@
 // on sign out.
 import type { QueryClient } from "@tanstack/react-query";
 
-const KEY = "orderrestro.cache.v1";
+const KEY = "easydine.cache.v1";
 const MAX_BYTES = 2_500_000; // stay well inside the ~5 MB storage limit
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 

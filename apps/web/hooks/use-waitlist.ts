@@ -1,6 +1,6 @@
 "use client";
 
-import type { CreateWaitlistEntryDto } from "@nodedr-restaurant/types";
+import type { CreateWaitlistEntryDto } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 

@@ -1,5 +1,5 @@
 // Sends raw ESC/POS bytes (see escpos-receipt.ts) to a USB thermal receipt
-// printer. Ported from nodedr-pos's backend/src/lib/escposUsb.js — same two
+// printer. Ported from easydine-pos's backend/src/lib/escposUsb.js — same two
 // transports, same order, same reasoning (see that file's history for the
 // hardware lessons this encodes): kernel usblp character device first (the
 // same path a plain `echo "hi" > /dev/usb/lp0` uses, and the only path that

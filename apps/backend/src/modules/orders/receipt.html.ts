@@ -1,4 +1,4 @@
-// Self-printing HTML receipt — ported from nodedr-pos's
+// Self-printing HTML receipt — ported from easydine-pos's
 // backend/src/lib/receipt.js (same 80mm-thermal-safe layout rules: @page
 // margin 0, left-aligned body, box-sizing border-box so 80mm stays 80mm
 // after padding). Loaded into a hidden iframe by the frontend
@@ -8,7 +8,7 @@
 // Multi-region tax (2026-09-27): which tax rows get shown, and whether the
 // top line reads as a tax-inclusive subtotal or a pre-tax one, now follows
 // the branch's taxRegime/taxMode — see resolveTaxLabel/resolveTaxIdLabel
-// in @nodedr-restaurant/types. This file only changes labels and which
+// in @easydine/types. This file only changes labels and which
 // rows are shown; order.subtotal/taxAmount/totalAmount are unchanged
 // (computed once, correctly, in pricing.ts — see its own multi-region
 // note) and are never recomputed here.
@@ -21,7 +21,7 @@ import {
   TAX_REGIME_PRESETS,
   type TaxMode,
   type TaxRegime,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   INR: '₹',

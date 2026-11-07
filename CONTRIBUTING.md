@@ -1,4 +1,4 @@
-# Contributing to Nodedr OrderRestro
+# Contributing to Easy Dine
 
 First off — thank you for considering a contribution. This is a young,
 fast-moving project (Phases 0-3 of a 20-module scope are done; see
@@ -37,7 +37,7 @@ participating, you agree to uphold it. Report unacceptable behavior to
 
 See [`MAINTAINERS.md`](./MAINTAINERS.md) — Raktim Ranjit is the lead
 maintainer; project copyright is held jointly by
-[Nodedr Infotech Private Limited](https://www.nodedr.com/) and Raktim
+[EasyDine Infotech Private Limited](https://www.easydine.com/) and Raktim
 Ranjit. By submitting a PR, you agree your contribution is licensed under
 the same [AGPL-3.0](./LICENSE) as the rest of the project; you retain
 copyright on your own contribution. Only submit code you wrote or have the
@@ -74,17 +74,17 @@ Docker for it.
 ### Option A — full stack via Docker
 
 ```bash
-git clone https://github.com/Raktim94/nodedr-restaurant-pos.git
-cd nodedr-restaurant-pos
+git clone https://github.com/Raktim94/easy-dine-pos.git
+cd easy-dine-pos
 cp .env.example .env                 # edit JWT_SECRET / POSTGRES_PASSWORD for anything beyond local dev
 docker compose up -d --build
-docker exec nodedr-restaurant-backend npx ts-node prisma/seed.ts   # first run only — demo data + login
+docker exec easy-dine-backend npx ts-node prisma/seed.ts   # first run only — demo data + login
 ```
 
 Open <http://localhost:1995> and sign in with `owner@demo.local` /
 `Password123!` (seeded demo account — never use this in a real
 deployment). The backend API and Swagger docs (`/api/docs`) are reachable
-only through the web app's `/api` proxy, matching `nodedr-pos`'s pattern —
+only through the web app's `/api` proxy, matching `easydine-pos`'s pattern —
 they are not published directly to the host.
 
 ### Option B — local dev (apps run on the host, Postgres in Docker)
@@ -93,7 +93,7 @@ they are not published directly to the host.
 pnpm install
 docker compose up -d postgres                               # just the DB
 cp apps/backend/.env.example apps/backend/.env               # point DATABASE_URL at your Postgres
-pnpm --filter @nodedr-restaurant/types build
+pnpm --filter @easydine/types build
 cd apps/backend && npx prisma migrate dev && npx ts-node prisma/seed.ts && cd ../..
 pnpm dev   # runs backend (:4001) and web (:1995) together via Turborepo
 ```
@@ -130,7 +130,7 @@ a module, not threading new routes through a shared app — see
 ## Conventions that are not optional
 
 These are documented, previously-learned-the-hard-way rules (some
-inherited from this project's sister repo, `nodedr-pos`, which hit these
+inherited from this project's sister repo, `easydine-pos`, which hit these
 bugs in production). PRs that violate them will be asked to change before
 merge, regardless of otherwise-good code:
 
@@ -197,7 +197,7 @@ Fix loyalty point drift on repeated redemptions
 Running balance was updated with a DB-side increment on a Float column,
 which compounds rounding error over many transactions. Switched to a
 rounded read-modify-write set, matching the rule this project inherited
-from nodedr-pos's original bug.
+from easydine-pos's original bug.
 ```
 
 No fixed prefix convention (`feat:`/`fix:`) is enforced yet — clear prose
@@ -249,7 +249,7 @@ PR.
 
 ## Questions & discussion
 
-Use [GitHub Discussions](https://github.com/Raktim94/nodedr-restaurant-pos/discussions)
+Use [GitHub Discussions](https://github.com/Raktim94/easy-dine-pos/discussions)
 for "how do I…" / "why does X work this way" / general chat. Use Issues
 for concrete bugs and feature requests. Keep architecture debates in
 Discussions or a tagged issue rather than scattered across PR comments,

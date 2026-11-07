@@ -123,8 +123,8 @@ export class AggregatorOrdersService {
       const v = headers[n];
       return Array.isArray(v) ? v[0] : v;
     };
-    const ts = header('x-orderrestro-timestamp') ?? '';
-    const sig = header('x-orderrestro-signature') ?? '';
+    const ts = header('x-easydine-timestamp') ?? '';
+    const sig = header('x-easydine-signature') ?? '';
     const age = Math.abs(Date.now() / 1000 - Number(ts));
     const expected = signAggregatorBody(secret, ts, rawBody);
     const a = Buffer.from(sig);

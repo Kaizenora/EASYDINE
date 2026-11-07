@@ -1,11 +1,11 @@
 using System.Net.Http;
 using System.Text.Json;
 
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 /// <summary>
-/// Per-user configuration: which LAN/local OrderRestro server this client
-/// points at. Stored under %LOCALAPPDATA%\OrderRestro, NOT inside the MSIX
+/// Per-user configuration: which LAN/local EasyDine server this client
+/// points at. Stored under %LOCALAPPDATA%\EasyDine, NOT inside the MSIX
 /// install directory (which is read-only after install and not guaranteed
 /// writable/stable across updates — see hardening brief section 19).
 /// </summary>
@@ -28,7 +28,7 @@ internal sealed class AppConfig
     // DataDir underneath it) — see that method's own comment for why MSIX
     // needs this at all (no uninstall-hook mechanism to do it automatically).
     internal static string ConfigDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OrderRestro");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EasyDine");
 
     public static string ConfigPath => Path.Combine(ConfigDir, "config.json");
 
@@ -64,7 +64,7 @@ internal sealed class AppConfig
 
     /// <summary>
     /// Only accepts http/https URLs pointing at a host — this app is a thin
-    /// client for a restaurant's own OrderRestro server (LAN IP, hostname,
+    /// client for a restaurant's own EasyDine server (LAN IP, hostname,
     /// or a Tailscale/VPN address), never a place for arbitrary local file
     /// or other-scheme URLs to end up wired into WebView2 navigation.
     /// </summary>
@@ -138,7 +138,7 @@ internal sealed class AppConfig
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
             using var response = await client.GetAsync($"{serverUrl}/api/health", ct);
             if (response.IsSuccessStatusCode) return (true, "Connected.");
-            return (false, $"Reached that address, but it didn't respond like an OrderRestro server (HTTP {(int)response.StatusCode}).");
+            return (false, $"Reached that address, but it didn't respond like an EasyDine server (HTTP {(int)response.StatusCode}).");
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

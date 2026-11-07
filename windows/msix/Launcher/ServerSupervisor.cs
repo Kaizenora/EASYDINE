@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 /// <summary>
 /// Owns the lifecycle of the embedded server: Postgres, the NestJS
@@ -96,7 +96,7 @@ internal sealed class ServerSupervisor : IDisposable
     // as child processes, even for a runFullTrust app — confirmed on real
     // CI: initdb.exe failed with "Access is denied" trying to run
     // postgres.exe -V directly from the install location. Only the
-    // package's own declared entry point (OrderRestro.exe itself) is
+    // package's own declared entry point (EasyDine.exe itself) is
     // actually launchable in place. The standard fix: copy the runtime
     // payload to a writable location once, and execute everything from
     // there instead — see ServerPaths.RuntimeServerDir.
@@ -107,7 +107,7 @@ internal sealed class ServerSupervisor : IDisposable
         // possibly slow — a few hundred MB — cost, not something to redo
         // on every start). Known v1 limitation: doesn't detect an MSIX
         // upgrade to a newer version and re-copy automatically; deleting
-        // %LOCALAPPDATA%\OrderRestro\server\server-runtime forces a
+        // %LOCALAPPDATA%\EasyDine\server\server-runtime forces a
         // fresh copy if ever needed.
         // The marker also records which package version made the copy: an
         // MSIX upgrade changes the bundled payload (e.g. 1.0.5.0 added the
@@ -228,7 +228,7 @@ internal sealed class ServerSupervisor : IDisposable
             Directory.Delete(ServerPaths.PgDataDir, recursive: true);
         }
         Directory.CreateDirectory(ServerPaths.PgDataDir);
-        var pwFile = Path.Combine(Path.GetTempPath(), $"orderrestro-pg-{Guid.NewGuid():N}.txt");
+        var pwFile = Path.Combine(Path.GetTempPath(), $"easydine-pg-{Guid.NewGuid():N}.txt");
         // Trust auth is fine here: Postgres is bound to 127.0.0.1 only,
         // never exposed to the LAN (same reasoning docker-compose.yml
         // already documents for its own `postgres` service) — the
@@ -239,7 +239,7 @@ internal sealed class ServerSupervisor : IDisposable
         {
             var exit = await RunToolAsync(
                 Path.Combine(ServerPaths.PostgresBinDir, "initdb.exe"),
-                $"-D \"{ServerPaths.PgDataDir}\" -U orderrestro -A trust -E UTF8 --pwfile=\"{pwFile}\"",
+                $"-D \"{ServerPaths.PgDataDir}\" -U easydine -A trust -E UTF8 --pwfile=\"{pwFile}\"",
                 ServerPaths.PostgresBinDir,
                 env: null,
                 "initdb",
@@ -282,7 +282,7 @@ internal sealed class ServerSupervisor : IDisposable
     /// reliable than reimplementing that check by hand: Windows recycles
     /// PIDs fast enough that a bare "does a process with this PID exist"
     /// test is a real false-positive risk. This also answers "does the
-    /// running instance actually belong to OrderRestro" for free, since it
+    /// running instance actually belong to EasyDine" for free, since it
     /// inspects OUR data directory specifically — unlike a raw TCP connect
     /// to the port, which would report "running" for ANY process that
     /// happens to be listening there, ours or not.
@@ -317,7 +317,7 @@ internal sealed class ServerSupervisor : IDisposable
             $"This update includes a newer PostgreSQL version (major {bundledMajor}) than the one your existing " +
             $"database was created with (major {dataDirMajor}).\n\n" +
             "Your restaurant data has NOT been touched or deleted. Automatic upgrades between major PostgreSQL " +
-            "versions aren't supported yet — please contact support, or reinstall the previous OrderRestro " +
+            "versions aren't supported yet — please contact support, or reinstall the previous EasyDine " +
             "version to keep using your existing data until an upgrade path is available.");
     }
 
@@ -345,7 +345,7 @@ internal sealed class ServerSupervisor : IDisposable
         LogStartup($"existing postgres process detection: {status}");
         if (status == PostgresStatus.Running)
         {
-            // Genuinely OrderRestro's own Postgres (confirmed against our
+            // Genuinely EasyDine's own Postgres (confirmed against our
             // data directory, not just "something answers on the port")
             // from a prior launch that wasn't stopped cleanly. Reuse it
             // instead of starting a second instance.
@@ -412,7 +412,7 @@ internal sealed class ServerSupervisor : IDisposable
                 $"Port {ServerPaths.PostgresPort} is already in use by another program on this PC.",
             _ when tail.Contains("Permission denied", StringComparison.OrdinalIgnoreCase)
                 || tail.Contains("Access is denied", StringComparison.OrdinalIgnoreCase) =>
-                "OrderRestro doesn't have permission to access its local database files.",
+                "EasyDine doesn't have permission to access its local database files.",
             _ when tail.Contains("database files are incompatible", StringComparison.OrdinalIgnoreCase) =>
                 "The local database files are incompatible with this PostgreSQL version.",
             _ when tail.Length == 0 =>
@@ -427,7 +427,7 @@ internal sealed class ServerSupervisor : IDisposable
 
     private async Task EnsureDatabaseCreatedAsync(CancellationToken ct)
     {
-        // Idempotent: createdb fails harmlessly if "orderrestro" already
+        // Idempotent: createdb fails harmlessly if "easydine" already
         // exists (checked by exit code / stderr rather than treated as fatal).
         // Scoped timeout (not just the overall StartAsync budget): a hang
         // here previously burned the entire 15-minute outer budget with no
@@ -435,7 +435,7 @@ internal sealed class ServerSupervisor : IDisposable
         var (exitCode, _, stderr) = await WithTimeoutAsync(ct, TimeSpan.FromSeconds(30), "createdb", innerCt =>
             RunToolCapturedAsync(
                 Path.Combine(ServerPaths.PostgresBinDir, "createdb.exe"),
-                "-U orderrestro -h 127.0.0.1 -p " + ServerPaths.PostgresPort + " orderrestro",
+                "-U easydine -h 127.0.0.1 -p " + ServerPaths.PostgresPort + " easydine",
                 ServerPaths.PostgresBinDir,
                 env: null,
                 "createdb",
@@ -454,7 +454,7 @@ internal sealed class ServerSupervisor : IDisposable
         var lines = new[]
         {
             $"JWT_SECRET={jwtSecret}",
-            $"DATABASE_URL=postgresql://orderrestro:embedded@127.0.0.1:{ServerPaths.PostgresPort}/orderrestro",
+            $"DATABASE_URL=postgresql://easydine:embedded@127.0.0.1:{ServerPaths.PostgresPort}/easydine",
             $"PORT={ServerPaths.BackendPort}",
             $"CORS_ORIGIN=http://localhost:{ServerPaths.WebPort}",
             $"COOKIE_SECURE=false",
@@ -537,7 +537,7 @@ internal sealed class ServerSupervisor : IDisposable
             // the failure reads as actionable instead of a bare Win32
             // "being used by another process" with no context.
             throw new InvalidOperationException(
-                $"Could not open {logPath} — it's in use by another process. If OrderRestro is " +
+                $"Could not open {logPath} — it's in use by another process. If EasyDine is " +
                 "already running, check the system tray (it minimizes there instead of exiting) " +
                 $"before reopening it.\n\n({ex.Message})", ex);
         }

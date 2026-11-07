@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
 
 // Browser only ever talks to ONE origin (this Next.js server) — API calls
-// are proxied server-side to the backend. Same reasoning as nodedr-pos:
+// are proxied server-side to the backend. Same reasoning as easydine-pos:
 // this keeps the session cookie first-party, avoiding the cross-origin
 // cookie fragility that broke that app's very first version. NOTE: Next
 // bakes the rewrite destination at build time, so in Docker this must come
-// from a build ARG, not a runtime env var (see nodedr-pos memory).
+// from a build ARG, not a runtime env var (see easydine-pos memory).
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:4001";
 
 // Baseline response headers for every page. A Content-Security-Policy is

@@ -48,7 +48,7 @@ export const cashfreeAdapter: PaymentGatewayAdapter = {
   limitations: [
     'Cashfree requires the payer phone number to create a link.',
     "Webhook body parsing follows Cashfree's documented schema but has not been exercised against a live Cashfree account; the payment is always confirmed by a server-side status lookup, and the return page also triggers that lookup.",
-    'Refunds are made in the Cashfree dashboard; OrderRestro cannot send them (the link-order refund API was not verified).',
+    'Refunds are made in the Cashfree dashboard; EasyDine cannot send them (the link-order refund API was not verified).',
   ],
   fields: [
     {
@@ -71,7 +71,7 @@ export const cashfreeAdapter: PaymentGatewayAdapter = {
     try {
       // A link id that cannot exist: 404 means the credentials were accepted
       // and the id simply was not found; 401/403 means they were not.
-      await gatewayFetch(`${base(ctx)}/links/orderrestro-connection-check`, {
+      await gatewayFetch(`${base(ctx)}/links/easydine-connection-check`, {
         headers: headers(ctx),
       });
       return { ok: true, message: 'Cashfree accepted the credentials.' };

@@ -8,7 +8,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { createIntegrationOrderSchema } from '@nodedr-restaurant/types';
+import { createIntegrationOrderSchema } from '@easydine/types';
 import { OrdersService } from '../modules/orders/orders.service';
 import {
   IntegrationKeyContext,

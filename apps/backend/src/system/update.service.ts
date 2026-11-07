@@ -16,7 +16,7 @@ export interface VersionInfo {
   checkedAt: string;
 }
 
-const GITHUB_REPO = 'Raktim94/nodedr-restaurant-pos';
+const GITHUB_REPO = 'Raktim94/easy-dine-pos';
 // Avoid hammering GitHub's unauthenticated rate limit (60 req/hr per IP,
 // shared across every self-hosted install behind the same egress IP in the
 // worst case) — a check this infrequent is still fast enough to surface a
@@ -78,7 +78,7 @@ export class UpdateService {
   }
 
   // Hands the update to the `updater` sidecar container (updater/server.js),
-  // same design as nodedr-pos. A container can't safely replace itself, and
+  // same design as easydine-pos. A container can't safely replace itself, and
   // giving this API the Docker socket would be far more privilege than a POS
   // backend should hold — the sidecar is reachable only on the internal
   // Docker network, only with UPDATER_TOKEN, and only ever swaps the image
@@ -159,7 +159,7 @@ export class UpdateService {
   // than a clear 404 means "can't tell", and the tag is trusted.
   private async imageTagExists(tag: string): Promise<boolean | null> {
     try {
-      const repo = 'raktim94/nodedr-restaurant-pos-backend';
+      const repo = 'raktim94/easy-dine-pos-backend';
       const version = tag.replace(/^v/i, '');
       const tokRes = await fetch(
         `https://ghcr.io/token?scope=repository:${repo}:pull`,
@@ -192,7 +192,7 @@ export class UpdateService {
       {
         headers: {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'nodedr-restaurant-pos-update-check',
+          'User-Agent': 'easy-dine-pos-update-check',
         },
         signal: AbortSignal.timeout(5000),
       },

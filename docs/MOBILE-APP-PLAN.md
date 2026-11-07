@@ -1,4 +1,4 @@
-# OrderRestro mobile app: Play Store and App Store plan
+# EasyDine mobile app: Play Store and App Store plan
 
 Status (2026-11-02, version 1.15.0): **built**, see `mobile/README.md`. Android debug and signed release builds run on an emulator; the iOS project is written but not compiled; store submission still needs the owner's accounts, a Firebase project and a public demo server. The sections below are the original plan.
 
@@ -6,7 +6,7 @@ What differs from the plan: the app opens the restaurant's own web app in the na
 
 ## 1. What we are shipping
 
-One app, **OrderRestro**, for Android and iOS. It is the staff and rider app, using the same login as the web app (email or phone plus password).
+One app, **EasyDine**, for Android and iOS. It is the staff and rider app, using the same login as the web app (email or phone plus password).
 
 | Role | What they get on the phone |
 |---|---|
@@ -68,12 +68,12 @@ About 9 to 10 weeks of work for one developer, with store approvals on top (Play
 ## 5. What the store submissions need
 
 Accounts and money
-- Google Play developer account: one-time US$25. Register as an **organization** (NODEDR INFOTECH PRIVATE LIMITED, needs a D-U-N-S number). New personal accounts must run a closed test with 12 testers for 14 days before production; organization accounts avoid that.
+- Google Play developer account: one-time US$25. Register as an **organization** (EASYDINE INFOTECH PRIVATE LIMITED, needs a D-U-N-S number). New personal accounts must run a closed test with 12 testers for 14 days before production; organization accounts avoid that.
 - Apple Developer Program: US$99 a year, also as an organization (D-U-N-S again). Building and submitting iOS needs a Mac with Xcode, or a cloud Mac build service. Nothing in the current setup builds for iOS.
 
 Both stores
-- App name, short and full description, icon, feature graphic (Play), 5 or more screenshots per device size, support URL and email (info@nodedr.com), marketing URL (orderrestro.nodedr.com), privacy policy URL (already on the site, needs a mobile section).
-- **A review login that works.** OrderRestro is self-hosted, so the reviewers need a public demo server with sample data and a staff and a rider account. Without it the app is rejected as "cannot be used". Plan: a small demo instance on `mail` or a VPS, reset nightly.
+- App name, short and full description, icon, feature graphic (Play), 5 or more screenshots per device size, support URL and email (info@easydine.com), marketing URL (easydine.easydine.com), privacy policy URL (already on the site, needs a mobile section).
+- **A review login that works.** EasyDine is self-hosted, so the reviewers need a public demo server with sample data and a staff and a rider account. Without it the app is rejected as "cannot be used". Plan: a small demo instance on `mail` or a VPS, reset nightly.
 - **Account deletion** inside the app and on a web page (required by both stores).
 - Age rating, content rating, export compliance (the app uses standard HTTPS only).
 
@@ -132,8 +132,8 @@ Store listing wording avoids claiming "certified" tax compliance (VERI*FACTU sta
 ## 10. Decisions needed from the owner
 
 1. Which app first: the **staff and rider app** (recommended) or the **customer app** for PKUSS.
-2. Push notifications: one NodeDR push relay that all installs use (simple for owners, NODEDR runs it) or each restaurant brings its own FCM and APNs keys (no shared service, harder to set up). Recommended: relay.
-3. Developer accounts: confirm NODEDR INFOTECH PRIVATE LIMITED as the publisher and that a D-U-N-S number exists or can be requested.
+2. Push notifications: one NodeDR push relay that all installs use (simple for owners, EASYDINE runs it) or each restaurant brings its own FCM and APNs keys (no shared service, harder to set up). Recommended: relay.
+3. Developer accounts: confirm EASYDINE INFOTECH PRIVATE LIMITED as the publisher and that a D-U-N-S number exists or can be requested.
 4. A Mac for iOS builds, or a cloud Mac service.
 5. Background location for riders in release 1 (slower approval) or later (recommended).
 6. Public demo server: where it runs and who resets it.

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "@/lib/toast";
-import { INTEGRATION_SCOPES, type IntegrationScope } from "@nodedr-restaurant/types";
+import { INTEGRATION_SCOPES, type IntegrationScope } from "@easydine/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";

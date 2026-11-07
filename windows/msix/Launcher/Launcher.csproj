@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Minimal WebView2 launcher for the OrderRestro Windows client.
+    Minimal WebView2 launcher for the EasyDine Windows client.
 
     This is NOT Electron: it ships no bundled Chromium. It hosts the
     OS-shared, evergreen WebView2 Runtime (present on Windows 11 and
@@ -33,8 +33,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>OrderRestro.Launcher</RootNamespace>
-    <AssemblyName>OrderRestro</AssemblyName>
+    <RootNamespace>EasyDine.Launcher</RootNamespace>
+    <AssemblyName>EasyDine</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>
 
@@ -55,9 +55,9 @@
     <SelfContained>true</SelfContained>
 
     <Version>1.0.8.0</Version>
-    <Product>Nodedr OrderRestro</Product>
-    <Company>Nodedr Infotech Private Limited</Company>
-    <Copyright>Copyright © Nodedr Infotech Private Limited</Copyright>
+    <Product>Easy Dine</Product>
+    <Company>EasyDine Infotech Private Limited</Company>
+    <Copyright>Copyright © EasyDine Infotech Private Limited</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

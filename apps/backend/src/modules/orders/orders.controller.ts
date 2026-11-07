@@ -32,7 +32,7 @@ import {
   type UpdateOrderDto,
   type UpdateOrderItemDto,
   type SessionUser,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -510,7 +510,7 @@ export class OrdersController {
   }
 
   // --- Direct-USB thermal printing (ESC/POS) ---------------------------------
-  // Ported from nodedr-pos, which has real hardware to verify against; this
+  // Ported from easydine-pos, which has real hardware to verify against; this
   // app's transport/byte-building code is identical in structure (see
   // escpos-usb.ts/escpos-receipt.ts file comments) but has only been
   // structurally verified here (module loads, correct 503 with no printer

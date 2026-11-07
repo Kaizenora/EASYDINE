@@ -8,7 +8,7 @@ The app talks only to the restaurant server the user connects it to (and to Goog
 |---|---|
 | Does the app collect or share user data? | Collects. Does not share with third parties |
 | Is all data encrypted in transit? | Yes when the restaurant server uses https. A server on a private network may use http; the app says so in its listing |
-| Can users request data deletion? | Yes: in the app (user menu > Delete my account) and at https://orderrestro.nodedr.com/delete-account |
+| Can users request data deletion? | Yes: in the app (user menu > Delete my account) and at https://easydine.easydine.com/delete-account |
 
 Data types collected (all "collected", none "shared", all optional = no except account info, purpose = App functionality / Account management):
 

@@ -7,7 +7,7 @@ import { Suspense, useEffect, useState } from "react";
 type State = "CREATED" | "SUCCEEDED" | "FAILED" | "EXPIRED" | "NEEDS_REVIEW" | "UNKNOWN";
 
 // Where a customer lands after the provider's payment page. This page is a
-// courtesy: it asks OrderRestro's server for the status, and the server asks
+// courtesy: it asks EasyDine's server for the status, and the server asks
 // the provider. Nothing here (or in the URL) can mark anything as paid.
 function Return() {
   const gp = useSearchParams().get("gp");

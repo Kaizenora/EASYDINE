@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import type { SessionUser } from '@nodedr-restaurant/types';
+import type { SessionUser } from '@easydine/types';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import {
   effectivePermissions,
@@ -16,7 +16,7 @@ interface JwtPayload {
 const cookieExtractor = (req: {
   cookies?: Record<string, string>;
 }): string | null => {
-  return req.cookies?.['nodedr_session'] ?? null;
+  return req.cookies?.['easydine_session'] ?? null;
 };
 
 @Injectable()

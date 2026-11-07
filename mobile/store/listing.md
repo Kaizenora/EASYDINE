@@ -1,18 +1,18 @@
 # Store listing text (Google Play and App Store)
 
-**App name:** OrderRestro
+**App name:** EasyDine
 **Subtitle / short description (80):** Orders, deliveries and your kitchen, connected to your own server.
 **Category:** Business (Play: Business; App Store: Business, secondary Food & Drink)
-**Contact email:** info@nodedr.com
-**Website:** https://orderrestro.nodedr.com
-**Privacy policy:** https://orderrestro.nodedr.com/privacy
-**Delete account page:** https://orderrestro.nodedr.com/delete-account
-**Support URL:** https://orderrestro.nodedr.com/contact
+**Contact email:** info@easydine.com
+**Website:** https://easydine.easydine.com
+**Privacy policy:** https://easydine.easydine.com/privacy
+**Delete account page:** https://easydine.easydine.com/delete-account
+**Support URL:** https://easydine.easydine.com/contact
 **Age rating:** 4+ / Everyone (no user-generated public content, no purchases)
 
 ## Full description
 
-OrderRestro is the staff and delivery rider app for restaurants that run NodeDR OrderRestro, the free, open-source restaurant system you host yourself. This app needs an OrderRestro server; ask your restaurant for its address or scan the QR code in Settings > Mobile app.
+EasyDine is the staff and delivery rider app for restaurants that run NodeDR EasyDine, the free, open-source restaurant system you host yourself. This app needs an EasyDine server; ask your restaurant for its address or scan the QR code in Settings > Mobile app.
 
 For riders
 - Sign in with your phone number and password
@@ -55,7 +55,7 @@ Free. No ads. No tracking. Delete your account any time from the user menu.
 - Readable status bar on Android 15 and 16
 
 ## First release (1.14.1)
-First release of the OrderRestro app for Android and iPhone.
+First release of the EasyDine app for Android and iPhone.
 
 ## Keywords (App Store, 100 chars)
 restaurant,pos,delivery,rider,kitchen,orders,waiter,cashier,dashboard,self-hosted

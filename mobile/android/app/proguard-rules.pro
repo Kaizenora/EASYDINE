@@ -25,7 +25,7 @@
 -keep @com.getcapacitor.annotation.CapacitorPlugin public class * { @com.getcapacitor.annotation.PermissionCallback <methods>; @com.getcapacitor.annotation.ActivityCallback <methods>; @com.getcapacitor.PluginMethod public <methods>; }
 -keep class com.capacitorjs.** { *; }
 -keep class io.capawesome.** { *; }
--keep class com.nodedr.orderrestro.** { *; }
+-keep class com.easydine.easydine.** { *; }
 -keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 -dontwarn com.getcapacitor.**

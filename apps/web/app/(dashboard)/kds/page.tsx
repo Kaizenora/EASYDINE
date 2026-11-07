@@ -1,6 +1,6 @@
 "use client";
 
-import type { KotStatusDto } from "@nodedr-restaurant/types";
+import type { KotStatusDto } from "@easydine/types";
 import { useEffect, useSyncExternalStore } from "react";
 import { CloudOff } from "lucide-react";
 import { Button } from "@/components/ui/button";

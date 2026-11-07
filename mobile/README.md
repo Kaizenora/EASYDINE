@@ -1,6 +1,6 @@
-# OrderRestro mobile app (Android and iOS)
+# EasyDine mobile app (Android and iOS)
 
-A Capacitor app that wraps the restaurant's own OrderRestro web app with native features. See `../docs/MOBILE-APP-PLAN.md` for the plan and `store/` for the store material.
+A Capacitor app that wraps the restaurant's own EasyDine web app with native features. See `../docs/MOBILE-APP-PLAN.md` for the plan and `store/` for the store material.
 
 ## How it works
 
@@ -42,9 +42,9 @@ ORDERRESTRO_KEYSTORE_PROPERTIES=/path/keystore.properties ./gradlew bundleReleas
 
 ## Push notifications (Firebase)
 
-Create a Firebase project, add the Android app `com.nodedr.orderrestro` and the iOS app with the same id, then:
+Create a Firebase project, add the Android app `com.easydine.easydine` and the iOS app with the same id, then:
 
-- Android: put `google-services.json` in `android/app/` (it is git-ignored; a copy is kept in `~/orderrestro-signing/`). The OrderRestro Firebase project is `orderrestro-c0a12` with the Android app `com.nodedr.orderrestro` already registered. Without it the app still works and just does not register for push (it checks `ServerLink.pushReady` first).
+- Android: put `google-services.json` in `android/app/` (it is git-ignored; a copy is kept in `~/easydine-signing/`). The EasyDine Firebase project is `easydine-c0a12` with the Android app `com.easydine.easydine` already registered. Without it the app still works and just does not register for push (it checks `ServerLink.pushReady` first).
 - iOS: not finished. The Capacitor push plugin returns an APNs device token on iPhone, but the server sends through Firebase (FCM), which needs an FCM token. Before iOS push works, either add the Firebase iOS SDK (`GoogleService-Info.plist`, an APNs key uploaded to Firebase and a Firebase Messaging plugin) or have the server send to APNs directly.
 - Server: set `FCM_SERVICE_ACCOUNT_JSON` (or `FCM_SERVICE_ACCOUNT_FILE`) from Firebase > Project settings > Service accounts. Without it push stays off.
 

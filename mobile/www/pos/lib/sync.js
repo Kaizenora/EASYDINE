@@ -29,7 +29,7 @@ export async function pullSnapshot(base) {
   await kv.set('snapshot', s.data);
   await kv.set('snapshotAt', Date.now());
   try {
-    localStorage.setItem('orderrestro.standalone.ready', '1'); // lets the "can't reach the server" page offer this
+    localStorage.setItem('easydine.standalone.ready', '1'); // lets the "can't reach the server" page offer this
   } catch {
     /* storage blocked */
   }

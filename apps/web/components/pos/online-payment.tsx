@@ -19,13 +19,13 @@ import { fromMinorUnits } from "@/lib/money-units";
 
 declare global {
   interface Window {
-    OrderRestroNative?: { openExternal?: (url: string) => void };
+    EasyDineNative?: { openExternal?: (url: string) => void };
   }
 }
 
 /** In the Android app the page opens in the phone's browser; elsewhere in a new tab. */
 function openPaymentPage(url: string) {
-  const native = typeof window === "undefined" ? undefined : window.OrderRestroNative;
+  const native = typeof window === "undefined" ? undefined : window.EasyDineNative;
   if (native?.openExternal) native.openExternal(url);
   else window.open(url, "_blank", "noopener,noreferrer");
 }
@@ -84,7 +84,7 @@ export function OnlinePayment({ orderId, branchId, disabled }: { orderId: string
       {!pay || pay.status === "EXPIRED" || pay.status === "FAILED" ? (
         <>
           <p className="text-xs text-muted-foreground">
-            Makes a {active.name} page for the amount still due on this bill. The customer pays there; card details never reach OrderRestro.
+            Makes a {active.name} page for the amount still due on this bill. The customer pays there; card details never reach EasyDine.
           </p>
           {active.requiresCustomerPhone && (
             <div className="flex flex-col gap-1">

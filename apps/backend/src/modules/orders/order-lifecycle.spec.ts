@@ -6,7 +6,7 @@ import {
   KOT_TRANSITIONS,
   kitchenProgress,
   type KotStatusDto,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 
 const ALL: KotStatusDto[] = [
   'NEW',

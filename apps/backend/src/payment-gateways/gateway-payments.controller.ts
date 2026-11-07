@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { SessionUser } from '@nodedr-restaurant/types';
+import type { SessionUser } from '@easydine/types';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { AuditAction } from '../audit/audit-action';

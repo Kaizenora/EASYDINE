@@ -1,6 +1,6 @@
 "use client";
 
-import type { TableStatusDto } from "@nodedr-restaurant/types";
+import type { TableStatusDto } from "@easydine/types";
 import { ClipboardList, Merge, Plus, QrCode, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

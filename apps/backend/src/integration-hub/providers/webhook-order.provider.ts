@@ -12,7 +12,7 @@ import {
  * aggregator / channel manager the restaurant already pays for (UrbanPiper,
  * Petpooja, Dotpe ...) that forwards Zomato and Swiggy orders.
  *
- * OrderRestro publishes one signed, documented inbound endpoint (see
+ * EasyDine publishes one signed, documented inbound endpoint (see
  * docs/INTEGRATIONS.md). This adapter has no outbound client: it never calls
  * the platform, so it can never claim a connection it has not seen. The hub
  * marks it CONNECTED only after a correctly signed delivery really arrived.

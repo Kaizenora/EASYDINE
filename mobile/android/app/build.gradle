@@ -6,11 +6,11 @@ if (keystoreFile.exists()) { keystoreFile.withInputStream { keystoreProperties.l
 else if (System.getenv("ORDERRESTRO_KEYSTORE_PROPERTIES")) { file(System.getenv("ORDERRESTRO_KEYSTORE_PROPERTIES")).withInputStream { keystoreProperties.load(it) } }
 
 android {
-    namespace "com.nodedr.orderrestro"
+    namespace "com.easydine.easydine"
     compileSdk rootProject.ext.compileSdkVersion
     buildFeatures { buildConfig true }
     defaultConfig {
-        applicationId "com.nodedr.orderrestro"
+        applicationId "com.easydine.easydine"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 122100

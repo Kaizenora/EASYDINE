@@ -47,7 +47,7 @@ input:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid color
 </main>
 <script>
 (function(){
-  var N=window.OrderRestroNative;
+  var N=window.EasyDineNative;
   var url=N?N.serverUrl():'';
   if(url){document.getElementById('where').textContent='Could not reach '+url+'. Check that this phone is on the restaurant WiFi and the server computer is on.';}
   document.getElementById('retry').addEventListener('click',function(){if(N&&N.retry)N.retry();else location.href=url||'/';});

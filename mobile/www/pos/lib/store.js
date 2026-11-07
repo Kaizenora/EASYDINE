@@ -1,7 +1,7 @@
 // Everything the standalone POS keeps on the phone, in IndexedDB:
 //   kv    small values: the menu snapshot, who is signed in, settings, counters
 //   sales every sale taken, with whether the server has it yet
-const DB = 'orderrestro-pos';
+const DB = 'easydine-pos';
 let dbp;
 
 function open() {

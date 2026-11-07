@@ -42,7 +42,7 @@ export async function request(base, method, path, body, { timeout = 15000 } = {}
   }
 }
 
-/** Is an OrderRestro server answering at this address? */
+/** Is an EasyDine server answering at this address? */
 export async function reachable(base, timeout = 3500) {
   try {
     const r = await request(base, 'GET', '/api/v1/auth/setup-status', undefined, { timeout });

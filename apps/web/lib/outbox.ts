@@ -16,7 +16,7 @@ export interface OutboxItem {
   meta?: { kind: "kot-status"; id: string; status: string } | { kind: "kot-priority"; id: string; isPriority: boolean };
 }
 
-const STORE = "orderrestro.outbox.v1";
+const STORE = "easydine.outbox.v1";
 const listeners = new Set<() => void>();
 
 function read(): OutboxItem[] {

@@ -149,10 +149,10 @@ async function bootstrap() {
     process.env.ENABLE_SWAGGER === 'true'
   ) {
     const config = new DocumentBuilder()
-      .setTitle('Nodedr OrderRestro API')
-      .setDescription('REST API for the Nodedr OrderRestro management system')
+      .setTitle('Easy Dine API')
+      .setDescription('REST API for the Easy Dine management system')
       .setVersion('1.0')
-      .addCookieAuth('nodedr_session')
+      .addCookieAuth('easydine_session')
       .addBearerAuth({ type: 'http', scheme: 'bearer' }, 'integration-key')
       .build();
     const document = SwaggerModule.createDocument(app, config);
@@ -162,7 +162,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
   console.log(
-    `Nodedr OrderRestro API listening on :${port} (docs at /api/docs)`,
+    `Easy Dine API listening on :${port} (docs at /api/docs)`,
   );
 }
 void bootstrap();

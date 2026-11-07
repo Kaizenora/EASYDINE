@@ -1,4 +1,4 @@
-// OrderRestro standalone POS. Opens with no connection, sells from the menu
+// EasyDine standalone POS. Opens with no connection, sells from the menu
 // saved on this phone, prints, and sends the sales to the restaurant server
 // whenever it can. Plain DOM + modules: nothing here needs a build step.
 import { computeBill, round2, settle, upiLink } from './lib/bill.js';
@@ -88,7 +88,7 @@ function saleFrom(localNumber, bill, payments, change) {
 }
 
 // ----------------------------------------------------------------- printing ---
-const PRINTER_KEY = 'orderrestro.btPrinter';
+const PRINTER_KEY = 'easydine.btPrinter';
 const savedPrinter = () => {
   try {
     return JSON.parse(localStorage.getItem(PRINTER_KEY) || 'null');
@@ -135,7 +135,7 @@ function choosePrinter() {
 
 async function printBluetooth(bytes) {
   const np = plugins().NativePrinter;
-  if (!np) return toast('Bluetooth printing works in the OrderRestro app.');
+  if (!np) return toast('Bluetooth printing works in the EasyDine app.');
   let printer = savedPrinter();
   if (!printer) printer = await choosePrinter();
   if (!printer) return;
@@ -148,7 +148,7 @@ async function printBluetooth(bytes) {
 }
 
 async function printPdf(sale, opts) {
-  const upiSvg = opts.upiUri && window.OrderRestroQR ? await window.OrderRestroQR.svg(opts.upiUri, 240) : null;
+  const upiSvg = opts.upiUri && window.EasyDineQR ? await window.EasyDineQR.svg(opts.upiUri, 240) : null;
   const html = htmlReceipt(sale, S.snap, { provisional: opts.provisional, upiSvg });
   const np = plugins().NativePrinter;
   if (np) {
@@ -563,9 +563,9 @@ function openPay() {
     const st = settle(bill.total, tenders);
     const upiRow = rows.find((r) => r.method === 'UPI');
     let qr = '';
-    if (upiRow && S.snap.restaurant.upiVpa && window.OrderRestroQR) {
+    if (upiRow && S.snap.restaurant.upiVpa && window.EasyDineQR) {
       const amt = Number(upiRow.amount) || bill.total;
-      const svg = await window.OrderRestroQR.svg(upiLink({ vpa: S.snap.restaurant.upiVpa, name: S.snap.restaurant.upiPayeeName, amount: amt }), 240);
+      const svg = await window.EasyDineQR.svg(upiLink({ vpa: S.snap.restaurant.upiVpa, name: S.snap.restaurant.upiPayeeName, amount: amt }), 240);
       qr = `<div class="qr" aria-label="UPI QR code">${svg}</div><p class="center mute">Ask the guest to scan, then confirm below when the payment shows on your phone.</p>`;
     } else if (upiRow) qr = '<div class="note">No UPI id is set for this restaurant. Take the UPI payment on your own phone and note the reference.</div>';
     const root = $('sheet').firstElementChild;
@@ -771,7 +771,7 @@ async function viewSync() {
     }
     await kv.del('snapshot');
     try {
-      localStorage.removeItem('orderrestro.standalone.ready');
+      localStorage.removeItem('easydine.standalone.ready');
     } catch {
       /* storage blocked */
     }

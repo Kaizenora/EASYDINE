@@ -8,19 +8,19 @@
   <!--
     Package identity. Name/Publisher come from Partner Center's "View
     product identity" page for this app (Store ID 9NVPNLWW2FZ4, PFN
-    NODEDRINFOTECHLIMITED.NodedrOrderRestro_wsh4jzg5a6682) — Publisher MUST
+    EASYDINEINFOTECHLIMITED.EasyDineEasyDine_wsh4jzg5a6682) — Publisher MUST
     exactly match the CN issued there, or Store validation and any
     Add-AppxPackage install reject the package.
   -->
   <Identity
-    Name="NODEDRINFOTECHLIMITED.NodedrOrderRestro"
+    Name="EASYDINEINFOTECHLIMITED.EasyDineEasyDine"
     Publisher="CN=11C721FC-E399-4888-B532-7BFCD5C491B3"
     Version="1.0.8.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>Nodedr OrderRestro</DisplayName>
-    <PublisherDisplayName>NODEDR INFOTECH LIMITED</PublisherDisplayName>
+    <DisplayName>Easy Dine</DisplayName>
+    <PublisherDisplayName>EASYDINE INFOTECH LIMITED</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -37,9 +37,9 @@
   </Dependencies>
 
   <Applications>
-    <Application Id="OrderRestro" Executable="OrderRestro.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="EasyDine" Executable="EasyDine.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="Nodedr OrderRestro"
+        DisplayName="Easy Dine"
         Description="Offline-first restaurant POS, tables, kitchen display, and menu management."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
@@ -59,7 +59,7 @@
     Capabilities: deliberately minimal, per hardening brief sections 2/17/26.
 
     - internetClient: outbound HTTP(S) to the restaurant's LAN/local
-      OrderRestro server. This is the ONLY capability the app needs.
+      EasyDine server. This is the ONLY capability the app needs.
     - runFullTrust: required for any Win32/.NET desktop app packaged as
       MSIX (this is what "EntryPoint=Windows.FullTrustApplication" above
       declares) — this is NOT the same thing as elevation/admin rights.

@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# One-command install of OrderRestro on Ubuntu or Debian (amd64 or arm64).
+# One-command install of EasyDine on Ubuntu or Debian (amd64 or arm64).
 #
-#   curl -fsSL https://orderrestro.nodedr.com/install-linux.sh | sudo bash
+#   curl -fsSL https://easydine.easydine.com/install-linux.sh | sudo bash
 #
 # Downloads the .deb for the latest release from GitHub, checks its SHA-256, makes sure Docker and Docker Compose
-# are present, and installs the package with apt. The package starts OrderRestro under systemd (it runs in Docker)
+# are present, and installs the package with apt. The package starts EasyDine under systemd (it runs in Docker)
 # and it is then available at http://localhost:1995.
-# Pin a version:  curl -fsSL https://orderrestro.nodedr.com/install-linux.sh | sudo ORDERRESTRO_VERSION=X.Y.Z bash
-# Read it first:  curl -fsSL https://orderrestro.nodedr.com/install-linux.sh | less
-# Use a file you already downloaded (it must sit next to its .sha256):  sudo DEB_FILE=./nodedr-orderrestro_X.Y.Z_amd64.deb bash install-linux.sh
+# Pin a version:  curl -fsSL https://easydine.easydine.com/install-linux.sh | sudo ORDERRESTRO_VERSION=X.Y.Z bash
+# Read it first:  curl -fsSL https://easydine.easydine.com/install-linux.sh | less
+# Use a file you already downloaded (it must sit next to its .sha256):  sudo DEB_FILE=./easy-dine_X.Y.Z_amd64.deb bash install-linux.sh
 set -euo pipefail
 
-REPO="Raktim94/nodedr-restaurant-pos"
-PKG="nodedr-orderrestro"
+REPO="Raktim94/easy-dine-pos"
+PKG="easy-dine"
 say() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 die() { printf '\033[1;31mERROR:\033[0m %s\n' "$1" >&2; exit 1; }
 
-[ "$(id -u)" -eq 0 ] || die "Run as root: curl -fsSL https://orderrestro.nodedr.com/install-linux.sh | sudo bash"
+[ "$(id -u)" -eq 0 ] || die "Run as root: curl -fsSL https://easydine.easydine.com/install-linux.sh | sudo bash"
 [ -r /etc/os-release ] && . /etc/os-release
-case "${ID:-}:${ID_LIKE:-}" in debian:*|ubuntu:*|*:*debian*|*:*ubuntu*) ;; *) die "This installer is for Ubuntu and Debian. For other systems use Docker: https://orderrestro.nodedr.com/" ;; esac
+case "${ID:-}:${ID_LIKE:-}" in debian:*|ubuntu:*|*:*debian*|*:*ubuntu*) ;; *) die "This installer is for Ubuntu and Debian. For other systems use Docker: https://easydine.easydine.com/" ;; esac
 command -v apt-get >/dev/null || die "apt-get was not found."
-{ command -v systemctl >/dev/null && [ -d /run/systemd/system ]; } || die "systemd is required. In a container or WSL without systemd, use Docker Compose instead: https://orderrestro.nodedr.com/"
+{ command -v systemctl >/dev/null && [ -d /run/systemd/system ]; } || die "systemd is required. In a container or WSL without systemd, use Docker Compose instead: https://easydine.easydine.com/"
 
 ARCH="$(dpkg --print-architecture)"
 case "$ARCH" in amd64|arm64) ;; *) die "Unsupported CPU architecture '$ARCH' (amd64 and arm64 are published)." ;; esac
@@ -45,7 +45,7 @@ fi
 systemctl enable --now docker >/dev/null 2>&1 || true
 docker compose version >/dev/null 2>&1 || die "Docker Compose is still unavailable. See https://docs.docker.com/engine/install/ and run this again."
 
-WORK="$(mktemp -d /var/tmp/nodedr-orderrestro-install.XXXXXX)"; chmod 0755 "$WORK"; trap 'rm -rf "$WORK"' EXIT
+WORK="$(mktemp -d /var/tmp/easy-dine-install.XXXXXX)"; chmod 0755 "$WORK"; trap 'rm -rf "$WORK"' EXIT
 if [ -n "${DEB_FILE:-}" ]; then
   [ -f "$DEB_FILE" ] || die "DEB_FILE '$DEB_FILE' does not exist."
   FILE="$(basename "$DEB_FILE")"; cp "$DEB_FILE" "$WORK/$FILE"
@@ -62,7 +62,7 @@ else
   VERSION="${VERSION#v}"
   FILE="${PKG}_${VERSION}_${ARCH}.deb"
   BASE="https://github.com/$REPO/releases/download/v${VERSION}"
-  say "Downloading OrderRestro $VERSION ($ARCH)"
+  say "Downloading EasyDine $VERSION ($ARCH)"
   curl -fSL --retry 3 -o "$WORK/$FILE" "$BASE/$FILE" || die "Could not download $BASE/$FILE"
   curl -fsSL -o "$WORK/$FILE.sha256" "$BASE/$FILE.sha256" || die "Could not download the checksum file."
 fi

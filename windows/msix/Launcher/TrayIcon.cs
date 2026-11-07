@@ -1,4 +1,4 @@
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 /// <summary>
 /// System tray presence for embedded-server mode: lets the till window be
@@ -19,7 +19,7 @@ internal sealed class TrayIcon : IDisposable
     public TrayIcon(Icon appIcon)
     {
         var menu = new ContextMenuStrip();
-        var open = new ToolStripMenuItem("Open Nodedr OrderRestro");
+        var open = new ToolStripMenuItem("Open Easy Dine");
         open.Click += (_, _) => OpenRequested?.Invoke();
         var viewLogs = new ToolStripMenuItem("View server logs");
         viewLogs.Click += (_, _) =>
@@ -41,7 +41,7 @@ internal sealed class TrayIcon : IDisposable
         _icon = new NotifyIcon
         {
             Icon = appIcon,
-            Text = "Nodedr OrderRestro — server running",
+            Text = "Easy Dine — server running",
             Visible = true,
             ContextMenuStrip = menu,
         };
@@ -56,9 +56,9 @@ internal sealed class TrayIcon : IDisposable
         _icon.ShowBalloonTip(10000);
     }
 
-    public void SetStatus(string text) => _icon.Text = $"Nodedr OrderRestro — {text}".Length > 63
-        ? $"Nodedr OrderRestro — {text}"[..63]
-        : $"Nodedr OrderRestro — {text}"; // NotifyIcon.Text has a 63-char OS limit
+    public void SetStatus(string text) => _icon.Text = $"Easy Dine — {text}".Length > 63
+        ? $"Easy Dine — {text}"[..63]
+        : $"Easy Dine — {text}"; // NotifyIcon.Text has a 63-char OS limit
 
     public void Dispose()
     {

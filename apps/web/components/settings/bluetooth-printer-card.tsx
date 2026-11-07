@@ -11,16 +11,16 @@ import { toast } from "@/lib/toast";
 
 const subscribe = (cb: () => void) => {
   window.addEventListener("storage", cb);
-  window.addEventListener("orderrestro:printer", cb);
+  window.addEventListener("easydine:printer", cb);
   return () => {
     window.removeEventListener("storage", cb);
-    window.removeEventListener("orderrestro:printer", cb);
+    window.removeEventListener("easydine:printer", cb);
   };
 };
-const read = () => window.localStorage.getItem("orderrestro.btPrinter") ?? "";
+const read = () => window.localStorage.getItem("easydine.btPrinter") ?? "";
 
 /**
- * Settings > Printer, on a phone running the OrderRestro app: choose the paired
+ * Settings > Printer, on a phone running the EasyDine app: choose the paired
  * Bluetooth printer this phone prints bills and kitchen tickets on. Hidden in a
  * browser, where the printer attached to the restaurant computer is used.
  */
@@ -34,7 +34,7 @@ export function BluetoothPrinterCard() {
 
   const choose = async () => {
     const p = await chooseBtPrinter();
-    if (p) window.dispatchEvent(new Event("orderrestro:printer"));
+    if (p) window.dispatchEvent(new Event("easydine:printer"));
   };
 
   return (
@@ -84,7 +84,7 @@ export function BluetoothPrinterCard() {
             onClick={() => {
               saveBtPrinter(null);
               setNote(null);
-              window.dispatchEvent(new Event("orderrestro:printer"));
+              window.dispatchEvent(new Event("easydine:printer"));
             }}
           >
             Forget

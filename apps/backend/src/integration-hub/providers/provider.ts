@@ -61,7 +61,7 @@ export interface IntegrationProvider {
   readonly accountIdLabel?: string;
   /** When true the account id may be left blank. */
   readonly accountIdOptional?: boolean;
-  /** Honest note about what must exist outside OrderRestro before this works. */
+  /** Honest note about what must exist outside EasyDine before this works. */
   readonly requirements?: string;
 
   /** Check the saved credentials against the platform. Must never claim success it did not observe. */

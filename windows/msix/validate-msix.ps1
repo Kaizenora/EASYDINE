@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Sanity-checks a built OrderRestro.msix before install-testing, sideload
+    Sanity-checks a built EasyDine.msix before install-testing, sideload
     distribution, or Store submission. Does NOT replace the Windows App
     Certification Kit (WACK) — run that too before a real Store submission
     (see README.md "Store submission checklist").
@@ -27,7 +27,7 @@
          packages.
 
 .PARAMETER MsixPath
-    Path to the .msix to validate. Defaults to ./out/OrderRestro.msix (the
+    Path to the .msix to validate. Defaults to ./out/EasyDine.msix (the
     build-windows-msix.ps1 default output location).
 
 .PARAMETER AllowPlaceholderPublisher
@@ -54,13 +54,13 @@
 
 .EXAMPLE
     ./validate-msix.ps1
-    ./validate-msix.ps1 -MsixPath .\out\OrderRestro.msix
+    ./validate-msix.ps1 -MsixPath .\out\EasyDine.msix
     ./validate-msix.ps1 -AllowPlaceholderPublisher   # CI/local self-signed test builds only
     ./validate-msix.ps1 -ExpectEmbeddedServer        # packages built with -IncludeEmbeddedServer
 #>
 [CmdletBinding()]
 param(
-    [string]$MsixPath = (Join-Path $PSScriptRoot 'out\OrderRestro.msix'),
+    [string]$MsixPath = (Join-Path $PSScriptRoot 'out\EasyDine.msix'),
     [switch]$AllowPlaceholderPublisher,
     [switch]$ExpectEmbeddedServer
 )
@@ -86,7 +86,7 @@ if (-not (Test-Path $MsixPath)) {
 }
 Write-Host "Validating: $MsixPath`n" -ForegroundColor White
 
-$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("orderrestro-validate-" + [Guid]::NewGuid())
+$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("easydine-validate-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
 try {
     $zipPath = Join-Path $tempDir 'package.zip'
@@ -256,7 +256,7 @@ try {
 
         Test-Check "No real secrets baked into the embedded server assets" {
             # backend.env (with the real, generated JWT_SECRET) is written
-            # at RUNTIME to %LOCALAPPDATA%\OrderRestro\server\ — it must
+            # at RUNTIME to %LOCALAPPDATA%\EasyDine\server\ — it must
             # never exist inside the built package itself. .pdb/.git
             # likewise have no legitimate reason to appear even inside a
             # real node_modules tree.
@@ -275,7 +275,7 @@ try {
     }
 
     Test-Check "Launcher executable and WebView2Loader.dll are present" {
-        if (-not ($allFiles | Where-Object Name -eq 'OrderRestro.exe')) { throw "OrderRestro.exe not found in package — publish/staging likely failed silently" }
+        if (-not ($allFiles | Where-Object Name -eq 'EasyDine.exe')) { throw "EasyDine.exe not found in package — publish/staging likely failed silently" }
         if (-not ($allFiles | Where-Object Name -eq 'WebView2Loader.dll')) { throw "WebView2Loader.dll not found — the launcher will fail at runtime with no native WebView2 loader present" }
     }
 

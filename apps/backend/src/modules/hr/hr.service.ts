@@ -9,7 +9,7 @@ import type {
   PayrollPayDto,
   ShiftDto,
   StaffPayDto,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 import { localDate, zonedRange } from '../../common/time';
 import { BranchTimeService } from '../../common/services/branch-time.service';
 import { PrismaService } from '../../prisma/prisma.service';

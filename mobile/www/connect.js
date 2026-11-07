@@ -3,7 +3,7 @@
   var C = window.Capacitor;
   var native = !!(C && C.isNativePlatform && C.isNativePlatform());
   var P = (C && C.Plugins) || {};
-  var KEY = 'orderrestro.recent';
+  var KEY = 'easydine.recent';
   var form = document.getElementById('f');
   var inLocal = document.getElementById('local');
   var inOnline = document.getElementById('online');
@@ -57,14 +57,14 @@
     });
   }
 
-  /** Is this really an OrderRestro server? Uses the native HTTP client, so no CORS. */
+  /** Is this really an EasyDine server? Uses the native HTTP client, so no CORS. */
   async function check(url) {
     var http = P.CapacitorHttp || (C && C.Plugins && C.Plugins.CapacitorHttp);
     var get = http
       ? function (u) { return http.get({ url: u, connectTimeout: 6000, readTimeout: 6000 }); }
       : function (u) { return fetch(u).then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); }); };
     var r = await get(url + '/api/v1/auth/setup-status');
-    if (r.status !== 200 || !r.data || typeof r.data.isSetup !== 'boolean') throw new Error('not-orderrestro');
+    if (r.status !== 200 || !r.data || typeof r.data.isSetup !== 'boolean') throw new Error('not-easydine');
     return r.data;
   }
 
@@ -81,7 +81,7 @@
       var l = res[0], o = res[1];
       var reachable = (l && l.ok) || (o && o.ok);
       if (!reachable) {
-        say('bad', "Couldn't reach an OrderRestro server at " + [localUrl, onlineUrl].filter(Boolean).join(' or ') + '. Check the address, and that this phone is on the restaurant WiFi (or the server has an https address).');
+        say('bad', "Couldn't reach an EasyDine server at " + [localUrl, onlineUrl].filter(Boolean).join(' or ') + '. Check the address, and that this phone is on the restaurant WiFi (or the server has an https address).');
         return;
       }
       var seen = res.filter(function (x) { return x && x.ok; });

@@ -1,6 +1,6 @@
 "use client";
 
-import { KOT_NEXT_STATUS, type KotStatusDto } from "@nodedr-restaurant/types";
+import { KOT_NEXT_STATUS, type KotStatusDto } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";

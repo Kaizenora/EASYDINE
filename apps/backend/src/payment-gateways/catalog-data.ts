@@ -45,7 +45,7 @@ const S = {
   redsys: 'https://docs.monei.com/onboarding/connect-redsys-tpv-virtual/',
 };
 
-const NO_ADAPTER = 'No OrderRestro integration yet: listed for reference only.';
+const NO_ADAPTER = 'No EasyDine integration yet: listed for reference only.';
 
 export const BUILTIN_CATALOG: CatalogSeed[] = [
   {

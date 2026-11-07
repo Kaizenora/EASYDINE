@@ -1,4 +1,4 @@
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 internal static class Program
 {
@@ -15,8 +15,8 @@ internal static class Program
     // process" crash this guard exists to prevent. "Local\" (not "Global\")
     // is correct here: this is a per-user desktop app, not a service shared
     // across sessions, and Local\ needs no extra permissions.
-    private const string SingleInstanceMutexName = "Local\\NodedrOrderRestro_SingleInstance_9F3D2E7A";
-    private const string ActivateEventName = "Local\\NodedrOrderRestro_Activate_9F3D2E7A";
+    private const string SingleInstanceMutexName = "Local\\EasyDineEasyDine_SingleInstance_9F3D2E7A";
+    private const string ActivateEventName = "Local\\EasyDineEasyDine_Activate_9F3D2E7A";
 
     [STAThread]
     private static void Main()
@@ -75,9 +75,9 @@ internal static class Program
         }
 
         MessageBox.Show(
-            $"Nodedr OrderRestro hit an unexpected error and needs to close.\n\n{ex.Message}\n\n" +
+            $"Easy Dine hit an unexpected error and needs to close.\n\n{ex.Message}\n\n" +
             $"Details were saved to:\n{AppConfig.LogDir}",
-            "Nodedr OrderRestro",
+            "Easy Dine",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);
     }

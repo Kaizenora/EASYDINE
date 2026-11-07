@@ -1,4 +1,4 @@
-package com.nodedr.orderrestro;
+package com.easydine.easydine;
 
 import android.os.Bundle;
 import android.view.View;
@@ -94,7 +94,7 @@ public class MainActivity extends BridgeActivity {
                     // Pick the local or online address again, then reopen.
                     runOnUiThread(MainActivity.this::recreate);
                 }
-            }, "OrderRestroNative");
+            }, "EasyDineNative");
         }
     }
 

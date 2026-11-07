@@ -2,7 +2,7 @@
 # Deliberately small and sealed off: its own network, a database that is never
 # published, memory limits, and ports bound to 127.0.0.1 (reach it through a tunnel).
 # See README.md. Needs .env with DEMO_DB_PASSWORD, DEMO_JWT_SECRET, DEMO_ORIGIN, APP_VERSION.
-name: orderrestro-demo
+name: easydine-demo
 
 services:
   db:
@@ -18,7 +18,7 @@ services:
     networks: [demo]
 
   backend:
-    image: ghcr.io/raktim94/nodedr-restaurant-pos-backend:${APP_VERSION:?set in .env}
+    image: ghcr.io/raktim94/easy-dine-pos-backend:${APP_VERSION:?set in .env}
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://demo:${DEMO_DB_PASSWORD}@db:5432/demo"
@@ -34,7 +34,7 @@ services:
     networks: [demo]
 
   web:
-    image: ghcr.io/raktim94/nodedr-restaurant-pos-web:${APP_VERSION}
+    image: ghcr.io/raktim94/easy-dine-pos-web:${APP_VERSION}
     restart: unless-stopped
     ports: ["127.0.0.1:19951:3000"]
     depends_on: [backend]

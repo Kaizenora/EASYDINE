@@ -1,7 +1,7 @@
 # Online payment gateways
 
 Settings → **Payments** lets a restaurant take card / UPI / wallet payments through a
-payment provider. The customer pays on the **provider's own hosted page**; OrderRestro
+payment provider. The customer pays on the **provider's own hosted page**; EasyDine
 never sees or stores card numbers, CVVs or any card data.
 
 ## What works today
@@ -11,12 +11,12 @@ never sees or stores card numbers, CVVs or any card data.
 | Razorpay | IN | Hosted Payment Link + refunds | Implemented. Signature verification, amount checks and settlement logic unit-tested. **Not yet run against a live Razorpay account** (only auth failure was seen against the real API) |
 | Stripe | US, GB, ES | Hosted Checkout Session + refunds | Same status |
 | Cashfree Payments | IN | Hosted Payment Link | Same status, plus: the webhook body shape is taken from Cashfree's docs (which differ across API versions) and was not exercised live. Confirmation never depends on it: the server always re-reads the link from Cashfree, and the customer return page triggers that re-read too |
-| PayU, CCAvenue, BillDesk, PayPal/Braintree, PayPal, Square, Adyen, Worldpay, Checkout.com, Redsys, PAYCOMET, PhonePe | listed | none | **Listed for reference only. OrderRestro cannot take payments through them yet** and refuses to store credentials for them |
+| PayU, CCAvenue, BillDesk, PayPal/Braintree, PayPal, Square, Adyen, Worldpay, Checkout.com, Redsys, PAYCOMET, PhonePe | listed | none | **Listed for reference only. EasyDine cannot take payments through them yet** and refuses to store credentials for them |
 
 "Implemented" is not "supported": before relying on a gateway in production, run one Test
 payment end to end with your own sandbox account (see *Trying it*).
 
-**Refunds:** Razorpay and Stripe refunds can be sent from OrderRestro (below). Cashfree refunds are made in
+**Refunds:** Razorpay and Stripe refunds can be sent from EasyDine (below). Cashfree refunds are made in
 Cashfree's dashboard and recorded here as an *Other* refund. Test payments cannot be refunded (no money moved).
 
 ## Setup flow

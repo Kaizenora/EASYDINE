@@ -1,7 +1,7 @@
 "use client";
 
 import { clearOfflineCache } from "@/lib/offline-cache";
-import { permissionSatisfied, type LoginDto, type RegisterDto, type SessionUser } from "@nodedr-restaurant/types";
+import { permissionSatisfied, type LoginDto, type RegisterDto, type SessionUser } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { savedPushToken, savePushToken } from "@/lib/native";
 import { api } from "@/lib/api";

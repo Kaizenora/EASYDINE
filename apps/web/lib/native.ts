@@ -1,4 +1,4 @@
-// Helpers for when the web app runs inside the OrderRestro Android / iOS app
+// Helpers for when the web app runs inside the EasyDine Android / iOS app
 // (Capacitor). In a normal browser every function here is a quiet no-op, so
 // nothing depends on the app being present. The Capacitor bridge puts the
 // native plugins on window.Capacitor.Plugins, which is why this file needs no
@@ -40,7 +40,7 @@ export function changeServer() {
   void plugin<{ forget: () => Promise<void> }>("ServerLink")?.forget();
 }
 
-const PUSH_TOKEN_KEY = "orderrestro.pushToken";
+const PUSH_TOKEN_KEY = "easydine.pushToken";
 
 export function savedPushToken(): string | null {
   try {

@@ -8,7 +8,7 @@ inventory, CRM, payments, security, AI, etc. — ~305 line items each marked
 Shipped/Partial/Planned against the real codebase) see
 [`FEATURE-CHECKLIST.md`](./FEATURE-CHECKLIST.md). This file tracks the same
 ground phase-by-phase for engineering; that one is organized by product
-category for anyone (including the website) that wants "what does OrderRestro
+category for anyone (including the website) that wants "what does EasyDine
 actually do today."
 
 ## Current phase: 5–8 core features shipped (see each phase for what is and is not built)
@@ -21,7 +21,7 @@ quotations with price comparison, purchase requests, vendor invoices with
 payment tracking, supplier performance) landed 2026-08-14 — all verified
 numerically/via real Docker end-to-end, not just built — see Session log.
 Direct-USB ESC/POS thermal printing (a Phase 8 hardware item) was also
-ported from nodedr-pos the same day. A few small Phase-4-adjacent items
+ported from easydine-pos the same day. A few small Phase-4-adjacent items
 remain deliberately deferred — see "Explicitly deferred" for what and why.
 
 ---
@@ -119,11 +119,11 @@ containers, not just "it compiles."
       ₹920 cart lands on exactly ₹828), %/flat discount, cash/card/UPI/wallet
       payment record. **Update (2026-08-04):** receipt printing shipped —
       `GET /v1/orders/:id/receipt` renders a self-printing HTML receipt
-      (ported from `nodedr-pos`'s `backend/src/lib/receipt.js` layout rules),
+      (ported from `easydine-pos`'s `backend/src/lib/receipt.js` layout rules),
       loaded into a hidden iframe and printed via the browser's own dialog
       (any printer, or "Save as PDF"), triggered by a **Print receipt**
       button on the post-checkout screen. A dedicated PDF-download endpoint
-      and direct-USB ESC/POS printing (nodedr-pos's other two print paths)
+      and direct-USB ESC/POS printing (easydine-pos's other two print paths)
       remain a Phase 8 hardware item.
 - [x] **Dashboard v1**: today's revenue, today's orders, table status
       breakdown, kitchen queue counts, recent transactions — bento-grid
@@ -345,7 +345,7 @@ containers, not just "it compiles."
 
 ## Explicitly deferred / not guessed
 
-Same judgment call `nodedr-pos` made on large government reference datasets
+Same judgment call `easydine-pos` made on large government reference datasets
 (HSN/PIN/IFSC): anything requiring a large, frequently-revised external
 dataset gets a documented import path, not a fabricated snapshot, when we
 reach it (tax code masters, delivery-platform rate cards, etc.).
@@ -419,7 +419,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   applied directly via `psql` against a real local Postgres (all prior
   migrations replayed first) to confirm it's syntactically and
   semantically correct against the actual schema — but **run
-  `pnpm --filter @nodedr-restaurant/types build && cd apps/backend && npx
+  `pnpm --filter @easydine/types build && cd apps/backend && npx
   prisma generate && npx prisma migrate deploy` for real once, and re-run
   the backend's own test suite, before trusting this in production.**
   `packages/types` and all of `apps/web` (including every file touched
@@ -456,7 +456,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   requests and quotations correctly rejected. Frontend verified visually
   via Playwright against seeded data.
 
-  **Direct-USB ESC/POS printing**, ported from `nodedr-pos`'s
+  **Direct-USB ESC/POS printing**, ported from `easydine-pos`'s
   hardware-verified transport (`escposUsb.js`) — same two-transport
   structure (kernel `usblp` character device primary, libusb raw bulk
   fallback), same hardware lessons encoded (vendor-class printers only
@@ -470,7 +470,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   to the existing "Print receipt" button on the POS checkout-complete
   screen, plus a Settings → USB thermal printer diagnostics card (device
   detection, send test slip) so staff can verify hardware without ringing
-  up a sale. `usb@2.18.0` pinned to the exact version `nodedr-pos` already
+  up a sale. `usb@2.18.0` pinned to the exact version `easydine-pos` already
   proved working (not npm's newer 3.x major) — per this project's own
   "don't assume latest is compatible" lesson. **Docker toolchain gotcha,
   caught by an actual `docker compose up --build` failure, not assumed:**
@@ -481,10 +481,10 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   pnpm's `install --frozen-lockfile` builds every workspace member's
   native addons regardless of which app actually imports the package.
   `device_cgroup_rules` for majors 180 (`usblp`) and 189 (`usbfs`) added
-  to `docker-compose.yml`, same least-privilege grant as `nodedr-pos`
+  to `docker-compose.yml`, same least-privilege grant as `easydine-pos`
   (not full `privileged: true`). **No physical thermal printer in this
   dev environment** — verified structurally instead, the same bar
-  `nodedr-pos` itself used before its first real-hardware test: the
+  `easydine-pos` itself used before its first real-hardware test: the
   native addon compiling and the backend starting with the module
   loaded; `print/diagnostics`, `print/test`, and `:id/print/usb` all
   returning a clean 503 with an accurate "no printer found" message
@@ -549,7 +549,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   exactly the expected value. Also caught and killed an orphaned `nest
   start` process left running from earlier the same session, squatting
   port 4001 — same "check what's actually bound to the port" lesson
-  `nodedr-pos`'s memory already recorded once.
+  `easydine-pos`'s memory already recorded once.
 
 - **2026-08-04**: Phase 4 core (Inventory & Store Management) — ingredients,
   recipe costing, suppliers, purchase orders, GRN, batch/lot, waste. Scoped
@@ -574,7 +574,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   log — not a blended average). Every cached running total (`Ingredient.
   currentStock`/`costPerUnit`, `PurchaseOrderItem.quantityReceived`) is
   updated via a transactional read-then-`set`, never a DB `increment` —
-  the `nodedr-pos` float-drift lesson, applied from the start instead of
+  the `easydine-pos` float-drift lesson, applied from the start instead of
   rediscovered later. Verified numerically end-to-end via curl before any
   UI existed for it (see the schema's own inline comment and this session's
   transcript): a 10kg@₹300 GRN then a 5kg@₹360 GRN landed the ingredient at
@@ -587,7 +587,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
 
   **Real bugs/gotchas caught this session:**
   1. `apps/backend/.env`'s `DATABASE_URL` had a stale password
-     (`nodedr_dev_pw`) that didn't match root `.env`'s actual
+     (`easydine_dev_pw`) that didn't match root `.env`'s actual
      `POSTGRES_PASSWORD` (`change-me`, which is what the running Postgres
      volume was actually initialized with) — local migrations failed with
      an auth error until traced and fixed. Pre-existing drift between the
@@ -619,7 +619,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
   `@Body()` (Nest's `@UsePipes()` runs a pipe against *every* parameter,
   including `@Query()` strings, which isn't obvious until a query param gets
   fed into a schema expecting the whole body object); server-authoritative
-  pricing (`orders/pricing.ts`) built with the `nodedr-pos` GST-inclusive
+  pricing (`orders/pricing.ts`) built with the `easydine-pos` GST-inclusive
   lesson in mind from the start, verified numerically rather than assumed;
   Socket.IO realtime gateway (branch-room push for KOT/table/order events).
   Frontend: Next.js + shadcn/ui (Base UI, not Radix — its trigger components
@@ -632,7 +632,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
      with a confusing "expected object, received string" until traced to
      `branchId` being run through the body schema).
   2. React's compiler-era ESLint rules (`react-hooks/set-state-in-effect`,
-     `react-hooks/purity` — same family as the `nodedr-pos` `react-hooks/refs`
+     `react-hooks/purity` — same family as the `easydine-pos` `react-hooks/refs`
      issue noted in `[[feedback_nextjs_agents_md]]`) flagged three spots:
      calling `Date.now()` during render in a KDS timer hook (fixed by only
      computing it inside the interval callback), and two "derive state from
@@ -647,7 +647,7 @@ reach it (tax code masters, delivery-platform rate cards, etc.).
      available data into state a tick later.
   3. **Two Docker packaging bugs, only caught by actually running
      `docker compose up` end-to-end** (build succeeding is not sufficient
-     evidence — same lesson `nodedr-pos` learned about Prisma/Docker): the
+     evidence — same lesson `easydine-pos` learned about Prisma/Docker): the
      backend's runtime stage flattened everything to `/app`, which silently
      breaks pnpm's per-workspace `node_modules/.bin/*` symlinks (they're
      relative paths back into the root `.pnpm` store) — `npx prisma migrate

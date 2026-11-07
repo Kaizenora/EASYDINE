@@ -1,6 +1,6 @@
 "use client";
 
-import type { CreateIntegrationApiKeyDto, CreateStaffApiKeyDto, IntegrationScope } from "@nodedr-restaurant/types";
+import type { CreateIntegrationApiKeyDto, CreateStaffApiKeyDto, IntegrationScope } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 

@@ -1,12 +1,12 @@
-# OrderRestro integrations: MCP server and public API
+# EasyDine integrations: MCP server and public API
 
-OrderRestro exposes two separate ways to integrate with it programmatically,
+EasyDine exposes two separate ways to integrate with it programmatically,
 each with its own credential type. Both are managed from **Settings > API
 Keys** in the app.
 
 | | **Personal API keys (MCP)** | **Integration API keys** |
 |---|---|---|
-| Who it's for | You (a staff member), connecting an AI client or script | An external website/system using OrderRestro as a backend |
+| Who it's for | You (a staff member), connecting an AI client or script | An external website/system using EasyDine as a backend |
 | Identity | Acts as you, with your exact role permissions | No staff identity — carries its own explicit permission list |
 | Created by | Any logged-in staff member, for themselves | Anyone with the `settings.manage` permission (owners/admins) |
 | Scope | Everything you can already do in the app | Only what you tick when creating the key, optionally locked to one location |
@@ -23,7 +23,7 @@ Point an MCP client (Claude Desktop, or any [Model Context
 Protocol](https://modelcontextprotocol.io) client) at:
 
 ```
-https://<your-orderrestro-domain>/api/v1/mcp
+https://<your-easydine-domain>/api/v1/mcp
 ```
 
 with header `Authorization: Bearer <personal api key>`. Create a key from
@@ -104,14 +104,14 @@ curl -X POST https://your-domain/api/v1/mcp \
 
 ## 2. Integration API (for an external website's backend)
 
-A REST API an external system calls as OrderRestro's backend — browse a
+A REST API an external system calls as EasyDine's backend — browse a
 location's menu, place an order, book a table, check status. Create a key
 from **Settings > API Keys > Integration API keys > New key**: pick a name,
 optionally scope it to one location ("selected location"), and tick the
 exact permissions ("scopes") it needs.
 
 **This is meant for server-to-server calls** — your website's own backend
-calling OrderRestro. Keep the key in the backend's environment (for Next.js:
+calling EasyDine. Keep the key in the backend's environment (for Next.js:
 a server-only variable *without* the `NEXT_PUBLIC_` prefix, used only in Route
 Handlers / Server Actions). Never put it in browser JavaScript, a static
 bundle or source control. The key is a reusable credential, not a per-resource
@@ -123,7 +123,7 @@ and address, `orders:read_customer`.
 To expose the API on the internet, and a complete Next.js example, see
 [website-integration.md](website-integration.md).
 
-Base URL: `https://<your-orderrestro-domain>/api/v1/integrations`
+Base URL: `https://<your-easydine-domain>/api/v1/integrations`
 
 Every request needs `Authorization: Bearer <integration api key>`. A
 request to a scope the key wasn't granted returns `403`; a request for a
@@ -357,9 +357,9 @@ website can show the price before the guest orders:
 Add one under **Settings > Webhooks**. Each request is a `POST` with a JSON
 body `{ "event", "createdAt", "data" }` and these headers:
 
-- `X-OrderRestro-Event` — the event name
-- `X-OrderRestro-Delivery` — unique delivery id (use it to de-duplicate)
-- `X-OrderRestro-Signature` — `t=<unix seconds>,v1=<hex>` where `v1` is the
+- `X-EasyDine-Event` — the event name
+- `X-EasyDine-Delivery` — unique delivery id (use it to de-duplicate)
+- `X-EasyDine-Signature` — `t=<unix seconds>,v1=<hex>` where `v1` is the
   HMAC-SHA256 of `"<t>.<raw body>"` using the endpoint's signing secret
   (shown once when you create it). Reject requests older than 5 minutes.
 

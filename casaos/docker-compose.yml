@@ -1,34 +1,34 @@
-name: nodedr-restaurant-pos
+name: easy-dine-pos
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: nodedr-restaurant-pos-postgres
-    hostname: nodedr-restaurant-pos-postgres
+    container_name: easy-dine-pos-postgres
+    hostname: easy-dine-pos-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: nodedr
+      POSTGRES_USER: easydine
       POSTGRES_PASSWORD: "please-change-this-password"
-      POSTGRES_DB: nodedr_restaurant
+      POSTGRES_DB: easydine_restaurant
     volumes:
       - type: bind
         source: /DATA/AppData/$AppID/postgres
         target: /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nodedr"]
+      test: ["CMD-SHELL", "pg_isready -U easydine"]
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - nodedr-restaurant-pos
+      - easy-dine-pos
 
   backend:
-    image: ghcr.io/raktim94/nodedr-restaurant-pos-backend:1.22.1
-    container_name: nodedr-restaurant-pos-backend
-    hostname: nodedr-restaurant-pos-backend
+    image: ghcr.io/raktim94/easy-dine-pos-backend:1.22.1
+    container_name: easy-dine-pos-backend
+    hostname: easy-dine-pos-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: "postgresql://nodedr:please-change-this-password@nodedr-restaurant-pos-postgres:5432/nodedr_restaurant"
+      DATABASE_URL: "postgresql://easydine:please-change-this-password@easy-dine-pos-postgres:5432/easydine_restaurant"
       # No JWT_SECRET here on purpose — the app generates a real random one
       # itself on first boot and persists it to the /data/state volume
       # below (see apps/backend/src/main.ts's resolveJwtSecret()). A
@@ -48,8 +48,8 @@ services:
       # PCs (Settings > Server Sync). Empty = sync server off.
       SYNC_API_KEY: ""
       # In-app "Update now" button (Settings > Updates) -> the updater below.
-      UPDATER_URL: "http://nodedr-restaurant-pos-updater:8080"
-      UPDATER_TOKEN: "nodedr-restaurant-updater"
+      UPDATER_URL: "http://easy-dine-pos-updater:8080"
+      UPDATER_TOKEN: "easy-dine-updater"
     volumes:
       - type: bind
         source: /DATA/AppData/$AppID/uploads
@@ -61,7 +61,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - nodedr-restaurant-pos
+      - easy-dine-pos
     x-casaos:
       envs:
         - container: DATABASE_URL
@@ -85,9 +85,9 @@ services:
             en_US: Auto-generated login security key. Created automatically on first launch — leave it alone.
 
   web:
-    image: ghcr.io/raktim94/nodedr-restaurant-pos-web:1.22.1
-    container_name: nodedr-restaurant-pos-web
-    hostname: nodedr-restaurant-pos-web
+    image: ghcr.io/raktim94/easy-dine-pos-web:1.22.1
+    container_name: easy-dine-pos-web
+    hostname: easy-dine-pos-web
     restart: unless-stopped
     ports:
       - target: 3000
@@ -96,63 +96,63 @@ services:
     depends_on:
       - backend
     networks:
-      - nodedr-restaurant-pos
+      - easy-dine-pos
     x-casaos:
       ports:
         - container: "3000"
           description:
-            en_US: Nodedr OrderRestro web interface
+            en_US: Easy Dine web interface
           protocol: tcp
 
-  # In-app "Update now" (Settings > Updates): pulls the newer OrderRestro
+  # In-app "Update now" (Settings > Updates): pulls the newer EasyDine
   # images above and recreates those two containers (nothing else). Needs the
   # Docker socket to do that; data in /DATA/AppData is untouched. The updater
   # image is generic (it only manages the containers named below), so the
   # one published for NodeDR POS is reused.
   updater:
-    image: ghcr.io/raktim94/nodedr-pos-updater:1.5.1
-    container_name: nodedr-restaurant-pos-updater
-    hostname: nodedr-restaurant-pos-updater
+    image: ghcr.io/raktim94/easydine-pos-updater:1.5.1
+    container_name: easy-dine-pos-updater
+    hostname: easy-dine-pos-updater
     restart: unless-stopped
     environment:
-      UPDATER_TOKEN: "nodedr-restaurant-updater"
-      TARGET_CONTAINERS: "nodedr-restaurant-pos-backend,nodedr-restaurant-pos-web"
+      UPDATER_TOKEN: "easy-dine-updater"
+      TARGET_CONTAINERS: "easy-dine-pos-backend,easy-dine-pos-web"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - nodedr-restaurant-pos
+      - easy-dine-pos
     x-casaos:
       volumes:
         - container: /var/run/docker.sock
           description:
-            en_US: Docker socket, used only by the in-app "Update now" button to move the two OrderRestro containers to a newer version.
+            en_US: Docker socket, used only by the in-app "Update now" button to move the two EasyDine containers to a newer version.
 
 networks:
-  nodedr-restaurant-pos:
+  easy-dine-pos:
     driver: bridge
 
 x-casaos:
-  id: com.nodedr.orderrestro
+  id: com.easydine.easydine
   architectures:
     - amd64
     - arm64
   main: web
-  author: Nodedr Infotech Private Limited
+  author: EasyDine Infotech Private Limited
   developer: Raktim94
   category: Finance
-  icon: https://cdn.jsdelivr.net/gh/Raktim94/nodedr-restaurant-pos@master/casaos/icon.png
-  thumbnail: https://cdn.jsdelivr.net/gh/Raktim94/nodedr-restaurant-pos@master/casaos/thumbnail.png
+  icon: https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/icon.png
+  thumbnail: https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/thumbnail.png
   screenshot_link:
-    - https://cdn.jsdelivr.net/gh/Raktim94/nodedr-restaurant-pos@master/casaos/screenshot-1.png
-    - https://cdn.jsdelivr.net/gh/Raktim94/nodedr-restaurant-pos@master/casaos/screenshot-2.png
-    - https://cdn.jsdelivr.net/gh/Raktim94/nodedr-restaurant-pos@master/casaos/screenshot-3.png
+    - https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/screenshot-1.png
+    - https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/screenshot-2.png
+    - https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/screenshot-3.png
   title:
-    en_US: Nodedr OrderRestro
+    en_US: Easy Dine
   tagline:
     en_US: Offline-first restaurant management — POS, kitchen display, tables, and reservations
   description:
     en_US: |
-      Nodedr OrderRestro is a free, open-source restaurant management system:
+      Easy Dine is a free, open-source restaurant management system:
       point-of-sale ordering, a live kitchen display (KDS) split by station,
       table/floor management with QR-code table ordering, reservations and a
       waitlist, inventory with automatic ingredient deduction, customer CRM
@@ -175,7 +175,7 @@ x-casaos:
         safe for a real installation.
 
         Your data (Postgres database + uploaded images) persists at
-        `/DATA/AppData/nodedr-restaurant-pos/`, following CasaOS/ZimaOS's
+        `/DATA/AppData/easy-dine-pos/`, following CasaOS/ZimaOS's
         standard backup/restore convention.
 
         After install, sign up for a new restaurant account from the app's
@@ -214,13 +214,13 @@ x-casaos:
       sends them to the server when it is back. Switching tabs no longer shows "Can't reach
       the server".
 
-      1.17.0: print from the phone. In the OrderRestro app, bills and kitchen tickets can
+      1.17.0: print from the phone. In the EasyDine app, bills and kitchen tickets can
       go to a Bluetooth thermal printer, or to Android's print dialog to save a PDF or use
       any printer on the phone. A bill that is not paid yet now prints a UPI "scan to pay"
       QR with the amount due when a UPI id is set in Settings. The pay button stays in view
       on phones and Kitchen Display buttons fit small screens.
 
-      1.15.1: the app is simply called OrderRestro everywhere (sign-in page, install name,
+      1.15.1: the app is simply called EasyDine everywhere (sign-in page, install name,
       page titles).
 
       1.15.0: Android and iPhone app. Staff and riders connect by typing the server
@@ -269,7 +269,7 @@ x-casaos:
       ingredients, an integrations hub, and error messages shown app-wide.
       Database changes are applied automatically on update.
 
-      1.10.0: connect your own website to OrderRestro. The Integration API now
+      1.10.0: connect your own website to EasyDine. The Integration API now
       returns the customer's mobile number and delivery address to the website's
       backend (new "View order customer & delivery details" key permission), places
       delivery orders with address and email, retries safely (Idempotency-Key), and
@@ -316,7 +316,7 @@ x-casaos:
       Initial CasaOS/ZimaOS release: POS ordering, kitchen display, table
       management with QR ordering, reservations, inventory, customer
       loyalty/CRM, and billing.
-  website: "https://orderrestro.nodedr.com/"
-  repo: "https://github.com/Raktim94/nodedr-restaurant-pos"
-  support: "https://orderrestro.nodedr.com/contact"
-  docs: "https://github.com/Raktim94/nodedr-restaurant-pos#readme"
+  website: "https://easydine.easydine.com/"
+  repo: "https://github.com/Raktim94/easy-dine-pos"
+  support: "https://easydine.easydine.com/contact"
+  docs: "https://github.com/Raktim94/easy-dine-pos#readme"

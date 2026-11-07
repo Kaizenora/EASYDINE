@@ -208,7 +208,7 @@ export class PaymentGatewaysService implements OnModuleInit {
     const a = getAdapter(entry.adapter);
     if (!a) {
       throw new BadRequestException(
-        `${entry.name} is not integrated with OrderRestro yet, so credentials cannot be saved for it.`,
+        `${entry.name} is not integrated with EasyDine yet, so credentials cannot be saved for it.`,
       );
     }
     return a;

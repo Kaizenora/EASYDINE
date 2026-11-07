@@ -1,18 +1,18 @@
 {
-  "name": "nodedr-orderrestro",
+  "name": "easy-dine",
   "private": true,
   "version": "0.1.0",
-  "description": "Nodedr OrderRestro — offline-first Restaurant Management System",
+  "description": "Easy Dine — offline-first Restaurant Management System",
   "author": "Raktim Ranjit <mail@raktimranjit.com> (https://github.com/Raktim94)",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Raktim94/nodedr-restaurant-pos.git"
+    "url": "https://github.com/Raktim94/easy-dine-pos.git"
   },
   "bugs": {
-    "url": "https://github.com/Raktim94/nodedr-restaurant-pos/issues"
+    "url": "https://github.com/Raktim94/easy-dine-pos/issues"
   },
-  "homepage": "https://orderrestro.nodedr.com/",
+  "homepage": "https://easydine.easydine.com/",
   "keywords": [
     "restaurant-management",
     "restaurant-pos",

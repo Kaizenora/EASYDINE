@@ -14,7 +14,7 @@ partially built, the note says what's missing.
 | Fast touch-friendly billing screen | Shipped | POS page, product grid + cart |
 | Product/category grid | Shipped | Category tabs + search |
 | Product search | Shipped | |
-| Barcode scanning | Planned | No barcode field/scanner in this app (nodedr-pos has it, not ported here) |
+| Barcode scanning | Planned | No barcode field/scanner in this app (easydine-pos has it, not ported here) |
 | SKU support | Planned | No SKU field on MenuItem |
 | Variants/sizes | Planned | No variant model on MenuItem |
 | Add-ons/modifiers | Shipped | Modifier groups + modifiers, min/max, defaults |
@@ -335,7 +335,7 @@ partially built, the note says what's missing.
 | Feature | Status | Note |
 |---|---|---|
 | Receipt printer (browser print) | Shipped | HTML receipt via print dialog |
-| Direct USB/ESC-POS printer | Shipped | Ported from nodedr-pos (kernel usblp + libusb fallback), diagnostics + test-print in Settings (2026-08-14). Not verified on real hardware |
+| Direct USB/ESC-POS printer | Shipped | Ported from easydine-pos (kernel usblp + libusb fallback), diagnostics + test-print in Settings (2026-08-14). Not verified on real hardware |
 | Network (TCP/9100) ESC/POS printer | Shipped | Per-branch address; verified against a local TCP listener only, not a physical printer. Server must be able to reach the printer |
 | Kitchen ticket thermal print | Shipped | Per ticket, once-only (409 on repeat), REPRINT-stamped copies, test ticket; see docs/PERMISSIONS-STOCK-PRINTING.md |
 | Label printers, weighing scales, payment terminals | Planned | Kitchen printers: see the thermal rows above |
@@ -400,7 +400,7 @@ partially built, the note says what's missing.
 
 | Feature | Status | Note |
 |---|---|---|
-| GST-inclusive pricing (CGST/SGST backed out correctly) | Shipped | Verified numerically, see docs/decisions ADR in nodedr-ecommerce-template |
+| GST-inclusive pricing (CGST/SGST backed out correctly) | Shipped | Verified numerically, see docs/decisions ADR in easydine-ecommerce-template |
 | UPI as a payment method | Shipped | Recorded as a payment method, no live UPI QR collection |
 | Indian currency (INR) | Shipped | Default currency |
 | Dynamic UPI QR, IGST, HSN/SAC, FSSAI, WhatsApp receipts/ordering, Tally/Razorpay/PhonePe/BharatPe, Swiggy/Zomato integration | Planned | None integrated |

@@ -1,4 +1,4 @@
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 internal enum FirstRunChoice
 {
@@ -20,7 +20,7 @@ internal sealed class FirstRunChoiceForm : Form
 
     public FirstRunChoiceForm()
     {
-        Text = "Welcome to Nodedr OrderRestro";
+        Text = "Welcome to Easy Dine";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
@@ -55,7 +55,7 @@ internal sealed class FirstRunChoiceForm : Form
 
         var remoteButton = new Button
         {
-            Text = "Connect to an existing OrderRestro server",
+            Text = "Connect to an existing EasyDine server",
             Location = new Point(20, 160),
             Size = new Size(440, 40),
             TextAlign = ContentAlignment.MiddleCenter,

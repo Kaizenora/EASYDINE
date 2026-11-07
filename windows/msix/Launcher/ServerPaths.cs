@@ -1,8 +1,8 @@
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 /// <summary>
 /// Single source of truth for where the embedded server's writable state
-/// lives (%LOCALAPPDATA%\OrderRestro\server\...) and where its read-only
+/// lives (%LOCALAPPDATA%\EasyDine\server\...) and where its read-only
 /// runtime assets ship inside the MSIX install directory. Mirrors
 /// AppConfig's existing ConfigDir pattern — writable state never goes
 /// inside the install directory (read-only after install, not guaranteed
@@ -21,7 +21,7 @@ internal static class ServerPaths
     public const int WebPort = 1995;
 
     public static string DataDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OrderRestro", "server");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EasyDine", "server");
 
     public static string PgDataDir => Path.Combine(DataDir, "pgdata");
     public static string UploadsDir => Path.Combine(DataDir, "uploads");
@@ -40,7 +40,7 @@ internal static class ServerPaths
     /// ACLs that block spawning arbitrary bundled executables as child
     /// processes even for a runFullTrust app (confirmed: initdb.exe
     /// failed with "Access is denied" trying to run postgres.exe -V from
-    /// there) — only the package's own declared entry point (OrderRestro
+    /// there) — only the package's own declared entry point (EasyDine
     /// .exe itself) is actually launchable in place.
     /// </summary>
     public static string InstallServerDir =>

@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-namespace OrderRestro.Launcher;
+namespace EasyDine.Launcher;
 
 internal sealed class MainForm : Form
 {
@@ -24,7 +24,7 @@ internal sealed class MainForm : Form
 
     public MainForm(EventWaitHandle activateEvent)
     {
-        Text = "Nodedr OrderRestro";
+        Text = "Easy Dine";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(1360, 860);
         MinimumSize = new Size(900, 600);
@@ -178,7 +178,7 @@ internal sealed class MainForm : Form
             ShowFatalError(
                 "The Microsoft Edge WebView2 Runtime is required but isn't installed on this PC.\n\n" +
                 "Install it from https://go.microsoft.com/fwlink/p/?LinkId=2124703 (Evergreen " +
-                "Bootstrapper), then reopen Nodedr OrderRestro.");
+                "Bootstrapper), then reopen Easy Dine.");
             return;
         }
         catch (Exception ex)
@@ -237,8 +237,8 @@ internal sealed class MainForm : Form
         };
         _supervisor.Faulted += message =>
         {
-            if (InvokeRequired) { BeginInvoke((Action)(() => _tray?.ShowBalloon("Nodedr OrderRestro", message))); return; }
-            _tray?.ShowBalloon("Nodedr OrderRestro", message);
+            if (InvokeRequired) { BeginInvoke((Action)(() => _tray?.ShowBalloon("Easy Dine", message))); return; }
+            _tray?.ShowBalloon("Easy Dine", message);
         };
 
         ShowStatus("Starting server…");
@@ -271,8 +271,8 @@ internal sealed class MainForm : Form
 
             ShowFatalError(
                 technicalMessage: $"Could not start the embedded server.\n\n{ex.Message}\n\nLogs: {ServerPaths.ServerLogDir}",
-                friendlyHeadline: "OrderRestro couldn't start its local database",
-                friendlyBody: "Your restaurant data has not been deleted. OrderRestro was unable to start its local database service.",
+                friendlyHeadline: "EasyDine couldn't start its local database",
+                friendlyBody: "Your restaurant data has not been deleted. EasyDine was unable to start its local database service.",
                 retry: async () => { Controls.Remove(_fatalErrorPanel); _fatalErrorPanel = null; await InitializeAsync(); });
             return false;
         }
@@ -327,7 +327,7 @@ internal sealed class MainForm : Form
     /// ServerPaths.cs/AppConfig.cs — writable state must survive an
     /// MSIX upgrade-in-place, which requires a real, stable path). That
     /// means the restaurant database, uploads, and server runtime under
-    /// %LOCALAPPDATA%\OrderRestro would otherwise survive an uninstall as
+    /// %LOCALAPPDATA%\EasyDine would otherwise survive an uninstall as
     /// residue. This is the app's own equivalent of an uninstaller's
     /// cleanup step — stop everything, delete it all, then hand off to
     /// Windows' own "Apps & features" to remove the package itself.
@@ -338,9 +338,9 @@ internal sealed class MainForm : Form
 
         var confirm = MessageBox.Show(
             this,
-            "This permanently deletes ALL local OrderRestro data on this PC — your restaurant's " +
+            "This permanently deletes ALL local EasyDine data on this PC — your restaurant's " +
             "database, uploaded images, and settings. This cannot be undone.\n\n" +
-            "Only do this if you're uninstalling OrderRestro from this PC, or want to start " +
+            "Only do this if you're uninstalling EasyDine from this PC, or want to start " +
             "completely fresh.\n\nContinue?",
             "Remove All Local Data",
             MessageBoxButtons.YesNo,
@@ -361,7 +361,7 @@ internal sealed class MainForm : Form
         // guaranteed instantaneous.
         _webView.Dispose();
 
-        // AppConfig.ConfigDir (%LOCALAPPDATA%\OrderRestro) is the single
+        // AppConfig.ConfigDir (%LOCALAPPDATA%\EasyDine) is the single
         // root for everything this app ever writes: config.json, the
         // WebView2 profile, logs, and ServerPaths.DataDir (pgdata, uploads,
         // server-runtime, backend.env) all live underneath it — deleting it
@@ -388,9 +388,9 @@ internal sealed class MainForm : Form
         {
             MessageBox.Show(
                 this,
-                "Local data removed. Windows Settings will now open — find \"Nodedr OrderRestro\" " +
+                "Local data removed. Windows Settings will now open — find \"Easy Dine\" " +
                 "and click Uninstall to finish removing the app.",
-                "Nodedr OrderRestro",
+                "Easy Dine",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         }
@@ -399,9 +399,9 @@ internal sealed class MainForm : Form
             MessageBox.Show(
                 this,
                 $"The server was stopped, but some files could not be deleted automatically:\n\n{deleteError}\n\n" +
-                $"You can safely delete this folder by hand once OrderRestro is closed: {dataDir}\n\n" +
+                $"You can safely delete this folder by hand once EasyDine is closed: {dataDir}\n\n" +
                 "Windows Settings will now open so you can uninstall the app.",
-                "Nodedr OrderRestro",
+                "Easy Dine",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
         }
@@ -430,7 +430,7 @@ internal sealed class MainForm : Form
             e.Cancel = true;
             Hide();
             _tray?.ShowBalloon(
-                "Nodedr OrderRestro",
+                "Easy Dine",
                 "Still running in the background so other devices stay connected. Use the tray icon to reopen or fully stop it.",
                 ToolTipIcon.Info);
         }
@@ -455,7 +455,7 @@ internal sealed class MainForm : Form
         _webView.Visible = false;
         _errorLabel.Text =
             $"Could not reach {_config.ServerUrl}.\n\n" +
-            "Check that the OrderRestro server is running and this device is on\n" +
+            "Check that the EasyDine server is running and this device is on\n" +
             "the same network, then choose File → Reload, or File → Change server address…";
         _errorLabel.Visible = true;
     }
@@ -491,7 +491,7 @@ internal sealed class MainForm : Form
 
         var headline = new Label
         {
-            Text = friendlyHeadline ?? "OrderRestro couldn't start",
+            Text = friendlyHeadline ?? "EasyDine couldn't start",
             Font = new Font("Segoe UI", 14f, FontStyle.Bold),
             AutoSize = false,
             Dock = DockStyle.Top,

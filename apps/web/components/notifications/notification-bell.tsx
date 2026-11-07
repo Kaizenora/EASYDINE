@@ -90,7 +90,7 @@ export function NotificationBell() {
   // for it so a new order is never silent.
   const announced = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (!data) return;
+    if (!data || !Array.isArray(data.data)) return;
     if (announced.current === null) {
       announced.current = new Set(data.data.map((n) => n.id));
       return;

@@ -1,4 +1,4 @@
-// Spain VERI*FACTU for OrderRestro: builds the append-only, hash-chained fiscal record for every paid
+// Spain VERI*FACTU for EasyDine: builds the append-only, hash-chained fiscal record for every paid
 // sale and every refund inside the same database transaction as the sale, and reports the records to
 // AEAT in the background. Implemented, not certified: see docs/verifactu.md for what remains (the
 // producer's Declaracion Responsable and a run against AEAT's pre-production portal).
@@ -76,7 +76,7 @@ export class VerifactuService {
     const get = (k: string, d: string) =>
       (this.config.get<string>(k) ?? '').trim() || d;
     return {
-      name: get('VERIFACTU_PRODUCER_NAME', 'NODEDR INFOTECH PRIVATE LIMITED'),
+      name: get('VERIFACTU_PRODUCER_NAME', 'EASYDINE INFOTECH PRIVATE LIMITED'),
       country: get('VERIFACTU_PRODUCER_COUNTRY', 'IN'),
       idType: get('VERIFACTU_PRODUCER_ID_TYPE', '04'),
       id: get('VERIFACTU_PRODUCER_ID', ''),
@@ -92,7 +92,7 @@ export class VerifactuService {
       producerCountry: p.country,
       producerIdType: p.idType,
       producerId: p.id,
-      systemName: 'OrderRestro',
+      systemName: 'EasyDine',
       systemId: p.systemId,
       version: p.version,
       installationNumber,

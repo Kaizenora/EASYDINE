@@ -1,27 +1,27 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: nodedr-orderrestro-postgres
+    container_name: easy-dine-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: nodedr
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD in /etc/nodedr-orderrestro/nodedr-orderrestro.env}
-      POSTGRES_DB: nodedr_restaurant
+      POSTGRES_USER: easydine
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD in /etc/easy-dine/easy-dine.env}
+      POSTGRES_DB: easydine_restaurant
     expose:
       - "5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nodedr"]
+      test: ["CMD-SHELL", "pg_isready -U easydine"]
       interval: 5s
       timeout: 5s
       retries: 10
   backend:
-    image: ghcr.io/raktim94/nodedr-restaurant-pos-backend:@VERSION@
-    container_name: nodedr-orderrestro-backend
+    image: ghcr.io/raktim94/easy-dine-pos-backend:@VERSION@
+    container_name: easy-dine-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: "postgresql://nodedr:${POSTGRES_PASSWORD}@postgres:5432/nodedr_restaurant"
+      DATABASE_URL: "postgresql://easydine:${POSTGRES_PASSWORD}@postgres:5432/easydine_restaurant"
       JWT_EXPIRES_IN: "12h"
       PORT: "4000"
       CORS_ORIGIN: "${FRONTEND_ORIGIN:-http://localhost:1995}"
@@ -44,8 +44,8 @@ services:
       - 'c 189:* rmw'
       - 'c 180:* rmw'
   web:
-    image: ghcr.io/raktim94/nodedr-restaurant-pos-web:@VERSION@
-    container_name: nodedr-orderrestro-web
+    image: ghcr.io/raktim94/easy-dine-pos-web:@VERSION@
+    container_name: easy-dine-web
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-1995}:3000"

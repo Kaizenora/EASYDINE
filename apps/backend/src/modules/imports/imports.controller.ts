@@ -13,7 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { SessionUser } from '@nodedr-restaurant/types';
+import type { SessionUser } from '@easydine/types';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { Auth } from '../../common/decorators/auth.decorator';

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CustomerAddressDto, CustomerDto } from "@nodedr-restaurant/types";
+import type { CustomerAddressDto, CustomerDto } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 

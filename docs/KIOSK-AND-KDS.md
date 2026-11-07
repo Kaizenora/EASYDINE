@@ -2,7 +2,7 @@
 
 This covers the self-service customer kiosk (a 23.8" landscape Android touchscreen,
 RK3576 / Android 14 / 4 GB RAM) and the staff kitchen-display tablet (HONOR Pad X8a),
-both served by the **same** OrderRestro instance. Nothing here needs an APK or a Play
+both served by the **same** EasyDine instance. Nothing here needs an APK or a Play
 Store listing: the kiosk is a browser page that can be added to the home screen as a
 full-screen web app (PWA shortcut).
 
@@ -26,7 +26,7 @@ station chips, (b) realtime now always connects through the web origin (see §6)
 ## 2. Kiosk URL and launch
 
 1. In the staff app: **Settings → Customer kiosk → Enable kiosk**. Copy the address, e.g.
-   `https://orderrestro.nodedrdev.com/kiosk/<32 hex characters>`. The address *is* the
+   `https://easydine.easydinedev.com/kiosk/<32 hex characters>`. The address *is* the
    credential: anyone who has it can place orders (and nothing else). **Create new address**
    invalidates the old one immediately; **Turn kiosk off** removes it.
 2. On the kiosk (Android 14, Chrome): open that address → ⋮ menu → **Add to Home screen / Install app**.
@@ -97,7 +97,7 @@ exercised in a desktop browser, not on the RK3576 / the real devices.**
 | Printing from Android Chrome | **Unverified.** The button only opens the browser print dialog (`window.print()`); it can't print silently and can't tell whether a printer exists. Requires an Android print service for the printer (vendor plugin / Mopria). If `window.print` is missing the screen says printing is unavailable. Paper-cut behaviour depends on the driver: **unverified**. |
 | Direct USB ESC/POS | Exists in the backend but only for a Linux **host** with USB passthrough (`escpos-usb.ts`). It does **not** run on Android and is **not** used by the kiosk. |
 | Silent print / Bluetooth / built-in printer / cash drawer from the kiosk | **Not implemented, not claimed.** Would need a small Android companion app or WebView bridge; see below. |
-| QR/barcode scanner as USB-HID keyboard wedge | **Unverified** on hardware; implemented as a plain focused text field on **Orders** (`lib/scan.ts`): strips scanner control characters, accepts only `orderrestro:order:<number>`, a bare order number, or a table-QR URL, rejects everything else, and only *opens* the order. Typing the number is the manual fallback. |
+| QR/barcode scanner as USB-HID keyboard wedge | **Unverified** on hardware; implemented as a plain focused text field on **Orders** (`lib/scan.ts`): strips scanner control characters, accepts only `easydine:order:<number>`, a bare order number, or a table-QR URL, rejects everything else, and only *opens* the order. Typing the number is the manual fallback. |
 | Scanner with a camera/SDK/serial (SPP) interface | Not supported; no camera API is assumed. |
 
 ### Facts needed from the vendors for direct integration
@@ -118,7 +118,7 @@ exercised in a desktop browser, not on the RK3576 / the real devices.**
 
 ## 7. Tests and how to run them
 ```bash
-pnpm install && pnpm --filter @nodedr-restaurant/types build
+pnpm install && pnpm --filter @easydine/types build
 (cd apps/backend && npx tsc --noEmit && npx jest)                        # unit incl. kiosk service
 (cd apps/web && npx tsc --noEmit && npx eslint . && npm test)            # node:test: basket, flow reducer, scan, ticket
 # API integration against a real, migrated + seeded Postgres:

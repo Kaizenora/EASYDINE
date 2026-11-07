@@ -155,7 +155,7 @@ describe('refunding through the gateway', () => {
     const noRefund = setup();
     delete (fake as any).refund;
     await expect(go(noRefund)).rejects.toThrow(
-      /cannot be sent from OrderRestro/,
+      /cannot be sent from EasyDine/,
     );
     (fake as any).refund = jest.fn();
     expect(fake.refund).not.toHaveBeenCalled();

@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCustomerAddress } from "@nodedr-restaurant/types";
+import { formatCustomerAddress } from "@easydine/types";
 import { useEffect, useState } from "react";
 import { useCustomerAddresses, useCustomers } from "@/hooks/use-customers";
 

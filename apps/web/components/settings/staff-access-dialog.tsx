@@ -1,6 +1,6 @@
 "use client";
 
-import { PERMISSIONS } from "@nodedr-restaurant/types";
+import { PERMISSIONS } from "@easydine/types";
 import { ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";

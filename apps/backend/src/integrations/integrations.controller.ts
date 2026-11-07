@@ -24,7 +24,7 @@ import {
   integrationRewardsLookupSchema,
   createIntegrationReservationSchema,
   integrationIdempotencyKeySchema,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 import { z } from 'zod';
 import { CurrentIntegrationKey } from '../common/decorators/current-integration-key.decorator';
 import { RequireScope } from '../common/decorators/require-scope.decorator';
@@ -34,7 +34,7 @@ import type { IntegrationKeyContext } from './integrations.service';
 import { IntegrationsService } from './integrations.service';
 
 // The public REST API an external website's own backend calls as a
-// back end for OrderRestro — list locations, browse a location's menu,
+// back end for EasyDine — list locations, browse a location's menu,
 // place an order, book a table, check status. Authenticated by
 // Authorization: Bearer <integration api key>, never cookies — see
 // docs/integrations-api.md for the full reference and IntegrationApiKeyGuard

@@ -1,5 +1,5 @@
 // Server-authoritative pricing. Mirrors the hard-won lesson from
-// nodedr-pos (see its project memory): the price entered against a menu
+// easydine-pos (see its project memory): the price entered against a menu
 // item is TAX-INCLUSIVE, not tax-exclusive — GST/VAT must be backed OUT of
 // it, never added on top. A flat/percent discount is computed against the
 // tax-inclusive subtotal directly (the rupee amount a cashier actually
@@ -24,7 +24,7 @@
 // downstream consumer (OrderItem.lineTotal, receipts, refunds, KOTs) keeps
 // working exactly as it did before this file existed.
 
-import type { TaxMode } from '@nodedr-restaurant/types';
+import type { TaxMode } from '@easydine/types';
 
 export function toEffectiveInclusiveUnitPrice(
   rawUnitPrice: number,

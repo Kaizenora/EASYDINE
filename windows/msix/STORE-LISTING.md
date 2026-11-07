@@ -7,13 +7,13 @@ description**, so each carries the words a restaurant owner actually types
 product really supports are used.
 
 ## Product name
-Reserved 2026-11-06 and selected in the listing: `Nodedr OrderRestro - Restaurant POS and Billing` (the original `Nodedr OrderRestro` stays reserved; the package DisplayName is unchanged).
+Reserved 2026-11-06 and selected in the listing: `Easy Dine - Restaurant POS and Billing` (the original `Easy Dine` stays reserved; the package DisplayName is unchanged).
 
 ## Short description (max 1000)
 Free restaurant POS and billing software: take dine-in, takeaway and delivery orders, print bills and KOT, run a kitchen display, manage tables, reservations and inventory. Works offline on your own PC.
 
 ## Description (max 10000)
-Nodedr OrderRestro is a free, open-source restaurant POS (point of sale) and restaurant management system for restaurants, cafes, coffee shops, bakeries, fast food outlets, bars, food courts and cloud kitchens.
+Easy Dine is a free, open-source restaurant POS (point of sale) and restaurant management system for restaurants, cafes, coffee shops, bakeries, fast food outlets, bars, food courts and cloud kitchens.
 
 Run your whole counter from one Windows PC: billing, tables, kitchen tickets (KOT), kitchen display (KDS), reservations, inventory, staff attendance and payroll, accounting and reports. It works offline, so orders and bills keep going even when the internet is down. No subscription, no per-terminal fee.
 
@@ -32,14 +32,14 @@ WHAT YOU CAN DO
 - Print bills and kitchen tickets on your Windows printer
 
 WORKS THE WAY A RESTAURANT WORKS
-The app can run its own local server and database on this PC (first start sets it up and takes a few minutes), or connect to your restaurant's OrderRestro server on the local network so every till, tablet and kitchen screen shows the same orders. Your data stays on your own machine or server.
+The app can run its own local server and database on this PC (first start sets it up and takes a few minutes), or connect to your restaurant's EasyDine server on the local network so every till, tablet and kitchen screen shows the same orders. Your data stays on your own machine or server.
 
 GOOD TO KNOW
-- Free and open source (AGPL-3.0). Source code: github.com/Raktim94/nodedr-restaurant-pos
+- Free and open source (AGPL-3.0). Source code: github.com/Raktim94/easy-dine-pos
 - Android app for waiters, managers and delivery riders is available on Google Play.
 - Needs Windows 10 (version 1809) or newer and the Microsoft Edge WebView2 Runtime (included with Windows 11).
 
-Website: https://orderrestro.nodedr.com
+Website: https://easydine.easydine.com
 
 ## Features (max 20, 200 chars each)
 - Restaurant POS and billing for dine-in, takeaway and delivery

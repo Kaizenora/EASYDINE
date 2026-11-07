@@ -81,7 +81,7 @@ Font: Geist (or Inter as fallback) — one premium sans, no mixing.
 Top nav (workspace switcher, search/command palette, notifications, user
 menu) + collapsible icon+label sidebar + content area. Sidebar collapses to
 an off-canvas drawer below `lg` (this is a correctness requirement, not
-cosmetic — `nodedr-pos` shipped a fixed-256px sidebar that ate 66% of a
+cosmetic — `easydine-pos` shipped a fixed-256px sidebar that ate 66% of a
 phone viewport before it was caught and fixed; do not repeat that here,
 verify at ~375px/~768px/desktop with real screenshots before calling any
 layout done).

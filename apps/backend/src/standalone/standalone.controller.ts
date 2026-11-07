@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Query, UsePipes } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { SessionUser } from '@nodedr-restaurant/types';
+import type { SessionUser } from '@easydine/types';
 import { Auth } from '../common/decorators/auth.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';

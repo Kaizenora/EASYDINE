@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OrderRestro — Departments, Access Exceptions &amp; Invoice Reading</title>
+<title>EasyDine — Departments, Access Exceptions &amp; Invoice Reading</title>
 <style>
   @page { size: A4; margin: 16mm 15mm; }
   :root { --ink:#111827; --mute:#6b7280; --line:#e5e7eb; --brand:#9f1239; --bg:#fafafa; --card:#fff; --ok:#15803d; --warn:#b45309; }
@@ -42,9 +42,9 @@
 </head>
 <body>
 <main>
-  <p class="kicker">OrderRestro · Tutorial</p>
+  <p class="kicker">EasyDine · Tutorial</p>
   <h1>Departments, access exceptions &amp; invoice reading</h1>
-  <p class="lead">Group your staff by team, give one person a little more (or less) access than their role, and fill in supplier invoices from pasted text. Plus how to install OrderRestro on every platform.</p>
+  <p class="lead">Group your staff by team, give one person a little more (or less) access than their role, and fill in supplier invoices from pasted text. Plus how to install EasyDine on every platform.</p>
 
   <nav class="toc" aria-label="Contents">
     <strong>In this guide</strong>
@@ -60,7 +60,7 @@
   </nav>
 
   <h2 id="install">1. Install on your platform</h2>
-  <p>OrderRestro runs on one computer in your restaurant (the <em>server</em>). Everyone else — tablets, phones, the kitchen screen — opens it in a browser or the mobile app. Pick the server option for your computer:</p>
+  <p>EasyDine runs on one computer in your restaurant (the <em>server</em>). Everyone else — tablets, phones, the kitchen screen — opens it in a browser or the mobile app. Pick the server option for your computer:</p>
   <table>
     <thead><tr><th>You have</th><th>Use this</th><th>Effort</th></tr></thead>
     <tbody>
@@ -68,13 +68,13 @@
       <tr><td><strong>Windows 10 / 11</strong></td><td>Docker Desktop + <code>install.sh</code> from WSL2 or Git Bash; or the Microsoft Store app</td><td>~15 minutes</td></tr>
       <tr><td><strong>macOS</strong></td><td>Docker Desktop + <code>install.sh</code></td><td>~10 minutes</td></tr>
       <tr><td><strong>CasaOS / ZimaOS home server</strong></td><td>One-click app install</td><td>2 minutes</td></tr>
-      <tr><td><strong>Android phone / tablet, iPhone / iPad</strong></td><td>Not a server. Use the OrderRestro mobile app, or any browser, to connect to your server.</td><td>1 minute</td></tr>
+      <tr><td><strong>Android phone / tablet, iPhone / iPad</strong></td><td>Not a server. Use the EasyDine mobile app, or any browser, to connect to your server.</td><td>1 minute</td></tr>
     </tbody>
   </table>
   <div class="note"><strong>Recommendation:</strong> a small always-on Linux machine is the most reliable server. Use Windows or macOS if that is what you already have in the restaurant.</div>
 
   <h3>Ubuntu / Debian / Raspberry Pi</h3>
-  <pre><code>curl -fsSL https://orderrestro.nodedr.com/install-linux.sh | sudo bash</code></pre>
+  <pre><code>curl -fsSL https://easydine.easydine.com/install-linux.sh | sudo bash</code></pre>
   <p>Installs Docker if it is missing, checks the download, and starts the app on port <code>1995</code>.</p>
 
   <h3>Windows</h3>
@@ -82,8 +82,8 @@
     <li>Open PowerShell and run <code>winget install Docker.DockerDesktop</code>. Reboot if asked, accept the WSL2 backend, then open Docker Desktop once.</li>
     <li>Open <strong>WSL2</strong> (Ubuntu) or <strong>Git Bash</strong> — plain PowerShell cannot run the install script.</li>
     <li>Run:
-<pre><code>git clone https://github.com/Raktim94/nodedr-restaurant-pos.git
-cd nodedr-restaurant-pos
+<pre><code>git clone https://github.com/Raktim94/easy-dine-pos.git
+cd easy-dine-pos
 ./install.sh</code></pre></li>
   </ol>
 
@@ -99,7 +99,7 @@ cd nodedr-restaurant-pos
 
   <h2 id="dashboard">2. The dashboard</h2>
   <p>The dashboard is the first screen after sign-in. It answers three questions in order: <em>how much did we make</em> (the large revenue card), <em>what needs me right now</em> (orders, tables, kitchen queue, then pending payments and low stock) and <em>how are we trending</em> (14-day revenue and waste).</p>
-  <figure><img src="screenshots/sa-dashboard-desktop.png" alt="OrderRestro dashboard on a desktop: revenue card, order and table counts, revenue trend and recent transactions" width="1440" height="1119"><figcaption>Desktop. Every card links to the full records behind the number.</figcaption></figure>
+  <figure><img src="screenshots/sa-dashboard-desktop.png" alt="EasyDine dashboard on a desktop: revenue card, order and table counts, revenue trend and recent transactions" width="1440" height="1119"><figcaption>Desktop. Every card links to the full records behind the number.</figcaption></figure>
   <div class="pair phone">
     <figure><img src="screenshots/sa-dashboard-mobile.png" alt="Dashboard on a phone" width="375" height="2441"><figcaption>Phone (375 px).</figcaption></figure>
     <figure><img src="screenshots/sa-dashboard-dark.png" alt="Dashboard in dark mode" width="1440" height="900"><figcaption>Dark mode is designed separately, not inverted.</figcaption></figure>
@@ -137,7 +137,7 @@ cd nodedr-restaurant-pos
   <figure class="phone"><img src="screenshots/sa-access-mobile.png" alt="Access dialog on a phone" width="375" height="812" style="max-width:260px"><figcaption>On a phone the list scrolls inside the dialog and Save stays visible.</figcaption></figure>
 
   <h2 id="invoice">5. Reading invoice text</h2>
-  <p>When a supplier sends an invoice as a PDF or email, copy its text and let OrderRestro fill in the form for you.</p>
+  <p>When a supplier sends an invoice as a PDF or email, copy its text and let EasyDine fill in the form for you.</p>
   <figure><img src="screenshots/sa-invoice-desktop.png" alt="Add a vendor invoice dialog with pasted text and the form filled in" width="1440" height="900"><figcaption>Procurement → Vendor invoices → New invoice.</figcaption></figure>
   <ol class="steps">
     <li>Open <strong>Inventory → Procurement</strong>, then <strong>New invoice</strong>.</li>

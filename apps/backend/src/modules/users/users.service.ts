@@ -9,7 +9,7 @@ import type {
   DepartmentDto,
   SetPermissionOverridesDto,
   UpdateStaffDto,
-} from '@nodedr-restaurant/types';
+} from '@easydine/types';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { AuditService } from '../../audit/audit.service';

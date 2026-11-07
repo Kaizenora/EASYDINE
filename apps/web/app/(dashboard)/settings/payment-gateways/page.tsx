@@ -58,7 +58,7 @@ const PILL = "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-sm fo
 /** Words plus an icon, never colour alone. */
 function StatusLine({ p }: { p: GatewayProvider }) {
   const c = p.connection;
-  if (!p.integrated) return <span className="text-sm text-muted-foreground">Not integrated with OrderRestro yet</span>;
+  if (!p.integrated) return <span className="text-sm text-muted-foreground">Not integrated with EasyDine yet</span>;
   if (!c) return <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"><CircleDashed className="h-4 w-4" aria-hidden />Not set up</span>;
   if (c.lastTestOk === false)
     return <span className={`${PILL} bg-destructive/10 text-destructive`}><ShieldAlert className="h-4 w-4" aria-hidden />Connection problem</span>;
@@ -267,12 +267,12 @@ function ProviderSetup({ p, country, open, onToggle }: { p: GatewayProvider; cou
 
       {!open ? null : !p.integrated ? (
         <p className="rounded-lg bg-secondary/60 px-3 py-2 text-sm text-muted-foreground">
-          OrderRestro cannot take payments through {p.name} yet, so no credentials are collected for it. {p.custom ? "This is a provider you added." : ""}
+          EasyDine cannot take payments through {p.name} yet, so no credentials are collected for it. {p.custom ? "This is a provider you added." : ""}
         </p>
       ) : (
         <>
           <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <p>How it works: {p.integration}. The customer pays on the provider&apos;s own page; card details never touch OrderRestro.</p>
+            <p>How it works: {p.integration}. The customer pays on the provider&apos;s own page; card details never touch EasyDine.</p>
             {p.limitations.map((l) => (
               <p key={l}>• {l}</p>
             ))}
@@ -360,7 +360,7 @@ function CustomProviderDialog({ country, open, onClose, adapters }: { country: s
           }}
         >
           <p className="text-sm text-muted-foreground">
-            Adds a provider to this country&apos;s list. It can only take payments if you pick one of the integrations OrderRestro already has; otherwise it is kept as a reference with a link to its documentation.
+            Adds a provider to this country&apos;s list. It can only take payments if you pick one of the integrations EasyDine already has; otherwise it is kept as a reference with a link to its documentation.
           </p>
           <Label htmlFor="cp-name">Provider name</Label>
           <Input id="cp-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />

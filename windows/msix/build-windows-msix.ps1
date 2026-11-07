@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-  Builds, packages, and (optionally) locally installs the OrderRestro
+  Builds, packages, and (optionally) locally installs the EasyDine
   Windows MSIX client. Windows-only — requires the .NET 8 SDK plus the
   Windows 10/11 SDK (for makeappx.exe/signtool.exe, normally on PATH from a
   "Developer PowerShell for VS" prompt, or installable standalone). Not
@@ -16,7 +16,7 @@
        folder publish — not single-file, see Launcher.csproj for why).
     2. Stage the published output + Assets/ + AppxManifest.xml into one
        folder (the exact shape Windows expects inside an .msix).
-    3. `makeappx pack` that folder into OrderRestro.msix.
+    3. `makeappx pack` that folder into EasyDine.msix.
     4. Optionally sign it with a throwaway self-signed test cert
        (-SelfSignedTest) and/or install it locally (-InstallLocally) for a
        real install/launch round-trip.
@@ -26,7 +26,7 @@
 
 .PARAMETER SelfSignedTest
   Generates (or reuses) a throwaway self-signed code-signing certificate
-  under $env:LOCALAPPDATA\OrderRestro\dev-cert, signs the package with it,
+  under $env:LOCALAPPDATA\EasyDine\dev-cert, signs the package with it,
   and trusts it into CurrentUser\TrustedPeople so `Add-AppxPackage`
   succeeds locally. FOR LOCAL/CI TEST INSTALLS ONLY — never use this cert
   for a real Store or sideload distribution; Partner Center issues the
@@ -69,9 +69,9 @@ $manifestSrc = Join-Path $root 'AppxManifest.xml'
 $assetsSrc = Join-Path $root 'Assets'
 $publishDir = Join-Path $root 'out/publish'
 $stageDir = Join-Path $root 'out/stage'
-$msixOut = Join-Path $root 'out/OrderRestro.msix'
+$msixOut = Join-Path $root 'out/EasyDine.msix'
 
-Write-Host "== OrderRestro Windows MSIX build ==" -ForegroundColor Cyan
+Write-Host "== EasyDine Windows MSIX build ==" -ForegroundColor Cyan
 Write-Host "Configuration=$Configuration Platform=$Platform" -ForegroundColor Cyan
 
 foreach ($tool in 'dotnet', 'makeappx') {
@@ -87,8 +87,8 @@ Remove-Item -Recurse -Force $publishDir, $stageDir, $msixOut -ErrorAction Silent
 & dotnet publish $launcherProj -c $Configuration -r "win-$Platform" -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 
-$exePath = Join-Path $publishDir 'OrderRestro.exe'
-if (-not (Test-Path $exePath)) { throw "Publish succeeded but OrderRestro.exe was not found at $exePath" }
+$exePath = Join-Path $publishDir 'EasyDine.exe'
+if (-not (Test-Path $exePath)) { throw "Publish succeeded but EasyDine.exe was not found at $exePath" }
 
 # --- 2. Stage the package layout --------------------------------------------
 New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
@@ -121,10 +121,10 @@ if ($SelfSignedTest) {
     if (-not (Get-Command signtool -ErrorAction SilentlyContinue)) {
         throw "signtool not found on PATH — required for -SelfSignedTest. Install the Windows 10/11 SDK."
     }
-    $certDir = Join-Path $env:LOCALAPPDATA 'OrderRestro\dev-cert'
+    $certDir = Join-Path $env:LOCALAPPDATA 'EasyDine\dev-cert'
     New-Item -ItemType Directory -Force -Path $certDir | Out-Null
-    $pfxPath = Join-Path $certDir 'orderrestro-dev.pfx'
-    $cerPath = Join-Path $certDir 'orderrestro-dev.cer'
+    $pfxPath = Join-Path $certDir 'easydine-dev.pfx'
+    $cerPath = Join-Path $certDir 'easydine-dev.cer'
 
     # Windows requires the signing cert's Subject to exactly equal the
     # packaged manifest's Identity/Publisher, or Add-AppxPackage rejects
@@ -144,10 +144,10 @@ if ($SelfSignedTest) {
             -Type Custom `
             -Subject $subject `
             -KeyUsage DigitalSignature `
-            -FriendlyName "OrderRestro dev-only test cert" `
+            -FriendlyName "EasyDine dev-only test cert" `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
-        $pwd = ConvertTo-SecureString -String "orderrestro-dev" -Force -AsPlainText
+        $pwd = ConvertTo-SecureString -String "easydine-dev" -Force -AsPlainText
         Export-PfxCertificate -Cert $existing -FilePath $pfxPath -Password $pwd | Out-Null
         Export-Certificate -Cert $existing -FilePath $cerPath | Out-Null
         # Trust it locally so Add-AppxPackage doesn't reject an untrusted
@@ -170,8 +170,8 @@ if ($SelfSignedTest) {
         throw "Found existing cert '$subject' in the store but no matching .pfx at $pfxPath — delete the cert from Cert:\CurrentUser\My and re-run to regenerate both together."
     }
 
-    $pwd = ConvertTo-SecureString -String "orderrestro-dev" -Force -AsPlainText
-    & signtool sign /fd SHA256 /a /f $pfxPath /p "orderrestro-dev" $msixOut
+    $pwd = ConvertTo-SecureString -String "easydine-dev" -Force -AsPlainText
+    & signtool sign /fd SHA256 /a /f $pfxPath /p "easydine-dev" $msixOut
     if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
     Write-Host "Signed with dev-only test certificate." -ForegroundColor Green
 }

@@ -1,4 +1,4 @@
-package com.nodedr.orderrestro;
+package com.easydine.easydine;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -9,7 +9,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Remembers which restaurant server this phone talks to. OrderRestro is
+ * Remembers which restaurant server this phone talks to. EasyDine is
  * self-hosted, so the address is typed (or scanned) once and the app then opens
  * that server's own web app.
  *
@@ -23,7 +23,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "ServerLink")
 public class ServerLinkPlugin extends Plugin {
 
-    static final String PREFS = "orderrestro";
+    static final String PREFS = "easydine";
     static final String KEY_LOCAL = "localUrl";
     static final String KEY_EXTERNAL = "externalUrl";
     static final String KEY_ACTIVE = "serverUrl"; // the address in use right now (also the pre-1.16 single address)
@@ -81,7 +81,7 @@ public class ServerLinkPlugin extends Plugin {
         return l.isEmpty() ? external(ctx) : l;
     }
 
-    /** Does an OrderRestro server answer at this address within a moment? */
+    /** Does an EasyDine server answer at this address within a moment? */
     static boolean reachable(String base) {
         java.net.HttpURLConnection c = null;
         try {
@@ -151,7 +151,7 @@ public class ServerLinkPlugin extends Plugin {
         r.put("localUrl", l.isEmpty() && active.isEmpty() ? str(p, KEY_LAST_LOCAL) : l);
         r.put("externalUrl", e.isEmpty() && active.isEmpty() ? str(p, KEY_LAST_EXTERNAL) : e);
         r.put("mode", active.isEmpty() ? "" : active.equals(l) ? "local" : "online");
-        r.put("version", com.nodedr.orderrestro.BuildConfig.VERSION_NAME);
+        r.put("version", com.easydine.easydine.BuildConfig.VERSION_NAME);
         r.put("startMode", mode(ctx));
         call.resolve(r);
     }

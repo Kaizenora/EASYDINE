@@ -1,5 +1,5 @@
 // Runs against a real PostgreSQL with every migration applied. Skipped unless VERIFACTU_TEST_DATABASE_URL is
-// set, e.g. postgresql://postgres@127.0.0.1:55432/orderrestro_vf (a throwaway database).
+// set, e.g. postgresql://postgres@127.0.0.1:55432/easydine_vf (a throwaway database).
 import { writeFileSync } from 'node:fs';
 import { ConfigService } from '@nestjs/config';
 import forge from 'node-forge';

@@ -1,4 +1,4 @@
-# OrderRestro — Windows MSIX client
+# EasyDine — Windows MSIX client
 
 A thin native shell (WinForms + WebView2) around the same web UI the
 Linux/Docker deployment already serves. It ships no server, no database, no
@@ -7,7 +7,7 @@ Node.js/Docker/pnpm, and no bundled Chromium — this is not Electron.
 ## What this is / isn't
 
 - **Is:** a client. On first launch it asks for the restaurant's own
-  OrderRestro server address (LAN IP, hostname, VPN address) and connects
+  EasyDine server address (LAN IP, hostname, VPN address) and connects
   to it — same as typing that address into a browser, but packaged as a
   normal Windows app with a Start Menu entry, no URL bar, no browser tab
   habits.
@@ -61,7 +61,7 @@ windows/msix/
     Program.cs                   # entry point
     MainForm.cs                  # WebView2 host + menu (change server / reload)
     ServerSettingsForm.cs        # first-run / change-server dialog
-    AppConfig.cs                 # per-user server URL, %LOCALAPPDATA%\OrderRestro
+    AppConfig.cs                 # per-user server URL, %LOCALAPPDATA%\EasyDine
     TrayIcon.cs                   # embedded-mode system tray (minimize-to-tray, stop/exit, remove data)
     ServerSupervisor.cs           # embedded-mode server lifecycle (Postgres/backend/web child processes)
     ServerPaths.cs                # embedded-mode writable state layout, under AppConfig.ConfigDir
@@ -99,7 +99,7 @@ tile) is really launching a **second** process against an already-running
 first one.
 
 `Program.cs` guards against this with a named per-user `Mutex`
-(`Local\NodedrOrderRestro_SingleInstance_...`): a second launch never
+(`Local\EasyDineEasyDine_SingleInstance_...`): a second launch never
 reaches `ServerSupervisor.StartAsync` at all — it signals the first
 instance (a named `EventWaitHandle`) to come to the foreground, then exits
 immediately. Without this guard, the second process's own
@@ -112,14 +112,14 @@ allowing readers but not a second writer), producing exactly:
 > The process cannot access the file '...\backend.log' because it is being
 > used by another process.
 
-## Uninstalling OrderRestro
+## Uninstalling EasyDine
 
 MSIX/Desktop Bridge has no uninstall-hook mechanism — unlike a classic MSI
 installer's uninstall custom actions, Windows runs no app code when a
 package is removed. It only auto-deletes the package's own sandboxed
 `%LOCALAPPDATA%\Packages\<PackageFamilyName>\LocalState` folder, which this
 app deliberately does **not** use: writable state (`AppConfig.ConfigDir` =
-`%LOCALAPPDATA%\OrderRestro`, covering config, the WebView2 profile, logs,
+`%LOCALAPPDATA%\EasyDine`, covering config, the WebView2 profile, logs,
 and — in embedded mode — `ServerPaths.DataDir`'s Postgres data directory,
 uploads, and the ~2.8GB server runtime copy) must survive an MSIX
 upgrade-in-place, which requires a real, stable, non-sandboxed path (see
@@ -132,7 +132,7 @@ uninstaller's cleanup step: **File → "Remove All Local Data & Uninstall…"**
 (also in the tray menu for embedded-mode installs). This stops the embedded
 server (Postgres/backend/web) if running, deletes `AppConfig.ConfigDir`
 entirely after a confirmation prompt, then opens Windows Settings →
-Apps so the user can click Uninstall on "Nodedr OrderRestro" to remove the
+Apps so the user can click Uninstall on "Easy Dine" to remove the
 package itself. Doing both steps — this menu action, then the actual
 package uninstall — leaves no residue on disk.
 
@@ -140,7 +140,7 @@ package uninstall — leaves no residue on disk.
 
 | Capability | Why |
 |---|---|
-| `internetClient` | Reaching the restaurant's OrderRestro server (LAN IP, hostname, or a VPN/Tailscale address). |
+| `internetClient` | Reaching the restaurant's EasyDine server (LAN IP, hostname, or a VPN/Tailscale address). |
 | `runFullTrust` (restricted) | Required for any Win32-model desktop app packaged via Desktop Bridge — see "Why WinForms, and why runFullTrust" above. Not elevation, not admin, not broad filesystem/registry/device access. |
 
 **No device/USB/Bluetooth capability of any kind**, no
@@ -189,12 +189,12 @@ What to do about it:
 
 1. ~~`AppxManifest.xml` → `Identity/@Publisher`~~ — **done.** Set to the
    real Partner Center-issued value (`CN=11C721FC-E399-4888-B532-
-   7BFCD5C491B3`, PublisherDisplayName "NODEDR INFOTECH LIMITED").
+   7BFCD5C491B3`, PublisherDisplayName "EASYDINE INFOTECH LIMITED").
    `validate-msix.ps1` fails loudly if this ever regresses to the
    placeholder.
 2. ~~`Identity/@Name`~~ — **done.** Set to the real Store-reserved package
-   identity `NODEDRINFOTECHLIMITED.NodedrOrderRestro` (Store ID `9NVPNLWW2FZ4`,
-   Package Family Name `NODEDRINFOTECHLIMITED.NodedrOrderRestro_wsh4jzg5a6682`),
+   identity `EASYDINEINFOTECHLIMITED.EasyDineEasyDine` (Store ID `9NVPNLWW2FZ4`,
+   Package Family Name `EASYDINEINFOTECHLIMITED.EasyDineEasyDine_wsh4jzg5a6682`),
    from Partner Center's "View product identity" page.
 3. **Signing** — real Store submissions are signed automatically by the
    Store on ingestion; you do not need your own certificate for Store
@@ -226,14 +226,14 @@ Per this project's own "don't fake test results" rule:
   uninstalls. Real, automated, machine-verified — not a manual claim.
 - **Upgrade/update (CI, windows-latest): verified, not just implied.**
   The workflow installs v1.0.0.0, writes a fake pre-existing
-  `%LOCALAPPDATA%\OrderRestro\config.json` (simulating a configured
+  `%LOCALAPPDATA%\EasyDine\config.json` (simulating a configured
   server address), bumps to v1.0.0.1, reinstalls in place, then asserts
   both that `Get-AppxPackage` reports the new version and that the
   config file survived byte-for-byte. This used to be an assumption
   ("`AppConfig` lives outside the install directory, so it should
   survive") — it's now an actual round-trip test.
 - **Correct app identity/signing: verified.** `AppxManifest.xml` carries
-  the real Partner Center identity (`NODEDRINFOTECHLIMITED.NodedrOrderRestro`,
+  the real Partner Center identity (`EASYDINEINFOTECHLIMITED.EasyDineEasyDine`,
   `CN=11C721FC-E399-4888-B532-7BFCD5C491B3`); the CI self-signed test
   cert's subject is read from that same manifest field so install
   succeeds only when they genuinely match, the same constraint Windows
@@ -298,7 +298,7 @@ Per this project's own "don't fake test results" rule:
 ## Server sync (embedded installs)
 
 File → **Server sync…** opens Settings → Server Sync. Point it at a central
-OrderRestro server (started with `SYNC_API_KEY=<long random key>`) and this PC
+EasyDine server (started with `SYNC_API_KEY=<long random key>`) and this PC
 two-way syncs with it: edits made offline queue up and upload when the server
 is reachable; the newest edit to a row wins. First sync either replaces this
 PC's data with the server's ("use the server's data", for a new PC) or merges

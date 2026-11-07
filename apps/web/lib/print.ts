@@ -1,4 +1,4 @@
-// Ported from nodedr-pos's frontend/lib/print.ts: loads the backend's
+// Ported from easydine-pos's frontend/lib/print.ts: loads the backend's
 // self-printing receipt HTML into a hidden same-page iframe rather than a
 // new tab, so there's no blank/finished tab left for the cashier to notice
 // and close. The OS print dialog still opens exactly as it would for any

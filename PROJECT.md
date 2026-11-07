@@ -1,4 +1,4 @@
-# Nodedr OrderRestro — Master Project Document
+# Easy Dine — Master Project Document
 
 > Start here. This file is the source of truth for scope, status, and decisions.
 > Companion docs: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (tech stack + why),
@@ -7,12 +7,12 @@
 
 ## What this is
 
-**Nodedr OrderRestro** is a purpose-built, offline-first Restaurant Management
+**Easy Dine** is a purpose-built, offline-first Restaurant Management
 System — not a retail POS reused for restaurants. Target venues: restaurants,
 cafés, coffee shops, bakeries, fast food, fine dining, bars, food courts,
 cloud kitchens, and multi-branch chains.
 
-It is a sister project to [`nodedr-pos`](../nodedr-pos) (the retail shop
+It is a sister project to [`easydine-pos`](../easydine-pos) (the retail shop
 POS), sharing its self-hosted/Docker/no-subscription philosophy and reusing
 *proven patterns* from it (auth session model, PDF/HTML receipt rendering,
 ESC/POS + USB printing lessons, currency/tax-rounding discipline, ISO
@@ -40,7 +40,7 @@ compromised both.
    than a flat Express app — see `ARCHITECTURE.md`.
 5. **Server-authoritative money.** All pricing, tax, discount, loyalty math
    computed server-side, never trusted from the client — the same rule
-   `nodedr-pos` learned the hard way (see its memory: GST-inclusive pricing
+   `easydine-pos` learned the hard way (see its memory: GST-inclusive pricing
    bug, float-increment drift bug). Every new money-touching feature here
    gets the same discipline from day one: round with a helper, `set` not
    `increment` on running balances, verify numerically before calling it done.
