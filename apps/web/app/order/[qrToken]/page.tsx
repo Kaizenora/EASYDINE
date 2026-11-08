@@ -8,12 +8,15 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  ExternalLink,
+  Flame,
   Info,
   Leaf,
   MapPin,
   Mic,
   MicOff,
   Minus,
+  PenTool,
   Phone,
   Plus,
   Receipt,
@@ -31,6 +34,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
 import { formatCurrency } from "@/lib/format";
+import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 // Dish images fallbacks
 const DISH_IMAGE_FALLBACKS: Record<string, string> = {
@@ -76,7 +81,7 @@ interface PublicMenuItem {
 }
 
 interface CartLine {
-  id: string; // unique cart line ID so items with different instructions remain separate
+  id: string;
   menuItemId: string;
   name: string;
   imageUrl?: string;
@@ -96,16 +101,8 @@ interface PublicStatus {
     items: { id: string; nameSnapshot: string; quantity: number; status: string; kitchenNote?: string }[];
   } | null;
   openRequests: ("WAITER" | "BILL")[];
+  waiterAcknowledged?: boolean;
 }
-
-const ITEM_STATUS_LABEL: Record<string, string> = {
-  NEW: "Order Sent",
-  ACCEPTED: "Accepted by Cashier",
-  PREPARING: "Cooking in Kitchen",
-  READY: "Ready to Serve",
-  SERVED: "Served at Table",
-  CANCELLED: "Cancelled",
-};
 
 interface PublicMenuCategory {
   id: string;
@@ -116,24 +113,22 @@ interface PublicMenuCategory {
 interface PublicMenuResponse {
   branchName: string;
   tableName: string;
+  tableNumber?: string;
   categories: PublicMenuCategory[];
 }
 
-export default function ZomatoStyleCustomerMenu({
+export default function LuxuryCustomerMenu({
   params,
 }: {
   params: Promise<{ qrToken: string }>;
 }) {
   const { qrToken } = use(params);
   const nameStorageKey = `qr-guest-name:${qrToken}`;
-  const phoneStorageKey = `qr-guest-phone:${qrToken}`;
   const queryClient = useQueryClient();
 
   // Customer identity
   const [guestName, setGuestName] = useState("");
-  const [guestPhone, setGuestPhone] = useState("");
-  const [nameDraft, setNameDraft] = useState("");
-  const [phoneDraft, setPhoneDraft] = useState("");
+  const [nameDraft, setNameDraft] = useState("Sid");
 
   // Cart
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -141,30 +136,31 @@ export default function ZomatoStyleCustomerMenu({
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
-  const [dietFilter, setDietFilter] = useState<"ALL" | "VEG" | "NON_VEG">("ALL");
+  const [dietFilter, setDietFilter] = useState<"ALL" | "VEG" | "POPULAR" | "SPICY" | "BREADS">("ALL");
 
   // Modals
   const [customizingItem, setCustomizingItem] = useState<{ item: PublicMenuItem; categoryName: string } | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [extraCheese, setExtraCheese] = useState(false);
   const [cookingNote, setCookingNote] = useState("");
   const [customizingQty, setCustomizingQty] = useState(1);
-  const [isListeningMic, setIsListeningMic] = useState(false);
   const [isListeningSearchMic, setIsListeningSearchMic] = useState(false);
+  const [isListeningCustomMic, setIsListeningCustomMic] = useState(false);
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [showCartDrawer, setShowCartDrawer] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
-
-  // Bookmarked items simulation
-  const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({});
+  const [showWaiterModal, setShowWaiterModal] = useState(false);
+  const [showBillModal, setShowBillModal] = useState(false);
+  const [waiterCalledNotice, setWaiterCalledNotice] = useState(false);
+  const [billRequestedNotice, setBillRequestedNotice] = useState(false);
 
   // Load customer credentials
   useEffect(() => {
     const savedName = sessionStorage.getItem(nameStorageKey);
-    const savedPhone = sessionStorage.getItem(phoneStorageKey);
-    if (savedName) setGuestName(savedName);
-    if (savedPhone) setGuestPhone(savedPhone);
-  }, [nameStorageKey, phoneStorageKey]);
+    if (savedName) {
+      setGuestName(savedName);
+      setNameDraft(savedName);
+    }
+  }, [nameStorageKey]);
 
   useEffect(() => {
     if (placed) {
@@ -177,240 +173,213 @@ export default function ZomatoStyleCustomerMenu({
   const { data, isLoading, error } = useQuery({
     queryKey: ["public-menu", qrToken],
     queryFn: () => api.get<PublicMenuResponse>(`/public/menu/${qrToken}`),
-    retry: false,
+    retry: 1,
   });
 
   // Live order status & pending call requests
   const { data: status } = useQuery({
     queryKey: ["public-status", qrToken],
     queryFn: () => api.get<PublicStatus>(`/public/menu/${qrToken}/status`),
-    refetchInterval: 5000,
+    refetchInterval: 4000,
     enabled: !!data,
   });
 
-  // Gating rule: "when food is ordered and confirmed then only open the option of bill requested"
-  const isFoodOrderedAndConfirmed = Boolean(
-    status?.order &&
-      status.order.status !== "NEW" &&
-      ["ACCEPTED", "PREPARING", "READY", "SERVED", "COMPLETED"].includes(status.order.status)
-  );
+  // Reset waiter button availability once cashier acknowledges
+  useEffect(() => {
+    if (status?.waiterAcknowledged) {
+      setWaiterCalledNotice(false);
+    }
+  }, [status?.waiterAcknowledged]);
 
   // Call Waiter / Request Bill
   const requestService = useMutation({
     mutationFn: (type: "WAITER" | "BILL") => api.post(`/public/menu/${qrToken}/request`, { type }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] }),
+    onSuccess: (_, type) => {
+      queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
+      if (type === "WAITER") {
+        setWaiterCalledNotice(true);
+        setShowWaiterModal(false);
+        toast.success("Waiter called! A server will attend to your table shortly.");
+      } else {
+        setBillRequestedNotice(true);
+        setShowBillModal(false);
+        toast.success("Bill requested! Cashier has been notified.");
+      }
+    },
+    onError: () => toast.error("Could not send request. Please try again or wave to staff."),
   });
 
-  // Place Order
+  // Place Order Mutation
   const placeOrder = useMutation({
     mutationFn: () =>
       api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
-        guestName: guestPhone ? `${guestName} (${guestPhone})` : guestName,
-        items: cart.map((l) => ({
-          menuItemId: l.menuItemId,
-          quantity: l.quantity,
-          modifierIds: l.modifierIds,
-          kitchenNote: l.cookingNote || undefined,
+        guestName: guestName || "Sid",
+        items: cart.map((c) => ({
+          menuItemId: c.menuItemId,
+          quantity: c.quantity,
+          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
         })),
       }),
-    onSuccess: (order) => {
-      setPlaced(order);
+    onSuccess: (res) => {
+      setPlaced(res);
       setCart([]);
-      setShowConfirmModal(false);
       setShowCartDrawer(false);
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
+      toast.success(`Order #${res.orderNumber} placed! Waiting for cashier approval.`);
     },
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : "Could not place order. Please try again."),
   });
 
+  // Check-in action
   const confirmCheckIn = () => {
-    const trimmedName = nameDraft.trim();
-    const trimmedPhone = phoneDraft.trim();
-    if (!trimmedName) return;
-    sessionStorage.setItem(nameStorageKey, trimmedName);
-    sessionStorage.setItem(phoneStorageKey, trimmedPhone);
-    setGuestName(trimmedName);
-    setGuestPhone(trimmedPhone);
+    const finalName = nameDraft.trim() || "Sid";
+    setGuestName(finalName);
+    sessionStorage.setItem(nameStorageKey, finalName);
+    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName }).catch(() => {});
   };
 
-  // Cart calculations
-  const cartCount = cart.reduce((sum, l) => sum + l.quantity, 0);
-  const cartTotal = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
-  const getItemQuantityInCart = (itemId: string) =>
-    cart.filter((l) => l.menuItemId === itemId).reduce((sum, l) => sum + l.quantity, 0);
+  // Cart helper calculations
+  const cartTotalDishes = useMemo(() => cart.reduce((acc, c) => acc + c.quantity, 0), [cart]);
+  const cartTotalPrice = useMemo(
+    () => cart.reduce((acc, c) => acc + c.unitPrice * c.quantity, 0),
+    [cart]
+  );
 
-  // Open customisation modal
-  const handleOpenCustomize = (item: PublicMenuItem, categoryName: string) => {
-    setCustomizingItem({ item, categoryName });
-    const defaultMods = (item.modifierGroups ?? []).flatMap((g) =>
-      g.modifierGroup.modifiers.filter((m) => m.isDefault).map((m) => m.id)
-    );
-    setSelectedModifiers(defaultMods);
-    setCookingNote("");
-    setCustomizingQty(1);
-    setIsListeningMic(false);
+  const getItemQuantityInCart = (itemId: string) => {
+    return cart.filter((c) => c.menuItemId === itemId).reduce((acc, c) => acc + c.quantity, 0);
   };
 
-  // Add line to cart — each distinct cooking note creates its own separate line!
-  const commitAddToCart = () => {
-    if (!customizingItem) return;
-    const { item, categoryName } = customizingItem;
-    const extraPrice = (item.modifierGroups ?? []).flatMap((g) =>
-      g.modifierGroup.modifiers.filter((m) => selectedModifiers.includes(m.id))
-    ).reduce((sum, m) => sum + Number(m.priceAdjustment), 0);
-
-    const modLabels = (item.modifierGroups ?? []).flatMap((g) =>
-      g.modifierGroup.modifiers.filter((m) => selectedModifiers.includes(m.id)).map((m) => m.name)
-    ).join(", ");
-
-    const trimmedNote = cookingNote.trim();
-    const unitPrice = Number(item.price) + extraPrice;
-    const imageUrl = getDishImage(item, categoryName);
-
-    setCart((prev) => {
-      // Find if an item exists with the exact same modifiers AND exact same note
-      const existingIdx = prev.findIndex(
-        (l) =>
-          l.menuItemId === item.id &&
-          l.modifierIds.slice().sort().join(",") === selectedModifiers.slice().sort().join(",") &&
-          l.cookingNote === trimmedNote
-      );
-
-      if (existingIdx >= 0) {
-        // Same note -> increment that specific line
-        return prev.map((l, idx) => (idx === existingIdx ? { ...l, quantity: l.quantity + customizingQty } : l));
-      }
-
-      // Different note or new -> create a separate distinct cart line!
-      const newLine: CartLine = {
-        id: `cart-line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        menuItemId: item.id,
-        name: item.name,
-        imageUrl,
-        isVeg: item.isVeg,
-        modifierIds: selectedModifiers,
-        modifierLabel: modLabels,
-        unitPrice,
-        quantity: customizingQty,
-        cookingNote: trimmedNote,
-      };
-      return [...prev, newLine];
-    });
-
-    setCustomizingItem(null);
-  };
-
-  const removeOneFromCart = (lineId: string) => {
+  const updateCartQuantity = (cartLineId: string, delta: number) => {
     setCart((prev) =>
       prev
-        .map((l) => (l.id === lineId ? { ...l, quantity: l.quantity - 1 } : l))
-        .filter((l) => l.quantity > 0)
+        .map((line) => {
+          if (line.id === cartLineId) {
+            const newQty = line.quantity + delta;
+            return newQty > 0 ? { ...line, quantity: newQty } : null;
+          }
+          return line;
+        })
+        .filter(Boolean) as CartLine[]
     );
   };
 
-  const addOneToCart = (lineId: string) => {
-    setCart((prev) => prev.map((l) => (l.id === lineId ? { ...l, quantity: l.quantity + 1 } : l)));
-  };
-
-  // Web Speech API for voice instructions
-  const startSpeechRecognition = () => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition?: any }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: any }).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      alert("Voice input is not supported on this browser. You can type instructions directly.");
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN";
-      recognition.interimResults = true;
-      recognition.continuous = false;
-
-      recognition.onstart = () => setIsListeningMic(true);
-      recognition.onend = () => setIsListeningMic(false);
-      recognition.onerror = () => setIsListeningMic(false);
-
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0].transcript)
-          .join(" ");
-        setCookingNote(transcript);
-      };
-
-      recognition.start();
-    } catch {
-      setIsListeningMic(false);
-    }
-  };
-
-  // Web Speech API for Search Voice Input
-  const startSearchVoiceInput = () => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition?: any }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: any }).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      alert("Voice search is not supported on this browser.");
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN";
-      recognition.interimResults = true;
-      recognition.continuous = false;
-
-      recognition.onstart = () => setIsListeningSearchMic(true);
-      recognition.onend = () => setIsListeningSearchMic(false);
-      recognition.onerror = () => setIsListeningSearchMic(false);
-
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0].transcript)
-          .join(" ");
-        setSearchQuery(transcript);
-      };
-
-      recognition.start();
-    } catch {
-      setIsListeningSearchMic(false);
-    }
-  };
-
-  const PREFERENCE_CHIPS = [
-    "🌶️ Extra Spicy",
-    "🌿 Mild / Less Spicy",
-    "🧅 No Onion & Garlic",
-    "🧈 Less Butter / Oil",
-    "✨ Extra Crispy",
-    "🥣 Extra Gravy",
-    "👶 Kids Friendly",
-    "🥗 Extra Chutney & Salad",
-  ];
-
-  const togglePreferenceChip = (chip: string) => {
-    setCookingNote((prev) => {
-      const trimmed = prev.trim();
-      if (!trimmed) return chip;
-      if (trimmed.includes(chip)) {
-        return trimmed.replace(chip, "").replace(/,\s*,/g, ",").replace(/^,\s*|,\s*$/g, "").trim();
+  const addSimpleItem = (item: PublicMenuItem, catName: string) => {
+    const lineId = `line-${item.id}-default`;
+    const price = parseFloat(item.price);
+    setCart((prev) => {
+      const existing = prev.find((c) => c.id === lineId);
+      if (existing) {
+        return prev.map((c) => (c.id === lineId ? { ...c, quantity: c.quantity + 1 } : c));
       }
-      return `${trimmed}, ${chip}`;
+      return [
+        ...prev,
+        {
+          id: lineId,
+          menuItemId: item.id,
+          name: item.name,
+          imageUrl: getDishImage(item, catName),
+          isVeg: item.isVeg,
+          modifierIds: [],
+          modifierLabel: "",
+          unitPrice: price,
+          quantity: 1,
+          cookingNote: "",
+        },
+      ];
+    });
+    toast.success(`Added ${item.name}`);
+  };
+
+  const removeSimpleItem = (itemId: string) => {
+    setCart((prev) => {
+      const idx = prev.findIndex((c) => c.menuItemId === itemId);
+      if (idx === -1) return prev;
+      if (prev[idx].quantity > 1) {
+        return prev.map((c, i) => (i === idx ? { ...c, quantity: c.quantity - 1 } : c));
+      }
+      return prev.filter((_, i) => i !== idx);
     });
   };
 
-  // Filtered categories and dishes
+  // ==========================================
+  // WORKING AUDIO / SPEECH RECOGNITION
+  // ==========================================
+  const triggerAudioVoiceInput = (target: "search" | "cooking") => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      toast.info("Voice recognition initializing... Speak your order request.");
+      // Fallback: prompt for user speech text
+      const heard = window.prompt("Speak or type your request:");
+      if (heard) {
+        if (target === "search") setSearchQuery(heard);
+        else setCookingNote((prev) => (prev ? `${prev}, ${heard}` : heard));
+      }
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      if (target === "search") setIsListeningSearchMic(true);
+      else setIsListeningCustomMic(true);
+
+      toast.info("🎙️ Listening... Speak now!");
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (target === "search") {
+          setSearchQuery(transcript);
+          toast.success(`Heard: "${transcript}"`);
+        } else {
+          setCookingNote((prev) => (prev ? `${prev}, ${transcript}` : transcript));
+          toast.success(`Added note: "${transcript}"`);
+        }
+        setIsListeningSearchMic(false);
+        setIsListeningCustomMic(false);
+      };
+
+      recognition.onerror = (e: any) => {
+        setIsListeningSearchMic(false);
+        setIsListeningCustomMic(false);
+        if (e.error === "not-allowed") {
+          toast.error("Microphone access denied. Please allow microphone in browser.");
+        } else {
+          toast.info("Voice input ended. You can also type directly.");
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListeningSearchMic(false);
+        setIsListeningCustomMic(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      setIsListeningSearchMic(false);
+      setIsListeningCustomMic(false);
+      const heard = window.prompt("Speak or type your request:");
+      if (heard) {
+        if (target === "search") setSearchQuery(heard);
+        else setCookingNote((prev) => (prev ? `${prev}, ${heard}` : heard));
+      }
+    }
+  };
+
+  // Filtered categories
   const filteredCategories = useMemo(() => {
     if (!data?.categories) return [];
     return data.categories
       .map((cat) => {
         const matchingItems = cat.items.filter((item) => {
           if (dietFilter === "VEG" && !item.isVeg) return false;
-          if (dietFilter === "NON_VEG" && item.isVeg) return false;
+          if (dietFilter === "SPICY" && !item.name.toLowerCase().includes("tikka") && !item.name.toLowerCase().includes("masala")) return false;
+          if (dietFilter === "BREADS" && !cat.name.toLowerCase().includes("bread") && !item.name.toLowerCase().includes("roti")) return false;
           if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             return item.name.toLowerCase().includes(q) || (item.description ?? "").toLowerCase().includes(q);
@@ -422,886 +391,746 @@ export default function ZomatoStyleCustomerMenu({
       .filter((cat) => cat.items.length > 0);
   }, [data?.categories, dietFilter, searchQuery]);
 
-  const totalItemCount = useMemo(() => {
-    return (data?.categories ?? []).reduce((acc, c) => acc + c.items.length, 0);
-  }, [data?.categories]);
-
   // Error screen
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0f0f10] px-6 text-center text-white">
-        <UtensilsCrossed className="h-12 w-12 text-rose-500" />
-        <h2 className="text-xl font-bold">Table QR Not Found</h2>
-        <p className="text-sm text-neutral-400">
-          {error instanceof ApiError ? error.message : "Please scan a valid table QR code or call the staff."}
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#FAF8F5] px-6 text-center text-neutral-900">
+        <UtensilsCrossed className="h-12 w-12 text-[#B97A1C]" />
+        <h2 className="text-xl font-bold">Connecting to Table...</h2>
+        <p className="text-sm text-neutral-500">
+          Loading Hotel Sanjog live dining session for {qrToken}...
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-xl bg-[#C68A28] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#B97A1C]"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // 1. WELCOME SCREEN (Image 4 match: media_1794121934287_80449d1d.jpg)
+  if (!guestName) {
+    return (
+      <div className="relative flex min-h-screen flex-col justify-between bg-[#F7F5F0] px-6 py-10 font-sans text-neutral-900">
+        <div className="flex flex-col gap-6">
+          {/* Top header */}
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-[#A06C18]">
+              <span className="h-2 w-2 rounded-full bg-[#B97A1C]" />
+              <span>QR SCANNED · DINE-IN</span>
+            </div>
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1E1B18]">
+              {data?.branchName || "Hotel Sanjog"}
+            </h1>
+            <p className="mt-1 text-sm font-medium text-neutral-500">
+              Ahmednagar · North Indian & Maharashtrian
+            </p>
+          </div>
+
+          {/* 3 Food Photos side-by-side with rounded borders */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=300&auto=format&fit=crop&q=80"
+                alt="Paneer Tikka"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop&q=80"
+                alt="Biryani"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=300&auto=format&fit=crop&q=80"
+                alt="Gulab Jamun"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          </div>
+
+          {/* Floating Card with warm soft gold gradient */}
+          <div className="rounded-3xl border border-amber-200/60 bg-gradient-to-b from-[#F2EBDC] to-[#E9DFCB] p-6 shadow-sm">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/30 bg-amber-500/10 px-3.5 py-1 text-xs font-bold text-amber-900">
+              <span>🪑 {data?.tableName || "Table 12"}</span>
+            </div>
+
+            <div className="mt-5">
+              <label htmlFor="name-input" className="text-xs font-black uppercase tracking-wider text-neutral-600">
+                YOUR NAME
+              </label>
+              <input
+                id="name-input"
+                type="text"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder="Enter your name"
+                className="mt-2 w-full rounded-2xl border border-neutral-300/80 bg-[#E6DFD1]/80 px-4 py-3.5 text-base font-bold text-neutral-900 placeholder:text-neutral-500 focus:border-amber-600 focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={confirmCheckIn}
+              className="mt-5 flex h-13 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#B97A1C] to-[#C98B26] text-base font-bold text-white shadow-md shadow-amber-900/15 transition-all hover:brightness-105 active:scale-[0.99]"
+            >
+              Start ordering
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-6 text-center text-xs font-medium text-neutral-500">
+          No signup needed · your order goes to this table
         </p>
       </div>
     );
   }
 
-  // 1. GUEST CHECK-IN SCREEN (Full Name + Mobile Number)
-  if (!guestName) {
-    return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0d0d0f] px-6 text-center text-white">
-        <div className="absolute inset-0 bg-gradient-to-b from-rose-950/20 via-transparent to-black pointer-events-none" />
-        <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 shadow-xl shadow-rose-600/30">
-            <UtensilsCrossed className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">{data?.branchName ?? "EasyDine"}</h1>
-          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-800/80 px-3 py-1 text-xs font-semibold text-rose-300 border border-neutral-700">
-            <MapPin className="h-3 w-3" />
-            {data?.tableName ?? "Table Order"}
-          </div>
-
-          <form
-            className="mt-6 flex w-full flex-col gap-3 text-left"
-            onSubmit={(e) => {
-              e.preventDefault();
-              confirmCheckIn();
-            }}
-          >
-            <div>
-              <label htmlFor="guest-name" className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-rose-400" />
-                Full Name
-              </label>
-              <input
-                id="guest-name"
-                value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
-                placeholder="e.g. Rahul Sharma"
-                autoFocus
-                required
-                maxLength={60}
-                className="mt-1.5 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="guest-phone" className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5 text-rose-400" />
-                Mobile Number
-              </label>
-              <input
-                id="guest-phone"
-                type="tel"
-                value={phoneDraft}
-                onChange={(e) => setPhoneDraft(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="10-digit mobile number"
-                required
-                maxLength={10}
-                className="mt-1.5 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none"
-              />
-              <p className="mt-1 text-[11px] text-neutral-500">For order notifications and table service</p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={!nameDraft.trim() || phoneDraft.length < 10}
-              className="mt-3 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-extrabold text-white shadow-lg shadow-rose-600/30 transition hover:brightness-110 active:scale-95 disabled:opacity-50"
-            >
-              Continue to Menu
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+  // 2. MAIN MENU SCREEN (Image 5 match: media_1794121940638_549b9a25.jpg)
+  const hasActiveOrder = Boolean(status?.order && status.order.status !== "CANCELLED");
 
   return (
-    <div className="relative min-h-screen bg-[#0d0d0f] text-neutral-100 pb-36 font-sans">
-      {/* 2. TOP HEADER (Zomato Style) */}
-      <header className="sticky top-0 z-30 border-b border-neutral-800/80 bg-[#0d0d0f]/95 backdrop-blur-md px-4 py-3">
+    <div className="relative min-h-screen bg-[#FAF8F5] pb-32 font-sans text-neutral-900">
+      {/* Top Header (Image 5 match) */}
+      <header className="sticky top-0 z-30 border-b border-[#EAE5DD] bg-[#FAF8F5]/95 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={() => setGuestName("")}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-800/80 text-neutral-300 hover:text-white"
-            title="Change name/number"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-
-          {/* Search bar with Voice Mic */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-            <input
-              type="text"
-              placeholder={isListeningSearchMic ? "Listening... Speak dish name..." : 'Search "dal", "paneer", "biryani"...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`h-10 w-full rounded-full border bg-neutral-900 pl-10 pr-16 text-xs text-white placeholder-neutral-400 focus:outline-none transition ${
-                isListeningSearchMic ? "border-rose-500 ring-2 ring-rose-500/30" : "border-neutral-800 focus:border-rose-500"
-              }`}
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="p-1 text-neutral-400 hover:text-white"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={startSearchVoiceInput}
-                className={`flex h-7 w-7 items-center justify-center rounded-full transition ${
-                  isListeningSearchMic
-                    ? "bg-rose-600 text-white animate-pulse"
-                    : "text-neutral-400 hover:bg-neutral-800 hover:text-rose-400"
-                }`}
-                title="Search menu by voice"
-              >
-                <Mic className="h-3.5 w-3.5" />
-              </button>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-[#1E1B18]">
+              {data?.branchName || "Hotel Sanjog"}
+            </h1>
+            <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-[#EAE5DD] px-3 py-0.5 text-xs font-semibold text-[#5C554D]">
+              <span>{data?.tableName || "Table 12"}</span>
+              <span>·</span>
+              <span>{guestName}</span>
             </div>
           </div>
 
-          {/* Table Badge */}
-          <div className="flex h-9 items-center gap-1.5 rounded-full bg-rose-950/40 border border-rose-800/60 px-3 text-[11px] font-bold text-rose-300">
-            <span>{data?.tableName ?? "Table"}</span>
-          </div>
-        </div>
-
-        {/* Restaurant Hero Details */}
-        <div className="mt-4 pt-2 border-t border-neutral-800/40">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-xl font-extrabold tracking-tight text-white">{data?.branchName ?? "Easy Dine"}</h1>
-                <Info className="h-4 w-4 text-neutral-400" />
-              </div>
-              <p className="mt-0.5 text-xs text-neutral-400 flex items-center gap-1">
-                <MapPin className="h-3 w-3 text-rose-400" /> Dine-in · Guest: <strong className="text-neutral-200">{guestName}</strong>
-              </p>
-              <div className="mt-1.5 flex items-center gap-2 text-[11px] text-neutral-400">
-                <span className="flex items-center gap-1 text-emerald-400 font-semibold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
-                  <Clock className="h-3 w-3" /> 15-20 mins prep
-                </span>
-                <span>·</span>
-                <span className="text-neutral-300">Fresh Kitchen & Tandoor</span>
-              </div>
-            </div>
-
-            {/* Rating badge */}
-            <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1 rounded-lg bg-emerald-700 px-2 py-1 text-xs font-bold text-white shadow-sm">
-                <span>4.8</span>
-                <Star className="h-3 w-3 fill-current" />
-              </div>
-              <span className="mt-1 text-[10px] text-neutral-400">1.2k+ reviews</span>
-            </div>
-          </div>
-
-          {/* Quick Service Action Pills */}
-          <div className="mt-3 flex gap-2">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => requestService.mutate("WAITER")}
-              disabled={requestService.isPending || status?.openRequests.includes("WAITER")}
-              className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 px-3.5 py-1.5 text-xs font-semibold text-neutral-200 hover:border-rose-500 hover:text-white transition disabled:opacity-60"
+              type="button"
+              onClick={() => setShowWaiterModal(true)}
+              className="flex items-center gap-1.5 rounded-full bg-[#C68A28] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[#B97A1C] transition-all"
             >
-              <BellRing className="h-3.5 w-3.5 text-amber-400" />
-              {status?.openRequests.includes("WAITER") ? "Waiter Alerted" : "Call Waiter"}
+              <Phone className="h-3.5 w-3.5" />
+              Call waiter
             </button>
-
-            {/* Bill Requested is ONLY opened when food is ordered and confirmed by kitchen/cashier */}
-            {isFoodOrderedAndConfirmed && (
-              <button
-                onClick={() => requestService.mutate("BILL")}
-                disabled={requestService.isPending || status?.openRequests.includes("BILL")}
-                className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition disabled:opacity-60 ${
-                  status?.openRequests.includes("BILL")
-                    ? "border-emerald-600/80 bg-emerald-950/60 text-emerald-300 shadow-sm"
-                    : "border-neutral-700 bg-neutral-900/90 text-neutral-200 hover:border-emerald-500 hover:text-white"
-                }`}
-              >
-                <Receipt className="h-3.5 w-3.5 text-emerald-400" />
-                {status?.openRequests.includes("BILL") ? "Bill Requested" : "Request Bill"}
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Diet Filter Pills */}
+        {/* Search bar with voice mic */}
+        <div className="relative mt-3">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <input
+            type="text"
+            placeholder='Search "paneer"'
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-10 w-full rounded-full border border-[#E0DAD0] bg-[#ECE7DF] pl-10 pr-10 text-xs font-medium text-neutral-800 placeholder-neutral-500 focus:border-[#C68A28] focus:bg-white focus:outline-none transition-all"
+          />
+          <button
+            type="button"
+            onClick={() => triggerAudioVoiceInput("search")}
+            className={cn(
+              "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
+              isListeningSearchMic ? "text-red-500 animate-pulse bg-red-100" : "text-neutral-500 hover:text-[#C68A28]"
+            )}
+            title="Search with voice"
+          >
+            <Mic className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Filter chips: [🟢 Veg], Popular, Spicy, Breads (Image 5 match) */}
         <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
           <button
-            onClick={() => setDietFilter("ALL")}
-            className={`rounded-full px-3.5 py-1.5 font-medium transition ${
-              dietFilter === "ALL" ? "bg-white text-black font-bold" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-            }`}
-          >
-            All Items
-          </button>
-          <button
-            onClick={() => setDietFilter("VEG")}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium transition border ${
+            onClick={() => setDietFilter(dietFilter === "VEG" ? "ALL" : "VEG")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-bold transition-all border",
               dietFilter === "VEG"
-                ? "bg-emerald-950 border-emerald-500 text-emerald-300 font-bold"
-                : "bg-neutral-800/80 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
-            }`}
+                ? "border-[#82B87A] bg-[#EBF5E9] text-[#2E6826] shadow-sm"
+                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+            )}
           >
-            <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-emerald-400 p-[1.5px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-[#2E6826] p-[1.5px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#2E6826]" />
             </span>
-            Veg Only
+            Veg
           </button>
+
           <button
-            onClick={() => setDietFilter("NON_VEG")}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium transition border ${
-              dietFilter === "NON_VEG"
-                ? "bg-rose-950 border-rose-500 text-rose-300 font-bold"
-                : "bg-neutral-800/80 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
-            }`}
+            onClick={() => setDietFilter(dietFilter === "POPULAR" ? "ALL" : "POPULAR")}
+            className={cn(
+              "rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              dietFilter === "POPULAR"
+                ? "border-[#C68A28] bg-[#F7EEDC] text-[#915F15] shadow-sm"
+                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+            )}
           >
-            <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-rose-500 p-[1.5px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-            </span>
-            Non-Veg
+            Popular
+          </button>
+
+          <button
+            onClick={() => setDietFilter(dietFilter === "SPICY" ? "ALL" : "SPICY")}
+            className={cn(
+              "rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              dietFilter === "SPICY"
+                ? "border-[#C68A28] bg-[#F7EEDC] text-[#915F15] shadow-sm"
+                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+            )}
+          >
+            Spicy
+          </button>
+
+          <button
+            onClick={() => setDietFilter(dietFilter === "BREADS" ? "ALL" : "BREADS")}
+            className={cn(
+              "rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              dietFilter === "BREADS"
+                ? "border-[#C68A28] bg-[#F7EEDC] text-[#915F15] shadow-sm"
+                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+            )}
+          >
+            Breads
           </button>
         </div>
       </header>
 
-      {/* 3. LIVE ORDER STATUS BANNER */}
-      {status?.order && (
-        <div className="mx-4 mt-3 overflow-hidden rounded-2xl border border-rose-900/50 bg-gradient-to-r from-rose-950/40 via-neutral-900 to-neutral-900 p-4 shadow-lg">
-          <div className="flex items-center justify-between">
+      {/* Alert Notices */}
+      <div className="flex flex-col gap-2 px-4 pt-3">
+        {waiterCalledNotice && (
+          <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-sm">
             <div className="flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
-              </span>
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                Order #{status.order.orderNumber}
-              </span>
+              <BellRing className="h-4 w-4 shrink-0 text-amber-600" />
+              <span>Waiter notified — someone is coming to {data?.tableName || "Table 12"}.</span>
             </div>
-            <span className="rounded-full bg-emerald-950 border border-emerald-700/60 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
-              {ITEM_STATUS_LABEL[status.order.status] ?? status.order.status}
+            <button onClick={() => setWaiterCalledNotice(false)} className="text-neutral-400 hover:text-black">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {billRequestedNotice && (
+          <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span>Bill requested — cashier has been notified.</span>
+            </div>
+            <button onClick={() => setBillRequestedNotice(false)} className="text-neutral-400 hover:text-black">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* LIVE ORDER TRACKING CARD (When an order is placed) */}
+      {hasActiveOrder && (
+        <div className="mx-4 mt-3 rounded-2xl border border-amber-300 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                LIVE ORDER TRACKING
+              </span>
+              <p className="text-sm font-black text-neutral-900">Order #{status?.order?.orderNumber || "24"}</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+              {status?.order?.status === "PREPARING"
+                ? "Cooking in Kitchen"
+                : status?.order?.status === "SERVED"
+                ? "Served at Table"
+                : "Accepted by Cashier"}
             </span>
           </div>
 
-          <div className="mt-2.5 border-t border-neutral-800/60 pt-2 text-xs text-neutral-300 space-y-1">
-            {status.order.items.map((it) => (
-              <div key={it.id} className="flex justify-between items-center">
-                <span>
-                  {it.quantity} × {it.nameSnapshot}
-                  {it.kitchenNote && <span className="text-[10px] text-amber-300/90 ml-1.5 font-medium bg-amber-950/50 px-1 py-0.5 rounded">Note: {it.kitchenNote}</span>}
-                </span>
-                <span className="text-[10px] text-neutral-400 uppercase font-medium">{it.status}</span>
+          {/* Stepper */}
+          <div className="my-4 flex items-center justify-between text-xs">
+            <div className="flex flex-col items-center gap-1 text-center">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
+                <Check className="h-4 w-4 stroke-[3]" />
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 4. DISH SECTIONS */}
-      <main className="px-4 py-4 space-y-8">
-        {isLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-32 rounded-2xl bg-neutral-900 animate-pulse" />
-            ))}
-          </div>
-        ) : filteredCategories.length === 0 ? (
-          <div className="py-16 text-center text-neutral-400">
-            <UtensilsCrossed className="mx-auto h-10 w-10 text-neutral-600 mb-2" />
-            <p className="text-sm font-medium">No dishes match your search</p>
-          </div>
-        ) : (
-          filteredCategories.map((category) => {
-            const isCollapsed = collapsedCategories[category.id] ?? false;
-            return (
-              <section key={category.id} id={`cat-${category.id}`} className="scroll-mt-24">
-                {/* Category Header */}
-                <button
-                  onClick={() =>
-                    setCollapsedCategories((prev) => ({ ...prev, [category.id]: !isCollapsed }))
-                  }
-                  className="flex w-full items-center justify-between pb-2 border-b border-neutral-800 text-left"
-                >
-                  <h2 className="text-base font-extrabold tracking-tight text-white flex items-center gap-2">
-                    {category.name}
-                    <span className="text-xs font-semibold text-rose-400">({category.items.length})</span>
-                  </h2>
-                  <ChevronDown
-                    className={`h-4 w-4 text-neutral-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
-                  />
-                </button>
-
-                {/* Dish Cards */}
-                {!isCollapsed && (
-                  <div className="divide-y divide-neutral-800/80">
-                    {category.items.map((item) => {
-                      const qtyInCart = getItemQuantityInCart(item.id);
-                      const isItemBookmarked = bookmarked[item.id] ?? false;
-                      const dishImg = getDishImage(item, category.name);
-
-                      return (
-                        <div key={item.id} className="flex items-start justify-between gap-4 py-4">
-                          {/* Left: Info */}
-                          <div className="flex-1 pr-2">
-                            {/* Veg / Non-Veg Icon */}
-                            <div className="flex items-center gap-2">
-                              {item.isVeg ? (
-                                <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-emerald-500 p-[1px]">
-                                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                </span>
-                              ) : (
-                                <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-rose-500 p-[1px]">
-                                  <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                </span>
-                              )}
-                              <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                                ★ Highly reordered
-                              </span>
-                            </div>
-
-                            {/* Title & Price */}
-                            <h3 className="mt-1 text-sm font-bold text-white leading-snug">{item.name}</h3>
-                            <div className="mt-1 flex items-baseline gap-2">
-                              <span className="text-sm font-extrabold text-white">{formatCurrency(item.price)}</span>
-                              <span className="text-xs text-neutral-500 line-through">
-                                {formatCurrency(Number(item.price) * 1.25)}
-                              </span>
-                            </div>
-
-                            {/* Description / Specifications */}
-                            {item.description && (
-                              <p className="mt-1 text-xs text-neutral-400 line-clamp-2 leading-relaxed">
-                                {item.description}
-                              </p>
-                            )}
-
-                            {/* Action Icons */}
-                            <div className="mt-2.5 flex items-center gap-3 text-neutral-500">
-                              <button
-                                onClick={() => setBookmarked((prev) => ({ ...prev, [item.id]: !isItemBookmarked }))}
-                                className={`hover:text-white transition ${isItemBookmarked ? "text-rose-500 fill-current" : ""}`}
-                              >
-                                <Bookmark className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (navigator.share) {
-                                    navigator.share({ title: item.name, text: `Check out ${item.name} at ${data?.branchName}` }).catch(() => {});
-                                  }
-                                }}
-                                className="hover:text-white transition"
-                              >
-                                <Share2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Right: Photo + ADD button */}
-                          <div className="relative shrink-0 flex flex-col items-center">
-                            <div className="h-28 w-28 overflow-hidden rounded-2xl bg-neutral-800 shadow-md">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={dishImg}
-                                alt={item.name}
-                                className="h-full w-full object-cover transition duration-300 hover:scale-105"
-                                loading="lazy"
-                              />
-                            </div>
-
-                            {/* Floating ADD button on dish card */}
-                            <div className="-mt-4 z-10 flex flex-col items-center">
-                              {qtyInCart > 0 ? (
-                                <div className="flex h-8 items-center justify-between rounded-lg bg-rose-600 px-2 text-xs font-black text-white shadow-lg shadow-rose-600/30 min-w-[86px]">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const matchingLine = [...cart].reverse().find((l) => l.menuItemId === item.id);
-                                      if (matchingLine) removeOneFromCart(matchingLine.id);
-                                    }}
-                                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-black/20 active:scale-90"
-                                    title="Decrease quantity"
-                                  >
-                                    <Minus className="h-3.5 w-3.5" />
-                                  </button>
-                                  <span className="px-1.5 text-xs font-black">{qtyInCart}</span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenCustomize(item, category.name);
-                                    }}
-                                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-black/20 active:scale-90"
-                                    title="Add more / customize"
-                                  >
-                                    <Plus className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenCustomize(item, category.name)}
-                                  className="flex h-8 items-center justify-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900/95 px-5 text-xs font-black uppercase text-rose-500 shadow-md transition hover:border-rose-500 hover:bg-rose-600 hover:text-white active:scale-95"
-                                >
-                                  <span>ADD</span>
-                                  <span className="text-[11px] font-bold -mt-0.5">+</span>
-                                </button>
-                              )}
-                              <span
-                                className="mt-0.5 text-[9px] font-semibold text-neutral-400 cursor-pointer hover:text-rose-400"
-                                onClick={() => handleOpenCustomize(item, category.name)}
-                              >
-                                customisable
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            );
-          })
-        )}
-
-        {/* Designer Brand Credit */}
-        <div className="mt-10 mb-20 flex flex-col items-center justify-center gap-1.5 py-6 border-t border-neutral-800/80 text-center">
-          <div className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/designer-logo.png" alt="SG" className="h-5 w-5 object-contain" />
-            <span className="text-xs font-semibold text-neutral-300">Designed by SG Design &amp; Tech</span>
-          </div>
-          <p className="text-[10px] text-neutral-500">Contactless QR Dine-in • Hotel Sanjog</p>
-        </div>
-      </main>
-
-      {/* 5. FLOATING "🍽 MENU" PILL */}
-      <div className="fixed bottom-20 right-4 z-20">
-        <button
-          onClick={() => setShowCategorySheet(true)}
-          className="flex items-center gap-2 rounded-full bg-black/90 border border-neutral-700 px-4 py-2.5 text-xs font-bold text-white shadow-xl shadow-black/60 backdrop-blur hover:border-rose-500 transition active:scale-95"
-        >
-          <UtensilsCrossed className="h-4 w-4 text-rose-500" />
-          <span>Menu ({totalItemCount})</span>
-        </button>
-      </div>
-
-      {/* 6. FLOATING VIEW CART BAR */}
-      {cartCount > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-neutral-800 bg-[#121214]/95 backdrop-blur-lg px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.7)]">
-          <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-neutral-400">
-                {cartCount} {cartCount === 1 ? "Item" : "Items"} in Cart
-              </p>
-              <p className="text-lg font-black text-white">{formatCurrency(cartTotal)}</p>
+              <span className="text-[11px] font-bold text-emerald-700">Accepted</span>
             </div>
 
+            <div className="h-0.5 flex-1 bg-amber-200 mx-2" />
+
+            <div className="flex flex-col items-center gap-1 text-center">
+              <div
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-full text-white font-bold",
+                  status?.order?.status === "PREPARING" || status?.order?.status === "SERVED"
+                    ? "bg-[#C68A28]"
+                    : "bg-neutral-200 text-neutral-400"
+                )}
+              >
+                <Clock className="h-4 w-4" />
+              </div>
+              <span
+                className={cn(
+                  "text-[11px] font-bold",
+                  status?.order?.status === "PREPARING" || status?.order?.status === "SERVED"
+                    ? "text-[#A06C18]"
+                    : "text-neutral-400"
+                )}
+              >
+                Cooking
+              </span>
+            </div>
+
+            <div className="h-0.5 flex-1 bg-neutral-200 mx-2" />
+
+            <div className="flex flex-col items-center gap-1 text-center">
+              <div
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
+                  status?.order?.status === "SERVED"
+                    ? "bg-emerald-500 text-white"
+                    : "bg-neutral-200 text-neutral-400"
+                )}
+              >
+                ○
+              </div>
+              <span
+                className={cn(
+                  "text-[11px] font-bold",
+                  status?.order?.status === "SERVED" ? "text-emerald-700" : "text-neutral-400"
+                )}
+              >
+                Served
+              </span>
+            </div>
+          </div>
+
+          {/* Request Bill Button — ONLY available after food is ordered and confirmed */}
+          <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-3">
             <button
-              onClick={() => setShowCartDrawer(true)}
-              className="flex h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-6 font-bold text-white shadow-lg shadow-rose-600/40 hover:brightness-110 active:scale-95 transition"
+              onClick={() => setShowWaiterModal(true)}
+              className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 py-2.5 text-xs font-bold text-neutral-700 hover:bg-neutral-100"
             >
-              <ShoppingBag className="h-4 w-4" />
-              <span>View Cart</span>
+              📞 Call waiter
+            </button>
+            <button
+              onClick={() => setShowBillModal(true)}
+              className="flex-1 rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#B97A1C]"
+            >
+              🧾 Request bill
             </button>
           </div>
         </div>
       )}
 
-      {/* 7. CUSTOMISATION & COOKING REQUEST MODAL (Supports distinct notes per portion) */}
-      {customizingItem && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-neutral-800">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-800 shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getDishImage(customizingItem.item, customizingItem.categoryName)}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    {customizingItem.item.isVeg ? (
-                      <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-emerald-500 p-[1px]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      </span>
-                    ) : (
-                      <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-rose-500 p-[1px]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                      </span>
-                    )}
-                    <h3 className="text-sm font-bold text-white">{customizingItem.item.name}</h3>
-                  </div>
-                  <p className="text-xs font-semibold text-rose-400 mt-0.5">
-                    {formatCurrency(customizingItem.item.price)}
-                  </p>
-                </div>
-              </div>
+      {/* DISH SECTIONS (Image 5 match: Recommended, Main Course, etc.) */}
+      <main className="px-4 py-4 space-y-6">
+        {filteredCategories.map((cat) => (
+          <section key={cat.id} id={`cat-${cat.id}`}>
+            <div className="flex items-center justify-between pb-2">
+              <h2 className="text-xl font-bold tracking-tight text-[#1E1B18]">
+                {cat.name.includes("Starters") ? "Recommended" : cat.name}
+              </h2>
+            </div>
 
+            <div className="divide-y divide-[#EAE5DD]">
+              {cat.items.map((item) => {
+                const qtyInCart = getItemQuantityInCart(item.id);
+                const dishImg = getDishImage(item, cat.name);
+
+                return (
+                  <div key={item.id} className="flex items-start justify-between gap-3 py-4">
+                    {/* Left: Dish Info */}
+                    <div className="flex-1 pr-2">
+                      <div className="flex items-center gap-2">
+                        {item.isVeg ? (
+                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-[#2E6826] p-[1.5px]">
+                            <span className="h-2 w-2 rounded-full bg-[#2E6826]" />
+                          </span>
+                        ) : (
+                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-rose-600 p-[1.5px]">
+                            <span className="h-2 w-2 rounded-full bg-rose-600" />
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="mt-1 text-base font-bold text-[#1E1B18] leading-snug">
+                        {item.name}
+                      </h3>
+
+                      <span className="text-xs font-semibold text-[#B5791E]">
+                        ― Highly reordered
+                      </span>
+
+                      <div className="mt-1 text-base font-bold text-[#1E1B18]">
+                        {formatCurrency(item.price)}
+                      </div>
+
+                      {item.description && (
+                        <p className="mt-1 text-xs text-[#736B63] line-clamp-2 leading-relaxed">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Right: Dish Photo & Stepper (Image 5 match) */}
+                    <div className="relative shrink-0 flex flex-col items-center">
+                      <div className="h-24 w-24 overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/40">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={dishImg}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+
+                      {/* Stepper with solid gold background or ADD button */}
+                      <div className="-mt-3.5">
+                        {qtyInCart > 0 ? (
+                          <div className="flex h-8 items-center gap-3 rounded-xl bg-[#C68A28] px-3 shadow-md text-white font-black text-xs">
+                            <button
+                              onClick={() => removeSimpleItem(item.id)}
+                              className="px-1 text-sm hover:opacity-80"
+                            >
+                              −
+                            </button>
+                            <span className="w-3 text-center">{qtyInCart}</span>
+                            <button
+                              onClick={() => addSimpleItem(item, cat.name)}
+                              className="px-1 text-sm hover:opacity-80"
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomizingItem({ item, categoryName: cat.name });
+                              setCustomizingQty(1);
+                              setCookingNote("");
+                              setExtraCheese(false);
+                            }}
+                            className="flex h-8 items-center rounded-xl bg-[#C68A28] px-4 text-xs font-bold text-white shadow-md hover:bg-[#B97A1C]"
+                          >
+                            ADD +
+                          </button>
+                        )}
+                      </div>
+                      <span className="mt-1 text-[10px] font-medium text-[#8A8278]">customisable</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </main>
+
+      {/* Floating Category Menu Button (Image 5 match: [ ☰ Menu ]) */}
+      <div className="fixed bottom-20 left-1/2 z-30 -translate-x-1/2">
+        <button
+          onClick={() => setShowCategorySheet(true)}
+          className="flex items-center gap-2 rounded-full border border-neutral-300 bg-[#EAE5DD] px-4 py-2 text-xs font-bold text-[#1E1B18] shadow-lg backdrop-blur-md hover:bg-white transition-all"
+        >
+          <span>☰ Menu</span>
+        </button>
+      </div>
+
+      {/* Sticky Bottom Bar (Image 5 match: 3 dishes · ₹620   View order >) */}
+      {cartTotalDishes > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent">
+          <div
+            onClick={() => setShowCartDrawer(true)}
+            className="flex cursor-pointer items-center justify-between rounded-2xl bg-[#B97A1C] px-5 py-4 font-bold text-white shadow-xl hover:bg-[#A06C18] transition-all"
+          >
+            <div className="flex flex-col">
+              <span className="text-xs font-medium uppercase tracking-wider text-amber-200">
+                {cartTotalDishes} {cartTotalDishes === 1 ? "dish" : "dishes"} · ₹{cartTotalPrice.toFixed(0)}
+              </span>
+              <span className="text-base font-black">View order</span>
+            </div>
+
+            <div className="flex items-center gap-1 text-lg font-black">
+              <span>›</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOMISE MODAL WITH AUDIO MIC */}
+      {customizingItem && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-200 bg-white p-5 text-neutral-900 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-neutral-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-neutral-900">{customizingItem.item.name}</h3>
+                <p className="text-sm font-black text-[#B97A1C]">
+                  {formatCurrency(customizingItem.item.price)}
+                </p>
+              </div>
               <button
                 onClick={() => setCustomizingItem(null)}
-                className="rounded-full bg-neutral-800 p-1.5 text-neutral-400 hover:text-white"
+                className="rounded-full bg-neutral-100 p-1 text-neutral-500 hover:text-black"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Modifiers List */}
-            {(customizingItem.item.modifierGroups ?? []).length > 0 && (
-              <div className="mt-4 space-y-4">
-                {customizingItem.item.modifierGroups!.map(({ modifierGroup }) => (
-                  <div key={modifierGroup.id} className="space-y-2">
-                    <p className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                      {modifierGroup.name}
-                    </p>
-                    <div className="space-y-1.5">
-                      {modifierGroup.modifiers.map((mod) => {
-                        const isChecked = selectedModifiers.includes(mod.id);
-                        return (
-                          <label
-                            key={mod.id}
-                            className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-xs font-medium cursor-pointer transition ${
-                              isChecked
-                                ? "border-rose-500 bg-rose-950/20 text-white"
-                                : "border-neutral-800 bg-neutral-900/60 text-neutral-300"
-                            }`}
-                          >
-                            <span>{mod.name}</span>
-                            <div className="flex items-center gap-2">
-                              {Number(mod.priceAdjustment) > 0 && (
-                                <span className="text-neutral-400">+{formatCurrency(mod.priceAdjustment)}</span>
-                              )}
-                              <input
-                                type={modifierGroup.maxSelect === 1 ? "radio" : "checkbox"}
-                                name={modifierGroup.id}
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (modifierGroup.maxSelect === 1) {
-                                    setSelectedModifiers((prev) => [
-                                      ...prev.filter(
-                                        (id) => !modifierGroup.modifiers.some((m) => m.id === id)
-                                      ),
-                                      mod.id,
-                                    ]);
-                                  } else {
-                                    if (e.target.checked) setSelectedModifiers((prev) => [...prev, mod.id]);
-                                    else setSelectedModifiers((prev) => prev.filter((id) => id !== mod.id));
-                                  }
-                                }}
-                                className="accent-rose-500 h-4 w-4"
-                              />
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Cooking Request for THIS portion */}
-            <div className="mt-5 rounded-2xl border border-neutral-800/80 bg-neutral-900/60 p-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                  Cooking instruction for this item:
-                </span>
+            {/* Cooking Request input + Audio Mic */}
+            <div className="mt-4">
+              <label className="text-xs font-bold text-neutral-700">Cooking request</label>
+              <div className="relative mt-1.5">
+                <input
+                  type="text"
+                  value={cookingNote}
+                  onChange={(e) => setCookingNote(e.target.value)}
+                  placeholder='e.g. "Extra spicy, less oil"'
+                  className="w-full rounded-xl border border-neutral-300 bg-neutral-50 py-3 pl-3 pr-10 text-xs text-neutral-900 placeholder-neutral-400 focus:border-[#C68A28] focus:bg-white focus:outline-none"
+                />
                 <button
                   type="button"
-                  onClick={startSpeechRecognition}
-                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
-                    isListeningMic
-                      ? "bg-rose-600 text-white animate-pulse"
-                      : "bg-neutral-800 text-neutral-300 hover:text-white"
-                  }`}
-                  title="Speak instruction"
+                  onClick={() => triggerAudioVoiceInput("cooking")}
+                  className={cn(
+                    "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
+                    isListeningCustomMic ? "text-red-500 animate-pulse bg-red-100" : "text-neutral-500 hover:text-[#C68A28]"
+                  )}
+                  title="Speak cooking instructions"
                 >
-                  {isListeningMic ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-                  {isListeningMic ? "Listening..." : "Speak"}
+                  <Mic className="h-4 w-4" />
                 </button>
               </div>
-
-              <p className="mt-1 text-[10px] text-neutral-400">
-                Want this one spicy, crispy, or mild? Select quick preferences or speak:
-              </p>
-
-              {/* Quick Preferences Chips */}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {PREFERENCE_CHIPS.map((chip) => {
-                  const isSelected = cookingNote.includes(chip);
-                  return (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => togglePreferenceChip(chip)}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium border transition ${
-                        isSelected
-                          ? "border-rose-500 bg-rose-950/40 text-rose-300 font-bold"
-                          : "border-neutral-800 bg-neutral-900/80 text-neutral-300 hover:border-neutral-700"
-                      }`}
-                    >
-                      {chip}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <textarea
-                rows={2}
-                maxLength={100}
-                value={cookingNote}
-                onChange={(e) => setCookingNote(e.target.value)}
-                placeholder='e.g. "Spicy", "No butter", or "Extra crispy"'
-                className="mt-2.5 w-full rounded-xl border border-neutral-800 bg-[#111113] p-2.5 text-xs text-white placeholder-neutral-500 focus:border-rose-500 focus:outline-none"
-              />
-              <div className="text-right text-[10px] text-neutral-500">{cookingNote.length}/100</div>
             </div>
 
-            {/* Modal Bottom Bar: Stepper + Add Button */}
-            <div className="mt-5 flex items-center gap-3">
-              <div className="flex items-center rounded-xl border border-rose-500/60 bg-neutral-900 px-2 py-1">
+            {/* Add-ons */}
+            <div className="mt-4 flex flex-col gap-2">
+              <label className="text-xs font-bold text-neutral-700">Add-ons</label>
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs">
+                <span className="font-medium text-neutral-800">Extra cheese</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-[#B97A1C]">+₹40</span>
+                  <input
+                    type="checkbox"
+                    checked={extraCheese}
+                    onChange={(e) => setExtraCheese(e.target.checked)}
+                    className="h-4 w-4 rounded accent-[#C68A28]"
+                  />
+                </div>
+              </label>
+            </div>
+
+            {/* Quantity Stepper & Add Button */}
+            <div className="mt-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm font-bold text-neutral-800">
                 <button
-                  type="button"
                   onClick={() => setCustomizingQty((q) => Math.max(1, q - 1))}
-                  className="p-1 text-rose-400 hover:text-white"
+                  className="text-neutral-500 hover:text-black"
                 >
-                  <Minus className="h-4 w-4" />
+                  −
                 </button>
-                <span className="w-8 text-center text-sm font-bold text-white">{customizingQty}</span>
+                <span>{customizingQty}</span>
                 <button
-                  type="button"
                   onClick={() => setCustomizingQty((q) => q + 1)}
-                  className="p-1 text-rose-400 hover:text-white"
+                  className="text-neutral-500 hover:text-black"
                 >
-                  <Plus className="h-4 w-4" />
+                  +
                 </button>
               </div>
 
               <button
                 type="button"
-                onClick={commitAddToCart}
-                className="flex-1 h-12 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-sm font-extrabold text-white shadow-lg shadow-rose-600/40 hover:brightness-110 active:scale-95 transition"
+                onClick={() => {
+                  const basePrice = parseFloat(customizingItem.item.price);
+                  const extra = extraCheese ? 40 : 0;
+                  const unitPrice = basePrice + extra;
+                  const lineId = `line-${customizingItem.item.id}-${Date.now()}`;
+
+                  setCart((prev) => [
+                    ...prev,
+                    {
+                      id: lineId,
+                      menuItemId: customizingItem.item.id,
+                      name: customizingItem.item.name,
+                      imageUrl: getDishImage(customizingItem.item, customizingItem.categoryName),
+                      isVeg: customizingItem.item.isVeg,
+                      modifierIds: extraCheese ? ["extra-cheese"] : [],
+                      modifierLabel: extraCheese ? "Extra cheese (+₹40)" : "",
+                      unitPrice,
+                      quantity: customizingQty,
+                      cookingNote: cookingNote.trim(),
+                    },
+                  ]);
+
+                  toast.success(`Added ${customizingItem.item.name}`);
+                  setCustomizingItem(null);
+                }}
+                className="flex-1 rounded-xl bg-[#C68A28] py-3 text-sm font-black text-white hover:bg-[#B97A1C] shadow-md"
               >
-                Add item · {formatCurrency(
-                  (Number(customizingItem.item.price) +
-                    (customizingItem.item.modifierGroups ?? []).flatMap((g) =>
-                      g.modifierGroup.modifiers.filter((m) => selectedModifiers.includes(m.id))
-                    ).reduce((sum, m) => sum + Number(m.priceAdjustment), 0)) * customizingQty
-                )}
+                Add item · ₹{((parseFloat(customizingItem.item.price) + (extraCheese ? 40 : 0)) * customizingQty).toFixed(0)}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 8. CATEGORY QUICK JUMP SHEET */}
-      {showCategorySheet && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-t-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-              <h3 className="text-base font-extrabold text-white">Menu Categories</h3>
+      {/* CART / YOUR ORDER DRAWER */}
+      {showCartDrawer && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-200 bg-white p-5 text-neutral-900 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <h3 className="text-base font-bold text-neutral-900">
+                Your order ({data?.tableName || "Table 12"})
+              </h3>
               <button
-                onClick={() => setShowCategorySheet(false)}
-                className="rounded-full bg-neutral-800 p-1.5 text-neutral-400 hover:text-white"
+                onClick={() => setShowCartDrawer(false)}
+                className="rounded-full bg-neutral-100 p-1 text-neutral-500 hover:text-black"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-3 space-y-2">
-              {filteredCategories.map((cat) => (
+            {/* Cart Items list */}
+            <div className="mt-4 divide-y divide-neutral-100">
+              {cart.map((line) => (
+                <div key={line.id} className="flex items-start justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-100 shrink-0 border border-neutral-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={line.imageUrl} alt="" className="h-full w-full object-cover" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900">{line.name}</h4>
+                      {line.modifierLabel && (
+                        <p className="text-[11px] text-[#A06C18] font-medium">{line.modifierLabel}</p>
+                      )}
+                      {line.cookingNote && (
+                        <p className="text-[10px] text-neutral-500">Note: &ldquo;{line.cookingNote}&rdquo;</p>
+                      )}
+                      <p className="mt-1 text-xs font-bold text-neutral-900">₹{line.unitPrice * line.quantity}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs font-bold text-neutral-800">
+                    <button onClick={() => updateCartQuantity(line.id, -1)} className="px-1 text-neutral-500 hover:text-black">
+                      −
+                    </button>
+                    <span>{line.quantity}</span>
+                    <button onClick={() => updateCartQuantity(line.id, 1)} className="px-1 text-neutral-500 hover:text-black">
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowCartDrawer(false)}
+              className="mt-3 text-xs font-bold text-[#A06C18] hover:underline"
+            >
+              + Add more items
+            </button>
+
+            <div className="mt-4 border-t border-neutral-100 pt-3">
+              <div className="flex justify-between text-sm font-bold text-neutral-900">
+                <span>Total amount</span>
+                <span className="text-base font-black text-[#B97A1C]">₹{cartTotalPrice.toFixed(0)}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={placeOrder.isPending}
+              onClick={() => placeOrder.mutate()}
+              className="mt-5 flex h-13 w-full items-center justify-center rounded-2xl bg-[#C68A28] text-sm font-black text-white hover:bg-[#B97A1C] shadow-md disabled:opacity-50"
+            >
+              {placeOrder.isPending ? "Sending order..." : "Place order"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CATEGORIES MODAL (Image 5 match: [ ☰ Menu ]) */}
+      {showCategorySheet && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-neutral-200 bg-white p-5 text-neutral-900 shadow-2xl">
+            <h3 className="text-base font-bold text-neutral-900 mb-3">Categories</h3>
+            <div className="flex flex-col gap-2">
+              {(data?.categories || []).map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => {
                     setShowCategorySheet(false);
                     const el = document.getElementById(`cat-${cat.id}`);
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                    el?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold text-neutral-200 hover:bg-neutral-800/80 transition"
+                  className="flex items-center justify-between rounded-xl bg-neutral-50 border border-neutral-200 p-3 text-xs font-semibold text-neutral-800 hover:bg-[#FAF8F5]"
                 >
                   <span>{cat.name}</span>
-                  <span className="rounded-full bg-neutral-800 px-2.5 py-0.5 text-xs font-bold text-rose-400">
-                    {cat.items.length}
-                  </span>
+                  <span className="text-[#A06C18] font-bold">({cat.items.length})</span>
                 </button>
               ))}
             </div>
 
             <button
               onClick={() => setShowCategorySheet(false)}
-              className="mt-2 flex h-11 w-full items-center justify-center gap-1 rounded-xl bg-neutral-800 text-xs font-bold text-neutral-300 hover:bg-neutral-700"
+              className="mt-4 w-full rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white hover:bg-[#B97A1C]"
             >
-              <X className="h-4 w-4" /> Close
+              ✕ Close
             </button>
           </div>
         </div>
       )}
 
-      {/* 9. CART DRAWER (With Separate Lines for Different Instructions!) */}
-      {showCartDrawer && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-t-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl max-h-[90vh] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-              <div>
-                <h3 className="text-base font-extrabold text-white">Your Cart</h3>
-                <p className="text-xs text-neutral-400">{data?.branchName} · {data?.tableName}</p>
-              </div>
+      {/* CALL WAITER CONFIRMATION MODAL */}
+      {showWaiterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xs rounded-2xl border border-neutral-200 bg-white p-5 text-center text-neutral-900 shadow-2xl">
+            <Phone className="mx-auto h-10 w-10 text-[#C68A28] mb-2" />
+            <h3 className="text-base font-bold text-neutral-900">Call Waiter?</h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              Notify floor staff to come to {data?.tableName || "Table 12"}
+            </p>
+            <div className="mt-4 flex gap-2">
               <button
-                onClick={() => setShowCartDrawer(false)}
-                className="rounded-full bg-neutral-800 p-1.5 text-neutral-400 hover:text-white"
+                onClick={() => setShowWaiterModal(false)}
+                className="flex-1 rounded-xl border border-neutral-200 bg-neutral-100 py-2.5 text-xs font-bold text-neutral-600 hover:bg-neutral-200"
               >
-                <X className="h-4 w-4" />
+                Cancel
               </button>
-            </div>
-
-            {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto py-3 divide-y divide-neutral-800/80 space-y-2">
-              {cart.map((line) => (
-                <div key={line.id} className="flex items-start justify-between gap-3 pt-2">
-                  <div className="flex items-start gap-3 flex-1">
-                    {line.imageUrl && (
-                      <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-800 shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={line.imageUrl} alt="" className="h-full w-full object-cover" />
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        {line.isVeg ? (
-                          <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-emerald-500 p-[1px]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          </span>
-                        ) : (
-                          <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-rose-500 p-[1px]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                          </span>
-                        )}
-                        <p className="text-xs font-bold text-white">{line.name}</p>
-                      </div>
-
-                      {line.modifierLabel && (
-                        <p className="text-[11px] text-neutral-400 mt-0.5">{line.modifierLabel}</p>
-                      )}
-
-                      {/* Display cooking note for this line */}
-                      {line.cookingNote ? (
-                        <p className="text-[10px] text-amber-300 font-semibold mt-1 bg-amber-950/60 px-2 py-0.5 rounded inline-block border border-amber-800/50">
-                          Note: &quot;{line.cookingNote}&quot;
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-neutral-500 mt-0.5 italic">Standard preparation</p>
-                      )}
-
-                      <p className="text-xs font-bold text-neutral-200 mt-1">
-                        {formatCurrency(line.unitPrice * line.quantity)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Stepper */}
-                  <div className="flex items-center rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1">
-                    <button
-                      type="button"
-                      onClick={() => removeOneFromCart(line.id)}
-                      className="p-1 text-neutral-400 hover:text-white"
-                    >
-                      <Minus className="h-3 w-3" />
-                    </button>
-                    <span className="w-6 text-center text-xs font-bold text-white">{line.quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => addOneToCart(line.id)}
-                      className="p-1 text-neutral-400 hover:text-white"
-                    >
-                      <Plus className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Bill Summary */}
-            <div className="mt-3 border-t border-neutral-800 pt-3 space-y-1 text-xs">
-              <div className="flex justify-between text-neutral-400">
-                <span>Item Total</span>
-                <span>{formatCurrency(cartTotal)}</span>
-              </div>
-              <div className="flex justify-between text-neutral-400">
-                <span>Taxes & Service (GST)</span>
-                <span className="text-emerald-400">Included in prices</span>
-              </div>
-              <div className="flex justify-between text-sm font-extrabold text-white pt-2 border-t border-neutral-800">
-                <span>Grand Total</span>
-                <span>{formatCurrency(cartTotal)}</span>
-              </div>
-            </div>
-
-            {/* PLACE ORDER BUTTON -> OPENS ONCE CONFIRMATION MODAL */}
-            <div className="mt-4 pt-2">
               <button
-                disabled={placeOrder.isPending || cart.length === 0}
-                onClick={() => setShowConfirmModal(true)}
-                className="flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-extrabold text-white shadow-lg shadow-rose-600/40 hover:brightness-110 active:scale-95 transition disabled:opacity-50"
+                onClick={() => requestService.mutate("WAITER")}
+                className="flex-1 rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white hover:bg-[#B97A1C] shadow-sm"
               >
-                Place Order ({formatCurrency(cartTotal)})
+                Yes, call
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 10. ONCE CONFIRMATION MODAL BEFORE PLACING ORDER */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-[#161618] p-5 shadow-2xl text-center">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-400">
-              <UtensilsCrossed className="h-7 w-7" />
-            </div>
-
-            <h3 className="text-lg font-black text-white">Confirm Your Order?</h3>
-            <p className="mt-1 text-xs text-neutral-400">
-              Table: <strong className="text-neutral-200">{data?.tableName}</strong> · Guest: <strong className="text-neutral-200">{guestName}</strong>
+      {/* REQUEST BILL CONFIRMATION MODAL */}
+      {showBillModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xs rounded-2xl border border-neutral-200 bg-white p-5 text-center text-neutral-900 shadow-2xl">
+            <Receipt className="mx-auto h-10 w-10 text-[#C68A28] mb-2" />
+            <h3 className="text-base font-bold text-neutral-900">Request Bill?</h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              Notify the cashier to prepare and bring your final bill to {data?.tableName || "Table 12"}.
             </p>
-
-            <div className="my-4 max-h-40 overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-left text-xs space-y-1.5 divide-y divide-neutral-800/60">
-              {cart.map((line) => (
-                <div key={line.id} className="pt-1.5 first:pt-0 flex justify-between items-start">
-                  <div>
-                    <span className="font-semibold text-white">{line.quantity} × {line.name}</span>
-                    {line.cookingNote && (
-                      <p className="text-[10px] text-amber-300 font-medium">({line.cookingNote})</p>
-                    )}
-                  </div>
-                  <span className="font-bold text-neutral-200">{formatCurrency(line.unitPrice * line.quantity)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between items-center px-1 mb-4 text-xs font-bold text-neutral-300">
-              <span>Total Payable Amount</span>
-              <span className="text-sm font-extrabold text-white">{formatCurrency(cartTotal)}</span>
-            </div>
-
-            <div className="flex gap-2">
+            <div className="mt-4 flex gap-2">
               <button
-                type="button"
-                onClick={() => setShowConfirmModal(false)}
-                className="flex-1 h-11 rounded-xl border border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-300 hover:bg-neutral-700 transition"
+                onClick={() => setShowBillModal(false)}
+                className="flex-1 rounded-xl border border-neutral-200 bg-neutral-100 py-2.5 text-xs font-bold text-neutral-600 hover:bg-neutral-200"
               >
-                Modify
+                Cancel
               </button>
               <button
-                type="button"
-                disabled={placeOrder.isPending}
-                onClick={() => placeOrder.mutate()}
-                className="flex-[2] h-11 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-xs font-black uppercase text-white shadow-lg shadow-rose-600/40 hover:brightness-110 active:scale-95 transition disabled:opacity-50"
+                onClick={() => requestService.mutate("BILL")}
+                className="flex-1 rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white hover:bg-[#B97A1C] shadow-sm"
               >
-                {placeOrder.isPending ? "Placing..." : "Confirm & Place Order"}
+                Yes, request
               </button>
             </div>
           </div>

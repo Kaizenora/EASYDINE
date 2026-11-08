@@ -198,18 +198,77 @@ let demoMenuItems = [
   },
 ];
 
+
+let demoDepartments = [
+  { id: "dept-mgmt", name: "Management", description: "Store managers and owners", branchId: "branch-1", _count: { members: 1 } },
+  { id: "dept-front", name: "Front of House", description: "Cashiers, hosts and waitstaff", branchId: "branch-1", _count: { members: 1 } },
+  { id: "dept-kitchen", name: "Kitchen", description: "Chefs and kitchen line cooks", branchId: "branch-1", _count: { members: 1 } },
+];
+
+
+let demoStaff = [
+  {
+    id: "u-admin",
+    name: "Restaurant Owner",
+    email: "owner@hotelsanjog.com",
+    phone: "+91 98765 43210",
+    isActive: true,
+    createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
+    roleId: "role-admin",
+    role: { id: "role-admin", name: "ADMIN", label: "Owner / Administrator" },
+    branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+    departmentId: "dept-mgmt",
+    department: { id: "dept-mgmt", name: "Management" },
+    permissionOverrides: [],
+  },
+  {
+    id: "u-cashier",
+    name: "Rahul Sharma (Cashier)",
+    email: "cashier@hotelsanjog.com",
+    phone: "+91 98123 45678",
+    isActive: true,
+    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+    roleId: "role-cashier",
+    role: { id: "role-cashier", name: "CASHIER", label: "Lead Cashier" },
+    branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+    departmentId: "dept-front",
+    department: { id: "dept-front", name: "Front of House" },
+    permissionOverrides: [],
+  },
+  {
+    id: "u-chef",
+    name: "Chef Sanjeev",
+    email: "chef@hotelsanjog.com",
+    phone: "+91 98234 56789",
+    isActive: true,
+    createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
+    roleId: "role-chef",
+    role: { id: "role-chef", name: "CHEF", label: "Head Chef" },
+    branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+    departmentId: "dept-kitchen",
+    department: { id: "dept-kitchen", name: "Kitchen" },
+    permissionOverrides: [],
+  },
+];
+
 let demoFloors = [
   {
     id: "floor-1",
     name: "Main Dining Hall",
     sortOrder: 1,
     tables: [
-      { id: "tbl-1", floorId: "floor-1", number: "1", name: "Table 1 (Window)", capacity: 4, status: "OCCUPIED", customerName: "siddharth", statusSince: new Date(Date.now() - 35 * 60000).toISOString(), posX: 50, posY: 50, width: 80, height: 80, rotation: 0, shape: "square", qrToken: "qr-table-1", assignedWaiter: { id: "w-1", name: "Rajesh" } },
-      { id: "tbl-2", floorId: "floor-1", number: "2", name: "Table 2", capacity: 4, status: "FREE", customerName: null, statusSince: new Date(Date.now() - 120 * 60000).toISOString(), posX: 180, posY: 50, width: 80, height: 80, rotation: 0, shape: "square", qrToken: "qr-table-2", assignedWaiter: null },
-      { id: "tbl-3", floorId: "floor-1", number: "3", name: "Table 3", capacity: 6, status: "OCCUPIED", customerName: "Amit Sharma", statusSince: new Date(Date.now() - 15 * 60000).toISOString(), posX: 310, posY: 50, width: 120, height: 80, rotation: 0, shape: "rect", qrToken: "qr-table-3", assignedWaiter: { id: "w-2", name: "Pooja" } },
-      { id: "tbl-4", floorId: "floor-1", number: "4", name: "Table 4", capacity: 2, status: "FREE", customerName: null, statusSince: new Date(Date.now() - 40 * 60000).toISOString(), posX: 50, posY: 180, width: 60, height: 60, rotation: 0, shape: "round", qrToken: "qr-table-4", assignedWaiter: null },
-      { id: "tbl-5", floorId: "floor-1", number: "5", name: "Table 5 (Booth)", capacity: 6, status: "RESERVED", customerName: "Pooja Verma", statusSince: new Date(Date.now() - 10 * 60000).toISOString(), posX: 180, posY: 180, width: 120, height: 80, rotation: 0, shape: "rect", qrToken: "qr-table-5", assignedWaiter: null },
-      { id: "tbl-6", floorId: "floor-1", number: "6", name: "Family Lounge", capacity: 8, status: "FREE", customerName: null, statusSince: new Date().toISOString(), posX: 330, posY: 180, width: 140, height: 90, rotation: 0, shape: "rect", qrToken: "qr-table-6", assignedWaiter: null },
+      { id: "tbl-12", floorId: "floor-1", number: "12", name: "Table 12", capacity: 4, status: "OCCUPIED", customerName: "Sid", checkInType: "QR check-in", dishesCount: 3, totalAmount: "620.00", orderNumber: "24", statusSince: new Date(Date.now() - 1 * 60000).toISOString(), posX: 50, posY: 50, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-12", assignedWaiter: { id: "w-1", name: "Ravi G." } },
+      { id: "tbl-4", floorId: "floor-1", number: "4", name: "Table 4", capacity: 4, status: "PREPARING", customerName: "Mehta family", guestCount: 4, dishesCount: 5, totalAmount: "1240.00", statusSince: new Date(Date.now() - 12 * 60000).toISOString(), posX: 210, posY: 50, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-4", assignedWaiter: { id: "w-1", name: "Ravi G." } },
+      { id: "tbl-7", floorId: "floor-1", number: "7", name: "Table 7", capacity: 4, status: "BILL_REQUESTED", customerName: "Kulkarni", dishesCount: 6, totalAmount: "1890.00", statusSince: new Date(Date.now() - 2 * 60000).toISOString(), posX: 370, posY: 50, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-7", serviceRequest: "BILL", assignedWaiter: { id: "w-2", name: "Pooja" } },
+      { id: "tbl-5", floorId: "floor-1", number: "5", name: "Table 5", capacity: 2, status: "WAITER_CALL", customerName: "Patil", guestCount: 2, dishesCount: 4, totalAmount: "960.00", statusSince: new Date(Date.now() - 0.5 * 60000).toISOString(), posX: 530, posY: 50, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-5", serviceRequest: "WAITER", assignedWaiter: { id: "w-2", name: "Pooja" } },
+      { id: "tbl-2", floorId: "floor-1", number: "2", name: "Table 2", capacity: 2, status: "SERVED", customerName: "Deshmukh", guestCount: 2, dishesCount: 4, totalAmount: "1150.00", statusSince: new Date(Date.now() - 20 * 60000).toISOString(), posX: 50, posY: 190, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-2", assignedWaiter: { id: "w-1", name: "Ravi G." } },
+      { id: "tbl-9", floorId: "floor-1", number: "9", name: "Table 9", capacity: 4, status: "PREPARING", customerName: "Joshi", guestCount: 3, dishesCount: 7, totalAmount: "2080.00", statusSince: new Date(Date.now() - 6 * 60000).toISOString(), posX: 210, posY: 190, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-9", assignedWaiter: { id: "w-1", name: "Ravi G." } },
+      { id: "tbl-3", floorId: "floor-1", number: "3", name: "Table 3", capacity: 4, status: "PREPARING", customerName: "Walk-in", checkInType: "cashier entered", dishesCount: 5, totalAmount: "1120.00", statusSince: new Date(Date.now() - 9 * 60000).toISOString(), posX: 370, posY: 190, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-3", assignedWaiter: { id: "w-1", name: "Ravi G." } },
+      { id: "tbl-8", floorId: "floor-1", number: "8", name: "Table 8", capacity: 4, status: "BROWSING", customerName: "Shinde", checkInType: "QR check-in", dishesCount: 2, totalAmount: "340.00", statusSince: new Date(Date.now() - 3 * 60000).toISOString(), posX: 530, posY: 190, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-8", assignedWaiter: null },
+      { id: "tbl-1", floorId: "floor-1", number: "1", name: "Table 1", capacity: 4, status: "FREE", customerName: null, statusSince: new Date().toISOString(), posX: 50, posY: 330, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-1", assignedWaiter: null },
+      { id: "tbl-6", floorId: "floor-1", number: "6", name: "Table 6", capacity: 2, status: "FREE", customerName: null, statusSince: new Date().toISOString(), posX: 210, posY: 330, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-6", assignedWaiter: null },
+      { id: "tbl-10", floorId: "floor-1", number: "10", name: "Table 10", capacity: 2, status: "FREE", customerName: null, statusSince: new Date().toISOString(), posX: 370, posY: 330, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-10", assignedWaiter: null },
+      { id: "tbl-11", floorId: "floor-1", number: "11", name: "Table 11", capacity: 6, status: "FREE", customerName: null, statusSince: new Date().toISOString(), posX: 530, posY: 330, width: 140, height: 120, rotation: 0, shape: "rect", qrToken: "qr-table-11", assignedWaiter: null },
     ],
   },
 ];
@@ -218,12 +277,24 @@ let activeTableRequests = [
   {
     id: "req-1",
     type: "WAITER",
-    createdAt: new Date(Date.now() - 3 * 60000).toISOString(),
-    table: { id: "tbl-1", number: "1", name: "Table 1 (Window)" },
+    createdAt: new Date(Date.now() - 0.5 * 60000).toISOString(),
+    table: { id: "tbl-5", number: "5", name: "Table 5" },
+    guestName: "Patil",
+  },
+  {
+    id: "req-2",
+    type: "BILL",
+    createdAt: new Date(Date.now() - 2 * 60000).toISOString(),
+    table: { id: "tbl-7", number: "7", name: "Table 7" },
+    guestName: "Kulkarni",
+    amount: "1890.00",
   },
 ];
-let openServiceRequests = ["WAITER"];
-let tableRequestsMap = new Map(); // tableId -> { openRequests: string[], waiterAcknowledged: boolean }
+let openServiceRequests = ["WAITER", "BILL"];
+let tableRequestsMap = new Map([
+  ["tbl-5", { openRequests: ["WAITER"], waiterAcknowledged: false }],
+  ["tbl-7", { openRequests: ["BILL"], waiterAcknowledged: false }],
+]);
 let waiterAcknowledged = false;
 
 
@@ -275,218 +346,304 @@ let demoAttendance = [
 
 let demoOrders = [
   {
-    id: "ord-1067",
-    orderNumber: "1067",
+    id: "ord-24",
+    orderNumber: "24",
     type: "DINE_IN",
     status: "OPEN",
     channel: "ONLINE",
     acceptance: "PENDING",
-    tableId: "tbl-1",
-    guestName: "s (2524234342)",
-    guestCount: 2,
-    notes: null,
+    tableId: "tbl-12",
+    guestName: "Sid",
+    guestCount: 1,
+    notes: "Extra spicy, less oil",
     cancelReason: null,
-    subtotal: "920.00",
-    taxAmount: "46.00",
+    subtotal: "620.00",
+    taxAmount: "0.00",
     discountAmount: "0.00",
     tipAmount: "0.00",
-    totalAmount: "966.00",
-    createdAt: new Date(Date.now() - 2 * 60000).toISOString(),
+    totalAmount: "620.00",
+    createdAt: new Date(Date.now() - 1 * 60000).toISOString(),
     billedAt: null,
-    table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
-    customer: { id: "cust-1067", name: "s (2524234342)", phone: "+91 9876543210" },
+    table: { id: "tbl-12", name: "Table 12", number: "12" },
+    customer: { id: "cust-sid", name: "Sid", phone: "+91 98765 43210" },
     items: [
       {
-        id: "item-1067-1",
-        menuItemId: "item-3",
-        nameSnapshot: "Crispy Corn & Water Chestnut",
-        quantity: 1,
-        unitPriceSnapshot: "290.00",
-        lineTotal: "290.00",
-        status: "PENDING",
-        kitchenNote: null,
-        modifiers: [],
-      },
-      {
-        id: "item-1067-2",
+        id: "item-24-1",
         menuItemId: "item-1",
-        nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
+        nameSnapshot: "Paneer Tikka",
         quantity: 1,
-        unitPriceSnapshot: "340.00",
-        lineTotal: "340.00",
+        unitPriceSnapshot: "280.00",
+        lineTotal: "280.00",
+        isVeg: true,
+        status: "PENDING",
+        kitchenNote: "Extra spicy, less oil",
+        modifiers: [{ name: "Extra cheese", priceAdjustment: "40.00" }],
+      },
+      {
+        id: "item-24-2",
+        menuItemId: "item-4",
+        nameSnapshot: "Dal Fry",
+        quantity: 2,
+        unitPriceSnapshot: "120.00",
+        lineTotal: "240.00",
+        isVeg: true,
         status: "PENDING",
         kitchenNote: null,
         modifiers: [],
       },
       {
-        id: "item-1067-3",
-        menuItemId: "item-3",
-        nameSnapshot: "Crispy Corn & Water Chestnut",
-        quantity: 1,
-        unitPriceSnapshot: "290.00",
-        lineTotal: "290.00",
+        id: "item-24-3",
+        menuItemId: "item-6",
+        nameSnapshot: "Butter Roti",
+        quantity: 4,
+        unitPriceSnapshot: "25.00",
+        lineTotal: "100.00",
+        isVeg: true,
         status: "PENDING",
         kitchenNote: null,
         modifiers: [],
       },
     ],
     kots: [],
-  },
-  {
-    id: "ord-1042",
-    orderNumber: "1042",
-    type: "DINE_IN",
-    status: "OPEN",
-    channel: "ONLINE",
-    acceptance: "ACCEPTED",
-    tableId: "tbl-1",
-    guestName: "siddharth",
-    guestCount: 2,
-    notes: "Serve piping hot",
-    cancelReason: null,
-    subtotal: "960.00",
-    taxAmount: "48.00",
-    discountAmount: "0.00",
-    tipAmount: "0.00",
-    totalAmount: "1008.00",
-    createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
-    billedAt: null,
-    table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
-    customer: { id: "cust-1", name: "siddharth", phone: "+91 9876543210" },
-    items: [
-      {
-        id: "item-1",
-        menuItemId: "item-1",
-        nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
-        quantity: 2,
-        unitPriceSnapshot: "340.00",
-        lineTotal: "680.00",
-        status: "PREPARING",
-        kitchenNote: "Extra spicy",
-        modifiers: [],
-      },
-      {
-        id: "item-2",
-        menuItemId: "item-4",
-        nameSnapshot: "Dal Makhani (Slow Cooked 24h)",
-        quantity: 1,
-        unitPriceSnapshot: "280.00",
-        lineTotal: "280.00",
-        status: "ACCEPTED",
-        kitchenNote: "No onion",
-        modifiers: [],
-      },
-    ],
-    kots: [
-      {
-        id: "kot-1",
-        ticketNumber: 1,
-        status: "PREPARING",
-        notes: "Table 1 (Window)",
-        createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
-        sentAt: new Date(Date.now() - 20 * 60000).toISOString(),
-        items: [
-          { id: "koti-1", nameSnapshot: "Paneer Tikka (Charcoal Smoked)", quantity: 2, status: "PREPARING" },
-          { id: "koti-2", nameSnapshot: "Dal Makhani (Slow Cooked 24h)", quantity: 1, status: "ACCEPTED" },
-        ],
-      },
-    ],
     payments: [],
   },
   {
-    id: "ord-1043",
-    orderNumber: "1043",
+    id: "ord-8",
+    orderNumber: "25",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "ONLINE",
+    acceptance: "PENDING",
+    tableId: "tbl-8",
+    guestName: "Shinde",
+    guestCount: 2,
+    notes: null,
+    cancelReason: null,
+    subtotal: "340.00",
+    taxAmount: "0.00",
+    discountAmount: "0.00",
+    tipAmount: "0.00",
+    totalAmount: "340.00",
+    createdAt: new Date(Date.now() - 4 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-8", name: "Table 8", number: "8" },
+    customer: { id: "cust-shinde", name: "Shinde", phone: "+91 98111 22334" },
+    items: [
+      {
+        id: "item-8-1",
+        menuItemId: "item-5",
+        nameSnapshot: "Veg Biryani",
+        quantity: 1,
+        unitPriceSnapshot: "267.00",
+        lineTotal: "267.00",
+        isVeg: true,
+        status: "PENDING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-8-2",
+        menuItemId: "item-6",
+        nameSnapshot: "Butter Roti",
+        quantity: 2,
+        unitPriceSnapshot: "35.00",
+        lineTotal: "70.00",
+        isVeg: true,
+        status: "PENDING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+    ],
+    kots: [],
+    payments: [],
+  },
+  {
+    id: "ord-3",
+    orderNumber: "23",
     type: "DINE_IN",
     status: "OPEN",
     channel: "STAFF",
     acceptance: "ACCEPTED",
     tableId: "tbl-3",
-    guestName: "Amit Sharma",
+    guestName: "Walk-in",
     guestCount: 4,
-    notes: null,
+    notes: "Entered by cashier",
     cancelReason: null,
-    subtotal: "840.00",
-    taxAmount: "42.00",
+    subtotal: "1120.00",
+    taxAmount: "0.00",
     discountAmount: "0.00",
     tipAmount: "0.00",
-    totalAmount: "882.00",
-    createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
+    totalAmount: "1120.00",
+    createdAt: new Date(Date.now() - 9 * 60000).toISOString(),
     billedAt: null,
     table: { id: "tbl-3", name: "Table 3", number: "3" },
-    customer: { id: "cust-2", name: "Amit Sharma", phone: "+91 9811223344" },
+    customer: { id: "cust-walkin", name: "Walk-in Guest", phone: "" },
     items: [
       {
-        id: "item-3",
+        id: "item-3-1",
         menuItemId: "item-3",
         nameSnapshot: "Murgh Malai Kebab",
         quantity: 2,
         unitPriceSnapshot: "420.00",
         lineTotal: "840.00",
-        status: "SERVED",
-        kitchenNote: "Mild spicy",
+        isVeg: false,
+        status: "PREPARING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-3-2",
+        menuItemId: "item-4",
+        nameSnapshot: "Dal Makhani",
+        quantity: 1,
+        unitPriceSnapshot: "280.00",
+        lineTotal: "280.00",
+        isVeg: true,
+        status: "PREPARING",
+        kitchenNote: null,
         modifiers: [],
       },
     ],
-    kots: [
-      {
-        id: "kot-2",
-        ticketNumber: 2,
-        status: "SERVED",
-        notes: "Table 3",
-        createdAt: new Date(Date.now() - 14 * 60000).toISOString(),
-        sentAt: new Date(Date.now() - 14 * 60000).toISOString(),
-        items: [
-          { id: "koti-3", nameSnapshot: "Murgh Malai Kebab", quantity: 2, status: "SERVED" },
-        ],
-      },
-    ],
+    kots: [{ id: "kot-3", ticketNumber: 23, status: "PRINTED", sentAt: new Date(Date.now() - 9 * 60000).toISOString() }],
     payments: [],
   },
   {
-    id: "ord-1041",
-    orderNumber: "1041",
-    type: "TAKEAWAY",
-    status: "COMPLETED",
-    channel: "STAFF",
+    id: "ord-7",
+    orderNumber: "21",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "ONLINE",
     acceptance: "ACCEPTED",
-    tableId: null,
-    guestName: "Vikram Malhotra",
-    guestCount: 1,
+    tableId: "tbl-7",
+    guestName: "Kulkarni",
+    guestCount: 4,
     notes: null,
     cancelReason: null,
-    subtotal: "534.00",
-    taxAmount: "26.70",
-    discountAmount: "50.00",
+    subtotal: "1890.00",
+    taxAmount: "0.00",
+    discountAmount: "0.00",
     tipAmount: "0.00",
-    totalAmount: "510.70",
-    createdAt: new Date(Date.now() - 120 * 60000).toISOString(),
-    billedAt: new Date(Date.now() - 100 * 60000).toISOString(),
-    table: null,
-    customer: { id: "cust-3", name: "Vikram Malhotra", phone: "+91 9988776655" },
+    totalAmount: "1890.00",
+    createdAt: new Date(Date.now() - 40 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-7", name: "Table 7", number: "7" },
+    customer: { id: "cust-kulkarni", name: "Kulkarni", phone: "+91 98333 44556" },
     items: [
       {
-        id: "item-4",
-        menuItemId: "item-5",
-        nameSnapshot: "Veg Biryani (Claypot)",
+        id: "item-7-1",
+        menuItemId: "item-1",
+        nameSnapshot: "Paneer Tikka",
         quantity: 2,
+        unitPriceSnapshot: "340.00",
+        lineTotal: "680.00",
+        isVeg: true,
+        status: "SERVED",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-7-2",
+        menuItemId: "item-5",
+        nameSnapshot: "Veg Biryani",
+        quantity: 3,
         unitPriceSnapshot: "267.00",
-        lineTotal: "534.00",
+        lineTotal: "801.00",
+        isVeg: true,
         status: "SERVED",
         kitchenNote: null,
         modifiers: [],
       },
     ],
     kots: [],
-    payments: [
+    payments: [],
+  },
+  {
+    id: "ord-4",
+    orderNumber: "22",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "ONLINE",
+    acceptance: "ACCEPTED",
+    tableId: "tbl-4",
+    guestName: "Mehta family",
+    guestCount: 4,
+    notes: null,
+    cancelReason: null,
+    subtotal: "1240.00",
+    taxAmount: "0.00",
+    discountAmount: "0.00",
+    tipAmount: "0.00",
+    totalAmount: "1240.00",
+    createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-4", name: "Table 4", number: "4" },
+    customer: { id: "cust-mehta", name: "Mehta family", phone: "+91 98444 55667" },
+    items: [
       {
-        id: "pay-1",
-        method: "UPI",
-        amount: "510.70",
-        tendered: "510.70",
-        changeGiven: "0.00",
-        createdAt: new Date(Date.now() - 100 * 60000).toISOString(),
+        id: "item-4-1",
+        menuItemId: "item-2",
+        nameSnapshot: "Crispy Corn",
+        quantity: 2,
+        unitPriceSnapshot: "290.00",
+        lineTotal: "580.00",
+        isVeg: true,
+        status: "PREPARING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-4-2",
+        menuItemId: "item-4",
+        nameSnapshot: "Dal Makhani",
+        quantity: 2,
+        unitPriceSnapshot: "280.00",
+        lineTotal: "560.00",
+        isVeg: true,
+        status: "PREPARING",
+        kitchenNote: null,
+        modifiers: [],
       },
     ],
+    kots: [],
+    payments: [],
+  },
+  {
+    id: "ord-2",
+    orderNumber: "20",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "ONLINE",
+    acceptance: "ACCEPTED",
+    tableId: "tbl-2",
+    guestName: "Deshmukh",
+    guestCount: 2,
+    notes: null,
+    cancelReason: null,
+    subtotal: "1150.00",
+    taxAmount: "0.00",
+    discountAmount: "0.00",
+    tipAmount: "0.00",
+    totalAmount: "1150.00",
+    createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-2", name: "Table 2", number: "2" },
+    customer: { id: "cust-deshmukh", name: "Deshmukh", phone: "+91 98555 66778" },
+    items: [
+      {
+        id: "item-2-1",
+        menuItemId: "item-1",
+        nameSnapshot: "Paneer Tikka",
+        quantity: 2,
+        unitPriceSnapshot: "340.00",
+        lineTotal: "680.00",
+        isVeg: true,
+        status: "SERVED",
+        kitchenNote: null,
+        modifiers: [],
+      },
+    ],
+    kots: [],
+    payments: [],
   },
 ];
 let demoCoupons = [
@@ -685,33 +842,33 @@ let demoTickets = [
 
 let demoNotifications = [
   {
-    id: "notif-1",
+    id: "notif-waiter-5",
     entity: "ServiceRequest",
-    entityId: "tbl-1",
-    title: "🔔 Table 1 (Window) — Waiter Called",
-    body: "Guest at Table 1 (Window) called for waiter assistance",
-    message: "Guest at Table 1 (Window) called for waiter assistance",
-    createdAt: new Date(Date.now() - 60000).toISOString(),
+    entityId: "tbl-5",
+    title: "📞 Waiter call · Table 5",
+    body: "Patil called waiter at Table 5",
+    message: "Patil called waiter at Table 5",
+    createdAt: new Date(Date.now() - 30000).toISOString(),
     readAt: null,
   },
   {
-    id: "notif-2",
+    id: "notif-bill-7",
     entity: "ServiceRequest",
-    entityId: "tbl-3",
-    title: "🧾 Table 3 — Bill Requested",
-    body: "Table 3 requested their final bill (₹882.00)",
-    message: "Table 3 requested their final bill (₹882.00)",
+    entityId: "tbl-7",
+    title: "🧾 Bill requested · Table 7",
+    body: "Kulkarni requested bill for Table 7 (₹1,890.00)",
+    message: "Kulkarni requested bill for Table 7 (₹1,890.00)",
     createdAt: new Date(Date.now() - 120000).toISOString(),
     readAt: null,
   },
   {
-    id: "notif-3",
+    id: "notif-order-24",
     entity: "Order",
-    entityId: "ord-1042",
-    title: "🟢 Table 1 (Window) — New Order #1042",
-    body: "Siddharth placed order at Table 1 (Window) (₹1,008.00)",
-    message: "Siddharth placed order at Table 1 (Window) (₹1,008.00)",
-    createdAt: new Date(Date.now() - 180000).toISOString(),
+    entityId: "ord-24",
+    title: "⏱ New order · Table 12",
+    body: "Sid placed order #24 at Table 12 (3 dishes · ₹620.00 · waiting approval)",
+    message: "Sid placed order #24 at Table 12 (3 dishes · ₹620.00 · waiting approval)",
+    createdAt: new Date(Date.now() - 60000).toISOString(),
     readAt: null,
   },
 ];
@@ -792,22 +949,63 @@ const server = http.createServer((req, res) => {
 
   // --- Restaurant logo upload ---
   if (pathname.includes("/settings/restaurant/logo")) {
-    const url = "/logo.png";
-    restaurantSettings.logoUrl = url;
-    return send({ url });
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        if (buffer.length > 50) {
+          const pubDir = path.join(__dirname, "..", "apps", "web", "public");
+          if (!fs.existsSync(pubDir)) fs.mkdirSync(pubDir, { recursive: true });
+          fs.writeFileSync(path.join(pubDir, "custom-logo.png"), buffer);
+        }
+      } catch (err) {
+        console.error("Logo write error:", err);
+      }
+      const url = `/custom-logo.png?v=${Date.now()}`;
+      restaurantSettings.logoUrl = url;
+      return send({ url });
+    });
+    return;
   }
 
-  // --- Table Status Update ---
-  if (pathname.includes("/tables/") && pathname.includes("/status")) {
+  // --- Table Status Update & Settle ---
+  if (pathname.includes("/tables/") && (pathname.includes("/status") || pathname.includes("/settle"))) {
     const parts = pathname.split("/");
     const tIndex = parts.indexOf("tables");
     const tableId = tIndex !== -1 && parts[tIndex + 1] ? parts[tIndex + 1].split("?")[0] : null;
+    const isSettle = pathname.includes("/settle");
     return getBody().then((b) => {
       for (const floor of demoFloors) {
-        const table = floor.tables.find((t) => t.id === tableId);
+        const table = floor.tables.find((t) => t.id === tableId || t.number === tableId || `tbl-${t.number}` === tableId);
         if (table) {
-          table.status = b.status;
-          table.statusSince = new Date().toISOString();
+          if (isSettle || b.status === "FREE" || b.status === "AVAILABLE") {
+            table.status = "FREE";
+            table.customerName = null;
+            table.dishesCount = 0;
+            table.totalAmount = "0.00";
+            table.serviceRequest = null;
+            table.statusSince = new Date().toISOString();
+            // Clear open requests for this table
+            activeTableRequests = activeTableRequests.filter((r) => r.table?.id !== table.id && r.table?.number !== table.number);
+            tableRequestsMap.delete(table.id);
+            // Mark open order for this table as COMPLETED
+            const openOrder = demoOrders.find((o) => (o.tableId === table.id || o.table?.id === table.id || o.table?.number === table.number) && o.status === "OPEN");
+            if (openOrder) {
+              openOrder.status = "COMPLETED";
+              openOrder.billedAt = new Date().toISOString();
+              // Clear KDS tickets for this order
+              for (const ticket of demoTickets) {
+                if (ticket.orderId === openOrder.id || ticket.order?.orderNumber === openOrder.orderNumber) {
+                  ticket.status = "SERVED";
+                }
+              }
+            }
+          } else {
+            table.status = b.status;
+            if (b.customerName !== undefined) table.customerName = b.customerName;
+            table.statusSince = new Date().toISOString();
+          }
           return send(table);
         }
       }
@@ -1272,8 +1470,27 @@ const server = http.createServer((req, res) => {
   }
 
   // Notifications (Call Waiter / Bill Alert to Cashier)
+  if (pathname.includes("/notifications/read-all") && (req.method === "PATCH" || req.method === "POST")) {
+    const now = new Date().toISOString();
+    demoNotifications.forEach((n) => { n.readAt = now; });
+    return send({ ok: true, unreadCount: 0 });
+  }
+  if (pathname.match(/\/notifications\/[^/]+\/read/) && (req.method === "PATCH" || req.method === "POST")) {
+    const parts = pathname.split("/");
+    const id = parts[parts.indexOf("notifications") + 1];
+    const n = demoNotifications.find((x) => x.id === id);
+    if (n) n.readAt = new Date().toISOString();
+    return send(n || { ok: true });
+  }
   if (pathname.includes("/notifications")) {
-    return send({ data: demoNotifications, unreadCount: demoNotifications.filter((n) => !n.readAt).length });
+    return send({
+      data: demoNotifications,
+      total: demoNotifications.length,
+      unreadCount: demoNotifications.filter((n) => !n.readAt).length,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    });
   }
 
   // Display settings (Restaurant + Branch for UI headers, menus, dialogs)
@@ -1355,6 +1572,18 @@ const server = http.createServer((req, res) => {
     const tableActiveOrder = demoOrders.find(
       (o) => (o.tableId === foundTable.id || o.table?.id === foundTable.id || o.table?.number === foundTable.number) && o.status === "OPEN"
     );
+
+    if (req.method === "POST" && pathname.endsWith("/check-in")) {
+      return getBody().then((b) => {
+        foundTable.customerName = b.guestName || "Guest";
+        foundTable.checkInType = "QR check-in";
+        if (foundTable.status === "FREE") {
+          foundTable.status = "BROWSING";
+        }
+        foundTable.statusSince = new Date().toISOString();
+        return send({ success: true, table: foundTable });
+      });
+    }
 
     if (pathname.endsWith("/status")) {
       return send({
@@ -1531,14 +1760,26 @@ const server = http.createServer((req, res) => {
       channel: o.channel,
       acceptance: o.acceptance,
       guestName: o.guestName,
+      guestCount: o.guestCount || 1,
+      notes: o.notes,
       totalAmount: o.totalAmount,
+      subtotal: o.subtotal,
+      taxAmount: o.taxAmount,
+      discountAmount: o.discountAmount,
       createdAt: o.createdAt,
       table: o.table ? { id: o.table.id, name: o.table.name, number: parseInt(o.table.number, 10) || 1 } : null,
       customer: o.customer,
       items: (o.items || []).map((it) => ({
         id: it.id,
+        menuItemId: it.menuItemId,
         nameSnapshot: it.nameSnapshot,
         quantity: it.quantity,
+        unitPriceSnapshot: it.unitPriceSnapshot || "250.00",
+        lineTotal: it.lineTotal || String((parseFloat(it.unitPriceSnapshot || "250") * (it.quantity || 1))),
+        isVeg: it.isVeg !== false,
+        status: it.status || "PENDING",
+        kitchenNote: it.kitchenNote || null,
+        modifiers: it.modifiers || [],
       })),
     }));
 
@@ -1576,6 +1817,50 @@ const server = http.createServer((req, res) => {
         acceptance: "ACCEPTED",
         items: order.items,
       };
+
+      // SYNC: Update table status to PREPARING when order is accepted
+      for (const floor of demoFloors) {
+        const table = floor.tables.find((t) => t.id === order.tableId || t.id === order.table?.id || t.number === order.table?.number);
+        if (table) {
+          table.status = "PREPARING";
+          table.statusSince = new Date().toISOString();
+          break;
+        }
+      }
+
+      // SYNC: Create KDS ticket for kitchen display
+      const newTicket = {
+        id: "kot-" + Date.now(),
+        orderId: order.id,
+        stationId: "station-1",
+        ticketNumber: "KOT-" + order.orderNumber + "-1",
+        status: "NEW",
+        isPriority: false,
+        printedCount: 1,
+        lastPrintError: null,
+        createdAt: new Date().toISOString(),
+        station: { id: "station-1", name: "Main Kitchen" },
+        order: {
+          orderNumber: order.orderNumber,
+          type: order.type,
+          channel: order.channel,
+          notes: order.notes,
+          table: order.table,
+          guestName: order.guestName,
+          customer: order.customer,
+        },
+        items: (order.items || []).map((it, idx) => ({
+          id: "koti-accept-" + Date.now() + "-" + idx,
+          orderItem: {
+            nameSnapshot: it.nameSnapshot,
+            quantity: it.quantity,
+            kitchenNote: it.kitchenNote || null,
+            modifiers: (it.modifiers || []).map((m) => ({ nameSnapshot: m.name || m.nameSnapshot || "Extra" })),
+          },
+        })),
+      };
+      demoTickets.push(newTicket);
+
       return send({ ok: true, order });
     }
     return send({ ok: true });
@@ -2239,51 +2524,64 @@ const server = http.createServer((req, res) => {
     ]);
   }
 
+  if (pathname.includes("/departments")) {
+    return send(demoDepartments);
+  }
+
   if (pathname.includes("/staff") || pathname.includes("/users")) {
-    return send([
-      {
-        id: "u-admin",
-        name: "Restaurant Owner",
-        email: "owner@hotelsanjog.com",
-        phone: "+91 98765 43210",
-        isActive: true,
-        createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
-        roleId: "role-admin",
-        role: { id: "role-admin", name: "ADMIN", label: "Owner / Administrator" },
-        branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
-        departmentId: "dept-mgmt",
-        department: { id: "dept-mgmt", name: "Management" },
-        permissionOverrides: [],
-      },
-      {
-        id: "u-cashier",
-        name: "Rahul Sharma (Cashier)",
-        email: "cashier@hotelsanjog.com",
-        phone: "+91 98123 45678",
-        isActive: true,
-        createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-        roleId: "role-cashier",
-        role: { id: "role-cashier", name: "CASHIER", label: "Lead Cashier" },
-        branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
-        departmentId: "dept-front",
-        department: { id: "dept-front", name: "Front of House" },
-        permissionOverrides: [],
-      },
-      {
-        id: "u-chef",
-        name: "Chef Sanjeev",
-        email: "chef@hotelsanjog.com",
-        phone: "+91 98234 56789",
-        isActive: true,
-        createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
-        roleId: "role-chef",
-        role: { id: "role-chef", name: "CHEF", label: "Head Chef" },
-        branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
-        departmentId: "dept-kitchen",
-        department: { id: "dept-kitchen", name: "Kitchen" },
-        permissionOverrides: [],
-      },
-    ]);
+    if (req.method === "GET") {
+      return send(demoStaff);
+    }
+    if (req.method === "POST" && pathname.includes("/permission-overrides")) {
+      return getBody().then((b) => {
+        const parts = pathname.split("/");
+        const id = parts[parts.indexOf("staff") + 1];
+        const staff = demoStaff.find((s) => s.id === id);
+        if (staff) {
+          staff.permissionOverrides = b.overrides || [];
+        }
+        return send({ success: true, member: staff });
+      });
+    }
+    if (req.method === "POST") {
+      return getBody().then((b) => {
+        const newMember = {
+          id: `u-${Date.now()}`,
+          name: b.name || "New Staff",
+          email: b.email || `staff${Date.now()}@hotelsanjog.com`,
+          phone: b.phone || "+91 90000 00000",
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          roleId: b.roleId || "role-cashier",
+          role: { id: b.roleId || "role-cashier", name: "CASHIER", label: "Cashier" },
+          branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+          departmentId: b.departmentId || "dept-front",
+          department: demoDepartments.find((d) => d.id === b.departmentId) || { id: "dept-front", name: "Front of House" },
+          permissionOverrides: [],
+        };
+        demoStaff.unshift(newMember);
+        return send(newMember, 201);
+      });
+    }
+    if (req.method === "PATCH") {
+      const parts = pathname.split("/");
+      const id = parts[parts.indexOf("staff") + 1] || parts[parts.indexOf("users") + 1];
+      return getBody().then((b) => {
+        const member = demoStaff.find((s) => s.id === id);
+        if (member) {
+          Object.assign(member, b);
+          return send(member);
+        }
+        return send({ success: true });
+      });
+    }
+    if (req.method === "DELETE") {
+      const parts = pathname.split("/");
+      const id = parts[parts.indexOf("staff") + 1] || parts[parts.indexOf("users") + 1];
+      demoStaff = demoStaff.filter((s) => s.id !== id);
+      return send({ success: true });
+    }
+    return send(demoStaff);
   }
 
   if (pathname.includes("/attendance")) {

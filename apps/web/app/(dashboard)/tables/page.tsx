@@ -7,6 +7,7 @@ import { EditableTableTile } from "@/components/tables/editable-table-tile";
 import { RenameFloorDialog } from "@/components/tables/rename-floor-dialog";
 import { TableEditorDialog } from "@/components/tables/table-editor-dialog";
 import { TableTile } from "@/components/tables/table-tile";
+import { ModernTableGrid } from "@/components/tables/modern-table-grid";
 import { WaitlistPanel } from "@/components/tables/waitlist-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -143,7 +144,15 @@ export default function TablesPage() {
               )}
             </div>
 
-            <Card ref={cardRef} className="overflow-auto p-3 sm:p-6">
+            {!editMode ? (
+              <ModernTableGrid
+                tables={activeFloor?.tables ?? allTables}
+                branchId={branchId}
+                onRefresh={() => void floorsQuery.refetch()}
+              />
+            ) : (
+              <>
+                <Card ref={cardRef} className="overflow-auto p-3 sm:p-6">
               <div
                 className="relative"
                 style={
@@ -194,6 +203,8 @@ export default function TablesPage() {
               <Legend color="bg-warning" label="Reserved" />
               <Legend color="bg-muted-foreground" label="Cleaning / out of service" />
             </div>
+              </>
+            )}
           </div>
 
           <WaitlistPanel branchId={branchId} availableTables={availableTables} />

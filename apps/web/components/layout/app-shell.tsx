@@ -2,7 +2,7 @@
 
 import type { SessionUser } from "@easydine/types";
 import { Menu } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EntityDialogHost } from "@/components/layout/entity-dialog-host";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -27,28 +27,45 @@ function RestaurantBrand() {
   const { data } = useDisplaySettings(branchId);
   const restaurant = data?.restaurant;
 
-  if (restaurant?.logoUrl) {
-    return (
-      <>
-        {/* eslint-disable-next-line @next/next/no-img-element -- uploaded asset served from the backend, not a Next-optimizable remote source */}
-        <img
-          src={restaurant.logoUrl}
-          alt={restaurant.name}
-          className="h-8 w-8 shrink-0 rounded-lg object-contain"
-        />
-        <span className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
-          {restaurant.name}
-        </span>
-      </>
-    );
-  }
+  // Support localStorage-persisted custom logo (uploaded from Settings)
+  const [localLogo, setLocalLogo] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("easydine_custom_logo");
+      if (stored) setLocalLogo(stored);
+    } catch {}
+    const handler = () => {
+      try {
+        const stored = localStorage.getItem("easydine_custom_logo");
+        setLocalLogo(stored);
+      } catch {}
+    };
+    window.addEventListener("easydine_logo_updated", handler);
+    return () => window.removeEventListener("easydine_logo_updated", handler);
+  }, []);
+
+  const logoSrc = localLogo || restaurant?.logoUrl || "/custom-logo.png";
+  const brandName = restaurant?.name ?? "Hotel Sanjog";
 
   return (
     <>
-      <Logo />
-      <span className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
-        {restaurant?.name ?? "EasyDine"}
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- uploaded asset served from the backend */}
+      <img
+        src={logoSrc}
+        alt={brandName}
+        className="h-8 w-8 shrink-0 rounded-lg object-contain"
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = "none";
+        }}
+      />
+      <div className="flex flex-col truncate">
+        <span className="truncate text-sm font-bold tracking-tight text-sidebar-foreground">
+          {brandName}
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-500">
+          CASHIER POS
+        </span>
+      </div>
     </>
   );
 }

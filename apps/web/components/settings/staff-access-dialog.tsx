@@ -45,19 +45,35 @@ export function StaffAccessDialog({ member }: { member: StaffMember }) {
 
   const initial = useMemo(() => {
     const m: Record<string, Choice> = {};
-    for (const o of (member.permissionOverrides || [])) { const k = o?.permission?.key || o?.key; if (k && o?.effect) m[k] = o.effect; }
+    const overrides = Array.isArray(member?.permissionOverrides) ? member.permissionOverrides : [];
+    for (const o of overrides) {
+      const k = o?.permission?.key || (o as any)?.key;
+      if (k && o?.effect) m[k] = o.effect;
+    }
     return m;
-  }, [member.permissionOverrides]);
+  }, [member?.permissionOverrides]);
 
   const [choices, setChoices] = useState<Record<string, Choice>>(initial);
-  const [until, setUntil] = useState(() => member.permissionOverrides.find((o) => o.expiresAt)?.expiresAt?.slice(0, 10) ?? "");
-  const [reason, setReason] = useState(() => member.permissionOverrides.find((o) => o.reason)?.reason ?? "");
+  const [until, setUntil] = useState(() => {
+    const overrides = Array.isArray(member?.permissionOverrides) ? member.permissionOverrides : [];
+    return overrides.find((o) => o?.expiresAt)?.expiresAt?.slice(0, 10) ?? "";
+  });
+  const [reason, setReason] = useState(() => {
+    const overrides = Array.isArray(member?.permissionOverrides) ? member.permissionOverrides : [];
+    return overrides.find((o) => o?.reason)?.reason ?? "";
+  });
 
-  const roleKeys = useMemo(
-    () => new Set(roles?.find((r) => r.id === member.roleId)?.permissions?.map((p) => p?.permission?.key || (typeof p === "string" ? p : p?.key)).filter(Boolean) ?? []),
-    [roles, member.roleId],
-  );
-  const myKeys = useMemo(() => new Set(me?.user.permissions ?? []), [me]);
+  const roleKeys = useMemo(() => {
+    const role = roles?.find((r) => r.id === member?.roleId);
+    if (!role || !Array.isArray(role.permissions)) return new Set<string>();
+    return new Set(
+      role.permissions
+        .map((p: any) => p?.permission?.key || (typeof p === "string" ? p : p?.key))
+        .filter(Boolean) as string[],
+    );
+  }, [roles, member?.roleId]);
+
+  const myKeys = useMemo(() => new Set(me?.user?.permissions ?? []), [me]);
 
   const groups = useMemo(() => {
     const map = new Map<string, (typeof PERMISSIONS)[number][]>();
@@ -66,7 +82,7 @@ export function StaffAccessDialog({ member }: { member: StaffMember }) {
   }, []);
 
   const changed = Object.entries(choices).filter(([, v]) => v !== "DEFAULT");
-  const isOwner = member.role?.name === "OWNER" || member.role?.name === "ADMIN";
+  const isOwner = member?.role?.name === "OWNER" || member?.role?.name === "ADMIN";
 
   const onOpenChange = (next: boolean) => {
     if (next) setChoices(initial);
@@ -99,104 +115,157 @@ export function StaffAccessDialog({ member }: { member: StaffMember }) {
     );
   };
 
-  const count = member.permissionOverrides.length;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
-          <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" aria-label={`Access exceptions for ${member.name}`}>
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-            <span className="hidden sm:inline">Access</span>
-            {count > 0 && <span className="tabular-nums">{count}</span>}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+            title="Edit access overrides"
+          >
+            <ShieldCheck className="mr-1 h-3.5 w-3.5 text-primary" />
+            Access
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Access for {member.name}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span>Access overrides</span>
+            <Badge variant="outline" className="text-xs font-normal">
+              {member.name}
+            </Badge>
+          </DialogTitle>
           <DialogDescription>
-            Starts from the <strong>{member.role.label}</strong> role. Allow or block single permissions for this person only.
-            Block always wins.
+            Grant or deny specific permissions on top of {member.name}&apos;s role (
+            <strong>{member.role?.label ?? member.role?.name ?? "Staff"}</strong>). Leave at
+            &ldquo;Role&rdquo; to inherit.
           </DialogDescription>
         </DialogHeader>
 
-        {isOwner ? (
-          <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-            The owner always has full access, so exceptions are not available.
+        {isOwner && (
+          <p className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            {member.name} has the <strong>{member.role?.name}</strong> role which grants full system
+            access by default. Overrides are rarely needed.
           </p>
-        ) : (
-          <>
-            <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-border">
-              {groups.map(([category, perms]) => (
-                <section key={category} aria-label={category}>
-                  <h3 className="sticky top-0 z-10 border-b border-border bg-card px-3 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                    {category}
-                  </h3>
-                  {perms.map((p) => {
-                    const value = choices[p.key] ?? "DEFAULT";
-                    const inRole = roleKeys.has(p.key);
-                    const cannotGrant = !myKeys.has(p.key);
-                    return (
-                      <div key={p.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2 last:border-b-0">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-foreground">{p.label}</p>
-                          <p className="text-xs text-muted-foreground">{inRole ? "Included in role" : "Not in role"}</p>
-                        </div>
-                        <div role="radiogroup" aria-label={p.label} className="inline-flex rounded-lg border border-border p-0.5">
-                          {CHOICES.map((c) => {
-                            const disabled = c.value === "GRANT" && cannotGrant;
-                            const active = value === c.value;
-                            return (
-                              <button
-                                key={c.value}
-                                type="button"
-                                role="radio"
-                                aria-checked={active}
-                                disabled={disabled}
-                                title={disabled ? "You can only allow permissions you have yourself" : undefined}
-                                onClick={() => setChoices((prev) => ({ ...prev, [p.key]: c.value }))}
-                                className={cn(
-                                  "min-h-8 min-w-14 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40",
-                                  active && c.value === "DEFAULT" && "bg-muted text-foreground",
-                                  active && c.value === "GRANT" && "bg-success/15 text-success",
-                                  active && c.value === "DENY" && "bg-destructive/15 text-destructive",
-                                  !active && "text-muted-foreground hover:text-foreground",
-                                )}
-                              >
-                                {c.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </section>
-              ))}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="ov-until">Exceptions end on (optional)</Label>
-                <Input id="ov-until" type="date" min={tomorrow()} value={until} onChange={(e) => setUntil(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="ov-reason">Reason (optional)</Label>
-                <Input id="ov-reason" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. covering for the manager" />
-              </div>
-            </div>
-
-            <DialogFooter className="items-center sm:justify-between">
-              <Badge variant="secondary" className="font-normal">
-                {changed.length === 0 ? "No exceptions" : `${changed.length} exception${changed.length === 1 ? "" : "s"}`}
-              </Badge>
-              <Button onClick={onSave} disabled={save.isPending}>
-                {save.isPending ? "Saving…" : "Save access"}
-              </Button>
-            </DialogFooter>
-          </>
         )}
+
+        <div className="flex flex-col gap-5 py-2">
+          {groups.map(([category, perms]) => (
+            <div key={category} className="flex flex-col gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {category}
+              </h3>
+              <div className="divide-y divide-border rounded-lg border border-border">
+                {perms.map((p) => {
+                  const roleHas = roleKeys.has(p.key);
+                  const current = choices[p.key] ?? "DEFAULT";
+                  const canGrant = myKeys.has("*") || myKeys.has(p.key);
+
+                  return (
+                    <div
+                      key={p.key}
+                      className="flex items-center justify-between gap-3 p-3 text-xs"
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium text-foreground">{p.label}</span>
+                        {"description" in p && <span className="text-muted-foreground">{(p as any).description}</span>}
+                        <span className="text-[10px] text-muted-foreground/75">
+                          Role default:{" "}
+                          <strong className={roleHas ? "text-primary" : "text-muted-foreground"}>
+                            {roleHas ? "Allowed" : "Not allowed"}
+                          </strong>
+                        </span>
+                      </div>
+
+                      <div className="flex shrink-0 items-center rounded-lg border border-border bg-muted/40 p-0.5">
+                        {CHOICES.map((c) => {
+                          const disabled = c.value === "GRANT" && !canGrant;
+                          return (
+                            <button
+                              key={c.value}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() =>
+                                setChoices((prev) => ({
+                                  ...prev,
+                                  [p.key]: c.value,
+                                }))
+                              }
+                              className={cn(
+                                "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
+                                current === c.value
+                                  ? c.value === "GRANT"
+                                    ? "bg-primary text-primary-foreground shadow-sm"
+                                    : c.value === "DENY"
+                                    ? "bg-destructive text-destructive-foreground shadow-sm"
+                                    : "bg-background text-foreground shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground",
+                                disabled && "cursor-not-allowed opacity-40",
+                              )}
+                            >
+                              {c.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {changed.length > 0 && (
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-4">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Override details
+              </span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="until-date" className="text-xs">
+                    Temporary until (optional)
+                  </Label>
+                  <Input
+                    id="until-date"
+                    type="date"
+                    min={tomorrow()}
+                    value={until}
+                    onChange={(e) => setUntil(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Leave blank to keep overrides active indefinitely.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="reason-input" className="text-xs">
+                    Reason / audit note
+                  </Label>
+                  <Input
+                    id="reason-input"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="e.g. Covering supervisor shift"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" disabled={save.isPending} onClick={onSave}>
+            {save.isPending ? "Saving..." : "Save overrides"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

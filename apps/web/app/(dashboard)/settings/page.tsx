@@ -294,8 +294,26 @@ function GeneralSettingsForm({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const dataUrl = ev.target?.result;
+                    if (dataUrl && typeof dataUrl === "string") {
+                      try {
+                        localStorage.setItem("easydine_custom_logo", dataUrl);
+                        window.dispatchEvent(new Event("easydine_logo_updated"));
+                      } catch {}
+                      setLogoUrl(dataUrl);
+                    }
+                  };
+                  reader.readAsDataURL(file);
                   uploadLogo.mutate(file, {
-                    onSuccess: (res) => setLogoUrl(res.url),
+                    onSuccess: (res) => {
+                      setLogoUrl(res.url);
+                      try {
+                        localStorage.setItem("easydine_custom_logo", res.url);
+                        window.dispatchEvent(new Event("easydine_logo_updated"));
+                      } catch {}
+                    },
                     onError: (err) =>
                       toast.error(err instanceof ApiError ? err.message : "Could not upload logo"),
                   });
@@ -309,6 +327,10 @@ function GeneralSettingsForm({
                     type="button"
                     onClick={() => {
                       setLogoUrl(null);
+                      try {
+                        localStorage.removeItem("easydine_custom_logo");
+                        window.dispatchEvent(new Event("easydine_logo_updated"));
+                      } catch {}
                       if (logoInputRef.current) logoInputRef.current.value = "";
                     }}
                     className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground"
