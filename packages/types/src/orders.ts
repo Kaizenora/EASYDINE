@@ -115,10 +115,18 @@ export type AddOrderItemsDto = z.infer<typeof addOrderItemsSchema>;
 // Guest self-order from a table's QR code — no account, so a name is the
 // only way staff can tell whose order this is (shown on KDS/order lists).
 export const publicOrderSchema = z.object({
-  guestName: z.string().trim().min(1, "Please enter your name").max(60),
+  guestName: z.string().trim().max(60).optional().default("Guest"),
+  guestPhone: z.string().trim().max(25).optional(),
+  requestId: z.string().optional(),
   items: z.array(cartItemSchema).min(1),
 });
 export type PublicOrderDto = z.infer<typeof publicOrderSchema>;
+
+export const publicCheckInSchema = z.object({
+  guestName: z.string().trim().max(60).optional(),
+  phone: z.string().trim().max(25).optional(),
+});
+export type PublicCheckInDto = z.infer<typeof publicCheckInSchema>;
 
 // Self-service kiosk order. No name or any other personal data is collected.
 // requestId is a client-generated idempotency key: the kiosk keeps the same

@@ -8,6 +8,7 @@ import type {
   PayrollLineAdjustDto,
   PayrollPayDto,
   ShiftDto,
+  ShiftUpdateDto,
   StaffPayDto,
 } from '@easydine/types';
 import { localDate, zonedRange } from '../../common/time';
@@ -93,6 +94,63 @@ export class HrService {
     return this.prisma.shift.create({
       data: { branchId, userId: dto.userId, startsAt, endsAt, note: dto.note },
       include: { user: USER },
+    });
+  }
+
+  async updateShift(branchId: string, id: string, dto: ShiftUpdateDto) {
+    const existing = await this.prisma.shift.findFirst({
+      where: { id, branchId },
+    });
+    if (!existing) throw new NotFoundException('Shift not found');
+
+    const userId = dto.userId ?? existing.userId;
+    await this.assertStaffInBranch(branchId, userId);
+
+    const startsAt = dto.startsAt ? new Date(dto.startsAt) : existing.startsAt;
+    const endsAt = dto.endsAt ? new Date(dto.endsAt) : existing.endsAt;
+
+    if (endsAt <= startsAt) {
+      throw new BadRequestException('A shift must end after it starts');
+    }
+
+    const clash = await this.prisma.shift.findFirst({
+      where: {
+        id: { not: id },
+        userId,
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+    });
+    if (clash) {
+      throw new BadRequestException(
+        'That person already has a shift at this time',
+      );
+    }
+
+    const tz = await this.time.tzForBranch(branchId);
+    const onLeave = await this.prisma.leaveRequest.findFirst({
+      where: {
+        userId,
+        status: 'APPROVED',
+        startDate: { lte: dayStart(localDate(endsAt, tz)) },
+        endDate: { gte: dayStart(localDate(startsAt, tz)) },
+      },
+    });
+    if (onLeave) {
+      throw new BadRequestException(
+        'That person is on approved leave during this shift',
+      );
+    }
+
+    return this.prisma.shift.update({
+      where: { id },
+      data: {
+        userId,
+        startsAt,
+        endsAt,
+        ...(dto.note !== undefined ? { note: dto.note } : {}),
+      },
+      include: { user: { select: { id: true, name: true, role: true } } },
     });
   }
 

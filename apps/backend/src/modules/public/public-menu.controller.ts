@@ -2,8 +2,11 @@ import { Body, Controller, Get, Param, Post, UsePipes } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
+  publicCheckInSchema,
   publicOrderSchema,
   publicRequestSchema,
+  type PublicCheckInDto,
+  type PublicOrderDto,
 } from '@easydine/types';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PublicMenuService } from './public-menu.service';
@@ -22,15 +25,27 @@ export class PublicMenuController {
     return this.publicMenuService.getMenuByQrToken(qrToken);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('menu/:qrToken/check-in')
+  @UsePipes(new ZodValidationPipe(publicCheckInSchema))
+  checkIn(@Param('qrToken') qrToken: string, @Body() body: PublicCheckInDto) {
+    return this.publicMenuService.checkIn(qrToken, body.guestName, body.phone);
+  }
+
   // Tighter than the app-wide default (300/min) — this is unauthenticated
   // and directly creates kitchen tickets, so it's a more attractive abuse
   // target than an authenticated staff endpoint.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('menu/:qrToken/order')
   @UsePipes(new ZodValidationPipe(publicOrderSchema))
-  createOrder(@Param('qrToken') qrToken: string, @Body() body: unknown) {
-    const { items, guestName } = body as { items: never; guestName: string };
-    return this.publicMenuService.createOrder(qrToken, items, guestName);
+  createOrder(@Param('qrToken') qrToken: string, @Body() body: PublicOrderDto) {
+    return this.publicMenuService.createOrder(
+      qrToken,
+      body.items as never,
+      body.guestName,
+      body.guestPhone,
+      body.requestId,
+    );
   }
 
   @Get('menu/:qrToken/status')

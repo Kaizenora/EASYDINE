@@ -48,7 +48,7 @@ const json = async (m, p, b) => { const t = await docker(m, p, b); return t ? JS
 const enc = encodeURIComponent;
 
 function splitImage(ref) {
-  // "ghcr.io/raktim94/easy-dine-pos-backend:1.4.0" -> repo + tag (a registry port
+  // "ghcr.io/kaizenora/easydine-backend:1.4.0" -> repo + tag (a registry port
   // colon is before the last slash, so only a colon after it is a tag).
   const slash = ref.lastIndexOf('/');
   const colon = ref.indexOf(':', slash + 1);

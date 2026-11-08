@@ -21,7 +21,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatOrderNumber } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -125,7 +125,7 @@ export default function LuxuryCustomerMenu({
   // Customer identity: Name + Contact (per user demand)
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [nameDraft, setNameDraft] = useState("Sid");
+  const [nameDraft, setNameDraft] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
 
   // Cart & Placed status
@@ -523,7 +523,7 @@ export default function LuxuryCustomerMenu({
         <div>
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-black tracking-tight text-white">
-              Order #{activeOrder.orderNumber || "24"}
+              Order {formatOrderNumber(activeOrder.orderNumber || "24")}
             </h1>
             <button
               onClick={() => setViewMode("MENU")}

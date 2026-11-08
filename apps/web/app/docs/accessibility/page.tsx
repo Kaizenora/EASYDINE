@@ -92,7 +92,7 @@ export default function AccessibilityPage() {
           If you encounter an accessibility barrier anywhere in this product,
           please open an issue on{" "}
           <a
-            href="https://github.com/Raktim94/easy-dine-pos/issues"
+            href="https://github.com/Kaizenora/EASYDINE/issues"
             className="text-primary underline underline-offset-4"
           >
             GitHub

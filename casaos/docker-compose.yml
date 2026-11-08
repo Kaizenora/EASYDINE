@@ -23,7 +23,7 @@ services:
       - easy-dine-pos
 
   backend:
-    image: ghcr.io/raktim94/easy-dine-pos-backend:1.22.1
+    image: ghcr.io/kaizenora/easydine-backend:1.22.1
     container_name: easy-dine-pos-backend
     hostname: easy-dine-pos-backend
     restart: unless-stopped
@@ -85,7 +85,7 @@ services:
             en_US: Auto-generated login security key. Created automatically on first launch — leave it alone.
 
   web:
-    image: ghcr.io/raktim94/easy-dine-pos-web:1.22.1
+    image: ghcr.io/kaizenora/easydine-web:1.22.1
     container_name: easy-dine-pos-web
     hostname: easy-dine-pos-web
     restart: unless-stopped
@@ -110,7 +110,7 @@ services:
   # image is generic (it only manages the containers named below), so the
   # one published for NodeDR POS is reused.
   updater:
-    image: ghcr.io/raktim94/easydine-pos-updater:1.5.1
+    image: ghcr.io/kaizenora/easydine-pos-updater:1.5.1
     container_name: easy-dine-pos-updater
     hostname: easy-dine-pos-updater
     restart: unless-stopped
@@ -140,12 +140,12 @@ x-casaos:
   author: EasyDine Infotech Private Limited
   developer: Raktim94
   category: Finance
-  icon: https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/icon.png
-  thumbnail: https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/thumbnail.png
+  icon: https://cdn.jsdelivr.net/gh/Kaizenora/EASYDINE@master/casaos/icon.png
+  thumbnail: https://cdn.jsdelivr.net/gh/Kaizenora/EASYDINE@master/casaos/thumbnail.png
   screenshot_link:
-    - https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/screenshot-1.png
-    - https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/screenshot-2.png
-    - https://cdn.jsdelivr.net/gh/Raktim94/easy-dine-pos@master/casaos/screenshot-3.png
+    - https://cdn.jsdelivr.net/gh/Kaizenora/EASYDINE@master/casaos/screenshot-1.png
+    - https://cdn.jsdelivr.net/gh/Kaizenora/EASYDINE@master/casaos/screenshot-2.png
+    - https://cdn.jsdelivr.net/gh/Kaizenora/EASYDINE@master/casaos/screenshot-3.png
   title:
     en_US: Easy Dine
   tagline:
@@ -317,6 +317,6 @@ x-casaos:
       management with QR ordering, reservations, inventory, customer
       loyalty/CRM, and billing.
   website: "https://easydine.easydine.com/"
-  repo: "https://github.com/Raktim94/easy-dine-pos"
+  repo: "https://github.com/Kaizenora/EASYDINE"
   support: "https://easydine.easydine.com/contact"
-  docs: "https://github.com/Raktim94/easy-dine-pos#readme"
+  docs: "https://github.com/Kaizenora/EASYDINE#readme"

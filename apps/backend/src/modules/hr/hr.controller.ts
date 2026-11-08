@@ -18,6 +18,7 @@ import {
   payrollPaySchema,
   payrollRunSchema,
   shiftSchema,
+  shiftUpdateSchema,
   staffPaySchema,
   type LeaveRequestDto,
   type PayrollLineAdjustDto,
@@ -25,6 +26,7 @@ import {
   type PayrollRunDto,
   type SessionUser,
   type ShiftDto,
+  type ShiftUpdateDto,
   type StaffPayDto,
 } from '@easydine/types';
 import { Auth } from '../../common/decorators/auth.decorator';

@@ -92,7 +92,19 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   // Settle table mutation
   const settleMutation = useMutation({
     mutationFn: ({ tableId, method }: { tableId: string; method: "CASH" | "UPI" | "CARD" }) =>
-      api.post<{ success: boolean; billNumber?: string }>(`/tables/${tableId}/settle`, { method }),
+      api.post<{
+        success: boolean;
+        billNumber?: string;
+        orderNumber?: string;
+        subtotal?: string;
+        tax?: string;
+        totalAmount?: string;
+        customerName?: string;
+        tableName?: string;
+        tableNumber?: string;
+        date?: string;
+        paymentMethod?: "CASH" | "UPI" | "CARD";
+      }>(`/tables/${tableId}/settle`, { method }),
     onSuccess: (res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -100,16 +112,16 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
 
       if (selectedTable) {
-        const total = (selectedTable as any).totalAmount || "620.00";
-        const sub = (parseFloat(total) * 0.95).toFixed(2);
-        const tax = (parseFloat(total) * 0.05).toFixed(2);
+        const total = res?.totalAmount || (selectedTable as any).totalAmount || "0.00";
+        const sub = res?.subtotal || (parseFloat(total) * 0.95).toFixed(2);
+        const tax = res?.tax || (parseFloat(total) * 0.05).toFixed(2);
         const receipt: SettleReceipt = {
-          billNumber: res?.billNumber || `INV-${Date.now().toString().slice(-5)}`,
-          tableNumber: String(selectedTable.number),
-          tableName: selectedTable.name || `Table ${selectedTable.number}`,
-          customerName: selectedTable.customerName || (selectedTable as any).guestName || "Guest",
-          paymentMethod: vars.method,
-          date: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          billNumber: res?.billNumber || res?.orderNumber || `INV-${Date.now().toString().slice(-5)}`,
+          tableNumber: res?.tableNumber || String(selectedTable.number),
+          tableName: res?.tableName || selectedTable.name || `Table ${selectedTable.number}`,
+          customerName: res?.customerName || selectedTable.customerName || (selectedTable as any).guestName || "Guest",
+          paymentMethod: res?.paymentMethod || vars.method,
+          date: res?.date || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           subtotal: sub,
           tax,
           totalAmount: total,

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { forwardRef, Inject } from '@nestjs/common';
 import {
   BadRequestException,
   ConflictException,
@@ -16,12 +17,15 @@ import type {
 } from '@easydine/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
+import { OrdersService } from '../orders/orders.service';
 
 @Injectable()
 export class TablesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    @Inject(forwardRef(() => OrdersService))
+    private readonly ordersService: OrdersService,
   ) {}
 
   listFloors(branchId: string) {
@@ -211,4 +215,111 @@ export class TablesService {
     this.realtime.emitToBranch(branchId, 'table.request', { id });
     return updated;
   }
+
+  async settleTable(
+    branchId: string,
+    tableId: string,
+    userId: string,
+    method: 'CASH' | 'UPI' | 'CARD' | 'OTHER' = 'CASH',
+  ) {
+    await this.assertTableInBranch(branchId, tableId);
+    const table = await this.prisma.table.findUniqueOrThrow({
+      where: { id: tableId },
+    });
+
+    const order = await this.prisma.order.findFirst({
+      where: { tableId, branchId, status: 'OPEN' },
+      include: { items: true, customer: true, payments: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let checkoutResult: any = null;
+    let customerName = order?.customer?.name || order?.guestName || 'Guest';
+
+    if (order) {
+      if (!order.customerId && (order.guestName || order.deliveryPhone)) {
+        try {
+          let customer: any = null;
+          if (order.deliveryPhone) {
+            customer = await this.prisma.customer.findFirst({
+              where: { branchId, phone: order.deliveryPhone },
+            });
+          }
+          if (!customer) {
+            customer = await this.prisma.customer.create({
+              data: {
+                branchId,
+                name: order.guestName || 'Guest',
+                phone: order.deliveryPhone || null,
+              },
+            });
+          }
+          if (customer) {
+            await this.prisma.order.update({
+              where: { id: order.id },
+              data: { customerId: customer.id },
+            });
+            customerName = customer.name || customerName;
+          }
+        } catch {
+          // ignore customer auto-creation error
+        }
+      }
+
+      const preview = await this.ordersService.previewBill(branchId, order.id, {});
+      checkoutResult = await this.ordersService.checkout(
+        branchId,
+        order.id,
+        userId,
+        {
+          payments: [
+            {
+              method: method as any,
+              amount: preview.totalDue,
+            },
+          ],
+        },
+      );
+    }
+
+    await this.prisma.tableRequest.updateMany({
+      where: { tableId, resolvedAt: null },
+      data: {
+        resolvedAt: new Date(),
+      },
+    });
+
+    const updatedTable = await this.prisma.table.update({
+      where: { id: tableId },
+      data: {
+        status: 'AVAILABLE',
+        statusSince: new Date(),
+      },
+    });
+
+    this.realtime.emitToBranch(branchId, 'table.updated', updatedTable);
+    this.realtime.emitToBranch(branchId, 'table.requests.updated', { tableId });
+
+    const billNumber = order?.orderNumber || `BILL-${Date.now().toString().slice(-6)}`;
+    const subtotal = checkoutResult?.subtotal !== undefined ? Number(checkoutResult.subtotal).toFixed(2) : '0.00';
+    const tax = checkoutResult?.taxAmount !== undefined ? Number(checkoutResult.taxAmount).toFixed(2) : '0.00';
+    const totalAmount = checkoutResult?.totalAmount !== undefined ? Number(checkoutResult.totalAmount).toFixed(2) : '0.00';
+
+    return {
+      success: true,
+      ok: true,
+      tableId,
+      tableNumber: String(table.number),
+      tableName: table.name || `Table ${table.number}`,
+      billNumber,
+      orderNumber: order?.orderNumber ?? null,
+      customerName,
+      paymentMethod: method,
+      subtotal,
+      tax,
+      totalAmount,
+      date: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
 }

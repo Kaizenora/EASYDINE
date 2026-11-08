@@ -129,7 +129,7 @@ export default function ComplianceIndiaPage() {
           For questions about this software&rsquo;s architecture or
           security posture, open an issue on{" "}
           <a
-            href="https://github.com/Raktim94/easy-dine-pos/issues"
+            href="https://github.com/Kaizenora/EASYDINE/issues"
             className="text-primary underline underline-offset-4"
           >
             GitHub

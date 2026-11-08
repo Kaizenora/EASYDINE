@@ -15,6 +15,27 @@ export const shiftSchema = z
   });
 export type ShiftDto = z.infer<typeof shiftSchema>;
 
+export const shiftUpdateSchema = z
+  .object({
+    userId: z.string().min(1).optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().optional(),
+    note: z.string().max(200).optional().nullable(),
+  })
+  .refine(
+    (v) => {
+      if (v.startsAt && v.endsAt) {
+        return new Date(v.endsAt) > new Date(v.startsAt);
+      }
+      return true;
+    },
+    {
+      message: "A shift must end after it starts",
+      path: ["endsAt"],
+    },
+  );
+export type ShiftUpdateDto = z.infer<typeof shiftUpdateSchema>;
+
 export const leaveTypeSchema = z.enum(["ANNUAL", "SICK", "UNPAID", "OTHER"]);
 export const leaveRequestSchema = z
   .object({

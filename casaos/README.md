@@ -21,7 +21,7 @@ don't need to wait for this to land in the official app store:
 2. Paste this URL (or the raw file contents):
 
    ```
-   https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/casaos/docker-compose.yml
+   https://raw.githubusercontent.com/Kaizenora/EASYDINE/master/casaos/docker-compose.yml
    ```
 
 3. **Before starting the app**, change the two placeholder secrets in the
@@ -30,7 +30,7 @@ don't need to wait for this to land in the official app store:
    `POSTGRES_PASSWORD` and the `backend` service's `DATABASE_URL`). Leaving
    the shipped placeholders is not safe beyond a quick local trial.
 4. Install. CasaOS pulls the pre-built
-   `ghcr.io/raktim94/easy-dine-pos-backend` and `...-web` images —
+   `ghcr.io/kaizenora/easydine-backend` and `...-web` images —
    there is no build step, so it works even though CasaOS never touches
    this repo's source.
 5. Open it from the CasaOS dashboard, or go straight to
@@ -74,8 +74,8 @@ not `:latest`, tags). To publish a new version:
    `secrets.GITHUB_TOKEN` — no manually-created registry credential needed,
    same as sibling project easydine-pos.
 3. Confirm both new tags exist at
-   `ghcr.io/raktim94/easy-dine-pos-backend` and
-   `ghcr.io/raktim94/easy-dine-pos-web` before updating this file —
+   `ghcr.io/kaizenora/easydine-backend` and
+   `ghcr.io/kaizenora/easydine-web` before updating this file —
    CasaOS installs will fail outright if the pinned tag doesn't exist yet.
 4. **First publish only:** GHCR packages default to private even when
    pushed from a public repo — a CasaOS install on someone else's box would

@@ -8,7 +8,7 @@ import { downloadHref, totalDownloads } from "@/lib/downloads";
 import { useDownloadStats } from "@/hooks/use-download-stats";
 
 const INSTALL_COMMAND =
-  "git clone https://github.com/Raktim94/easy-dine-pos.git && cd easy-dine-pos && ./install.sh";
+  "git clone https://github.com/Kaizenora/EASYDINE.git && cd EASYDINE && ./install.sh";
 
 const channels = [
   {

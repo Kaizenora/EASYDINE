@@ -27,6 +27,8 @@ import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { ManagedOrder } from "@/hooks/use-orders";
+import { ReasonDialog } from "@/components/orders/reason-dialog";
+import { formatOrderNumber } from "@/lib/format";
 
 interface MasterDetailOrdersProps {
   branchId: string | null;
@@ -46,6 +48,7 @@ export function MasterDetailOrders({
 
   // Tab: Incoming Queue vs Active vs History
   const [activeTab, setActiveTab] = useState<"QUEUE" | "IN_PROGRESS" | "HISTORY">("QUEUE");
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
 
   // Filter list by tab
   const queueOrders = useMemo(() => {
@@ -96,14 +99,21 @@ export function MasterDetailOrders({
 
   // Mutations for Accept & Reject
   const acceptOrder = useMutation({
-    mutationFn: (id: string) => api.post(`/orders/${id}/accept`),
-    onSuccess: (_, id) => {
+    mutationFn: (id: string) =>
+      api.post<{ printStatus?: "NO_PRINTER" | "PRINTED" | "FAILED"; printError?: string }>(`/orders/${id}/accept`),
+    onSuccess: (data) => {
       vibrateSuccess();
       playSuccessChime();
       queryClient.invalidateQueries({ queryKey: ["managed-orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success(`Order accepted! KOT dispatched to kitchen printer.`);
+      if (data?.printStatus === "PRINTED") {
+        toast.success("Order accepted · KOT printed");
+      } else if (data?.printStatus === "FAILED") {
+        toast.warning(`Order accepted · Printer offline (${data.printError || "KOT visible on kitchen display"})`);
+      } else {
+        toast.success("Order accepted · KOT sent to kitchen display");
+      }
       if (onRefresh) onRefresh();
     },
     onError: (err) => {
@@ -112,12 +122,16 @@ export function MasterDetailOrders({
   });
 
   const rejectOrder = useMutation({
-    mutationFn: (id: string) => api.post(`/orders/${id}/reject`),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.post(`/orders/${id}/reject`, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["managed-orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors"] });
       toast.info("Order rejected");
       if (onRefresh) onRefresh();
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : "Could not reject order");
     },
   });
 
@@ -267,7 +281,7 @@ export function MasterDetailOrders({
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-white">
-                      {selectedOrder.table?.name || `Table ${selectedOrder.table?.number || "12"}`} · Order #{selectedOrder.orderNumber}
+                      {selectedOrder.table?.name || `Table ${selectedOrder.table?.number || "12"}`} · Order {formatOrderNumber(selectedOrder.orderNumber)}
                     </h2>
                     <span className="rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-bold text-amber-400 border border-amber-500/30">
                       {selectedOrder.acceptance === "ACCEPTED" ? "ACCEPTED · COOKING" : "WAITING APPROVAL"}
@@ -359,15 +373,15 @@ export function MasterDetailOrders({
                 <Button
                   variant="outline"
                   className="h-12 rounded-xl border-neutral-800 bg-neutral-900 text-sm font-bold text-neutral-300 hover:bg-neutral-800 hover:text-white"
-                  disabled={rejectOrder.isPending}
-                  onClick={() => rejectOrder.mutate(selectedOrder.id)}
+                  disabled={rejectOrder.isPending || acceptOrder.isPending}
+                  onClick={() => setRejectDialogOpen(true)}
                 >
                   Reject
                 </Button>
 
                 <Button
                   className="h-12 rounded-xl bg-amber-500 text-sm font-black text-black hover:bg-amber-400"
-                  disabled={acceptOrder.isPending || selectedOrder.acceptance === "ACCEPTED"}
+                  disabled={acceptOrder.isPending || rejectOrder.isPending || selectedOrder.acceptance === "ACCEPTED"}
                   onClick={() => acceptOrder.mutate(selectedOrder.id)}
                 >
                   <Check className="mr-2 h-5 w-5 stroke-[3]" />
@@ -391,6 +405,27 @@ export function MasterDetailOrders({
           )}
         </div>
       </div>
+
+      {selectedOrder && (
+        <ReasonDialog
+          open={rejectDialogOpen}
+          onOpenChange={setRejectDialogOpen}
+          title={`Reject Order ${formatOrderNumber(selectedOrder.orderNumber)}?`}
+          description="Declining returns the table to its previous state. The guest will see the order was not accepted."
+          reasons={[
+            "Kitchen closing soon",
+            "Item out of stock",
+            "Table unavailable",
+            "Duplicate order",
+            "Guest requested cancellation",
+          ]}
+          confirmLabel="Reject order"
+          keepLabel="Keep order"
+          onSubmit={async (reason) => {
+            await rejectOrder.mutateAsync({ id: selectedOrder.id, reason });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -20,16 +20,20 @@ export function TableQrDialog({
 }) {
   const rotate = useRotateQrToken(branchId);
 
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+
   const orderUrl =
-    table.qrToken && typeof window !== "undefined"
-      ? `${window.location.origin}/order/${table.qrToken}`
+    table.qrToken && baseUrl
+      ? `${baseUrl}/order/${table.qrToken}`
       : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{table.name ?? `Table ${table.number}`} — QR code</DialogTitle>
+          <DialogTitle>{table.name ?? `Table ${table.number}`} · QR code</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col items-center gap-4 py-2">
@@ -44,7 +48,7 @@ export function TableQrDialog({
             </>
           ) : (
             <p className="py-8 text-sm text-muted-foreground">
-              No QR code yet — generate one below.
+              No QR code yet · generate one below.
             </p>
           )}
 
@@ -69,7 +73,7 @@ export function TableQrDialog({
           </div>
           {orderUrl && (
             <p className="text-center text-xs text-muted-foreground">
-              Generating a new code invalidates this one — reprint any table tents using it.
+              Generating a new code invalidates this one · reprint any table tents using it.
             </p>
           )}
         </div>

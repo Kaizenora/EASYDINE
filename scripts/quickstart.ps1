@@ -12,7 +12,7 @@
 # running inside WSL2.
 #
 # Usage (run in PowerShell):
-#   irm https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/scripts/quickstart.ps1 | iex
+#   irm https://raw.githubusercontent.com/Kaizenora/EASYDINE/master/scripts/quickstart.ps1 | iex
 #
 # Safe to re-run: every step only acts if the previous one didn't already
 # succeed, and an existing checkout inside WSL2 is updated in place rather
@@ -29,7 +29,7 @@ Set-Location $HOME
 
 $distroName = "Ubuntu"
 $repoDir = "easy-dine-pos"
-$linuxQuickstartUrl = "https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/scripts/quickstart.sh"
+$linuxQuickstartUrl = "https://raw.githubusercontent.com/Kaizenora/EASYDINE/master/scripts/quickstart.sh"
 
 # winget writes new PATH entries to the Machine/User registry values, but
 # this already-running PowerShell process keeps its own stale copy of

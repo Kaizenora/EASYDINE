@@ -719,11 +719,11 @@ function GeneralSettingsForm({
         you are using is available to every user of this service at{" "}
         <a
           className="underline"
-          href="https://github.com/Raktim94/easy-dine-pos"
+          href="https://github.com/Kaizenora/EASYDINE"
           target="_blank"
           rel="noopener noreferrer"
         >
-          github.com/Raktim94/easy-dine-pos
+          github.com/Kaizenora/EASYDINE
         </a>
         .
       </p>

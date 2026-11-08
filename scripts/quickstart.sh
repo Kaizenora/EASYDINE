@@ -9,14 +9,14 @@
 # installer (which generates a .env with random secrets on first run).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/scripts/quickstart.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Kaizenora/EASYDINE/master/scripts/quickstart.sh | bash
 #
 # Safe to re-run: every step only acts if the previous one didn't already
 # succeed, and an existing ./easy-dine-pos checkout is updated in
 # place rather than clobbered.
 set -euo pipefail
 
-REPO_URL="https://github.com/Raktim94/easy-dine-pos.git"
+REPO_URL="https://github.com/Kaizenora/EASYDINE.git"
 REPO_DIR="easy-dine-pos"
 SUDO=""
 

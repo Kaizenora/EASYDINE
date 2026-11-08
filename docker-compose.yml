@@ -30,7 +30,7 @@ services:
     # Same name CI publishes. `up --build` tags the local build with it, and
     # the in-app "Update now" button (see the `updater` service below) pulls
     # the published image of a newer version under it.
-    image: ghcr.io/raktim94/easy-dine-pos-backend:${APP_VERSION:-dev}
+    image: ghcr.io/kaizenora/easydine-backend:${APP_VERSION:-dev}
     container_name: easy-dine-backend
     restart: unless-stopped
     environment:
@@ -121,7 +121,7 @@ services:
         # Next bakes rewrite destinations at BUILD time — this must be a
         # build ARG, not a runtime env (see apps/web/Dockerfile comment).
         BACKEND_URL: "http://backend:4000"
-    image: ghcr.io/raktim94/easy-dine-pos-web:${APP_VERSION:-dev}
+    image: ghcr.io/kaizenora/easydine-web:${APP_VERSION:-dev}
     container_name: easy-dine-web
     restart: unless-stopped
     ports:
@@ -140,7 +140,7 @@ services:
   updater:
     build:
       context: ./updater
-    image: ghcr.io/raktim94/easy-dine-pos-updater:latest
+    image: ghcr.io/kaizenora/easydine-updater:latest
     container_name: easy-dine-updater
     restart: unless-stopped
     environment:

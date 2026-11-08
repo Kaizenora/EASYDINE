@@ -30,7 +30,40 @@ export class PublicMenuService {
     return {
       branchName: branch.name,
       tableName: table.name ?? `Table ${table.number}`,
+      tableNumber: table.number,
       categories,
+    };
+  }
+
+  /** Customer check-in from QR scan. Marks table OCCUPIED for the cashier grid. */
+  async checkIn(qrToken: string, guestName?: string, phone?: string) {
+    const table = await this.resolveTable(qrToken);
+    const branchId = table.floor.branchId;
+
+    if (table.status === 'AVAILABLE') {
+      const noteParts = [guestName?.trim(), phone?.trim()].filter(Boolean);
+      await this.prisma.table.update({
+        where: { id: table.id },
+        data: {
+          status: 'OCCUPIED',
+          statusSince: new Date(),
+          notes: noteParts.length > 0 ? noteParts.join(' · ') : undefined,
+        },
+      });
+      this.realtime.emitToBranch(branchId, 'table.updated', {
+        id: table.id,
+        status: 'OCCUPIED',
+      });
+    }
+
+    return {
+      ok: true,
+      table: {
+        id: table.id,
+        number: table.number,
+        name: table.name ?? `Table ${table.number}`,
+        status: 'OCCUPIED',
+      },
     };
   }
 
@@ -83,29 +116,49 @@ export class PublicMenuService {
     });
   }
 
-  async createOrder(qrToken: string, items: CartItemDto[], guestName: string) {
+  async createOrder(
+    qrToken: string,
+    items: CartItemDto[],
+    guestName?: string,
+    guestPhone?: string,
+    requestId?: string,
+  ) {
     const table = await this.resolveTable(qrToken);
     const branchId = table.floor.branchId;
 
+    // Idempotency: retry of the exact same request key returns the existing order
+    if (requestId) {
+      const existing = await this.prisma.order.findFirst({
+        where: {
+          branchId,
+          tableId: table.id,
+          clientRequestId: requestId,
+        },
+        include: { items: true },
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
     // A guest who already ordered once this visit and scans again to add
-    // more (e.g. drinks now, food later) should land on the same tab, not
-    // open a second order for the table — mirrors how staff add a round
-    // from the POS for an occupied table.
+    // more lands on the same tab, not opening a second order for the table.
     const openOrder = await this.prisma.order.findFirst({
       where: { branchId, tableId: table.id, status: 'OPEN' },
     });
     if (openOrder) {
+      if (guestPhone && !openOrder.deliveryPhone) {
+        await this.prisma.order.update({
+          where: { id: openOrder.id },
+          data: { deliveryPhone: guestPhone },
+        });
+      }
       return this.ordersService.addItems(branchId, openOrder.id, items, {
         enforceModifierLimits: true,
         websiteOnly: true,
       });
     }
 
-    // A guest scanning a QR code has no staff account, but Order.createdById
-    // is a required FK — attribute the order to whoever is on the floor for
-    // this table (assigned waiter), falling back to any staff member linked
-    // to the branch (every branch has at least its owner) so this never
-    // fails for lack of a "system user" that doesn't otherwise exist.
     const createdById =
       table.assignedWaiterId ??
       (
@@ -120,15 +173,19 @@ export class PublicMenuService {
       );
     }
 
+    const cleanGuestName = guestName?.trim() || 'Guest';
+
     return this.ordersService.createOrder(
       branchId,
       createdById,
       {
         type: 'QR_ORDER',
         tableId: table.id,
-        guestName,
+        guestName: cleanGuestName,
+        guestPhone,
+        clientRequestId: requestId,
         items,
-      },
+      } as any,
       { channel: 'ONLINE' },
     );
   }
@@ -140,25 +197,90 @@ export class PublicMenuService {
       where: { tableId: table.id, status: { in: ['OPEN', 'BILLED'] } },
       orderBy: { createdAt: 'desc' },
       select: {
+        id: true,
         orderNumber: true,
         status: true,
         acceptance: true,
         totalAmount: true,
+        createdAt: true,
+        acceptedAt: true,
         items: {
+          where: { status: { not: 'CANCELLED' } },
           select: {
             id: true,
             nameSnapshot: true,
             quantity: true,
+            unitPriceSnapshot: true,
+            lineTotal: true,
             status: true,
+            kitchenNote: true,
           },
         },
       },
     });
+
     const requests = await this.prisma.tableRequest.findMany({
       where: { tableId: table.id, resolvedAt: null },
       select: { type: true },
     });
-    return { order, openRequests: requests.map((r) => r.type) };
+
+    if (!order) {
+      return { order: null, openRequests: requests.map((r) => r.type) };
+    }
+
+    // Derive aggregated cooking status from active items
+    const activeItems = order.items;
+    let cookingStatus = 'PENDING';
+    if (activeItems.length > 0) {
+      const allServed = activeItems.every((it) => it.status === 'SERVED');
+      const allReadyOrServed = activeItems.every((it) => it.status === 'READY' || it.status === 'SERVED');
+      const anyPreparing = activeItems.some((it) => it.status === 'PREPARING');
+      const anyAccepted = activeItems.some((it) => it.status === 'ACCEPTED') || order.acceptance === 'ACCEPTED';
+
+      if (allServed) {
+        cookingStatus = 'SERVED';
+      } else if (allReadyOrServed) {
+        cookingStatus = 'READY';
+      } else if (anyPreparing) {
+        cookingStatus = 'PREPARING';
+      } else if (anyAccepted) {
+        cookingStatus = 'ACCEPTED';
+      }
+    } else if (order.acceptance === 'ACCEPTED') {
+      cookingStatus = 'ACCEPTED';
+    }
+
+    const isServed = cookingStatus === 'SERVED';
+
+    const placedAt = order.createdAt
+      ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : undefined;
+    const acceptedAt = order.acceptedAt
+      ? new Date(order.acceptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : undefined;
+
+    return {
+      order: {
+        orderNumber: order.orderNumber,
+        status: cookingStatus,
+        cookingStatus,
+        acceptance: order.acceptance,
+        totalAmount: order.totalAmount ? String(order.totalAmount) : '0.00',
+        placedAt,
+        acceptedAt,
+        isServed,
+        items: order.items.map((it) => ({
+          id: it.id,
+          nameSnapshot: it.nameSnapshot,
+          quantity: it.quantity,
+          unitPriceSnapshot: String(it.unitPriceSnapshot),
+          lineTotal: String(it.lineTotal),
+          status: it.status,
+          kitchenNote: it.kitchenNote,
+        })),
+      },
+      openRequests: requests.map((r) => r.type),
+    };
   }
 
   /** "Call waiter" / "Bring the bill". One open request per type per table. */

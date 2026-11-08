@@ -8,10 +8,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 // hardening report's "unsafe URL handling / open redirects" check, which
 // this is deliberately built to keep passing.
 const DOWNLOAD_CHANNELS: Record<string, string> = {
-  github: 'https://github.com/Raktim94/easy-dine-pos',
+  github: 'https://github.com/Kaizenora/EASYDINE',
   'install-script':
-    'https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/install.sh',
-  docker: 'https://github.com/Raktim94/easy-dine-pos#one-click-install',
+    'https://raw.githubusercontent.com/Kaizenora/EASYDINE/master/install.sh',
+  docker: 'https://github.com/Kaizenora/EASYDINE#one-click-install',
   casaos: 'https://github.com/IceWhaleTech/CasaOS-AppStore',
 };
 
