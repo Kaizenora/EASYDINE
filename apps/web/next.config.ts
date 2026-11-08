@@ -23,6 +23,7 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  devIndicators: false,
   images: {
     // The backend's upload folder (proxied through /api) plus the app's own
     // static images. Deliberately not "/**": that would let the optimizer fetch

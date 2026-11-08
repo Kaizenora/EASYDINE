@@ -350,3 +350,15 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Hide Next.js development dev indicator pill and error overlay */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dev-overlay],
+#__next-build-watcher,
+div:has(> button[data-nextjs-toast-errors-hide-button]) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
