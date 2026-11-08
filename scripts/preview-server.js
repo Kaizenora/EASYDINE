@@ -223,6 +223,7 @@ let activeTableRequests = [
   },
 ];
 let openServiceRequests = ["WAITER"];
+let tableRequestsMap = new Map(); // tableId -> { openRequests: string[], waiterAcknowledged: boolean }
 let waiterAcknowledged = false;
 
 
@@ -1312,11 +1313,61 @@ const server = http.createServer((req, res) => {
 
   // Public QR Menu endpoint
   if (pathname.startsWith("/api/v1/public/menu/")) {
+    const rawToken = pathname.replace("/api/v1/public/menu/", "").split("/")[0];
+    const cleanToken = decodeURIComponent(rawToken);
+
+    // Resolve table across all floors
+    let foundTable = null;
+    for (const floor of demoFloors) {
+      const match = floor.tables.find(
+        (t) =>
+          t.qrToken === cleanToken ||
+          t.id === cleanToken ||
+          t.number === cleanToken ||
+          `qr-table-${t.number}` === cleanToken ||
+          `table-${t.number}` === cleanToken
+      );
+      if (match) {
+        foundTable = match;
+        break;
+      }
+    }
+
+    // Fallback if not directly found by token
+    if (!foundTable) {
+      const numMatch = cleanToken.match(/\d+/);
+      const num = numMatch ? numMatch[0] : "1";
+      foundTable = {
+        id: `tbl-${num}`,
+        number: num,
+        name: `Table ${num}`,
+        qrToken: cleanToken,
+      };
+    }
+
+    const tableId = foundTable.id;
+    if (!tableRequestsMap.has(tableId)) {
+      tableRequestsMap.set(tableId, { openRequests: [], waiterAcknowledged: false });
+    }
+    const tState = tableRequestsMap.get(tableId);
+
+    // Find active order specifically for this table
+    const tableActiveOrder = demoOrders.find(
+      (o) => (o.tableId === foundTable.id || o.table?.id === foundTable.id || o.table?.number === foundTable.number) && o.status === "OPEN"
+    );
+
     if (pathname.endsWith("/status")) {
       return send({
-        order: activeCustomerOrder,
-        openRequests: openServiceRequests,
-        waiterAcknowledged,
+        order: tableActiveOrder
+          ? {
+              orderNumber: tableActiveOrder.orderNumber,
+              status: tableActiveOrder.status,
+              acceptance: tableActiveOrder.acceptance,
+              items: tableActiveOrder.items || [],
+            }
+          : null,
+        openRequests: tState.openRequests,
+        waiterAcknowledged: tState.waiterAcknowledged,
       });
     }
 
@@ -1349,8 +1400,8 @@ const server = http.createServer((req, res) => {
           status: "OPEN",
           channel: "ONLINE",
           acceptance: "PENDING",
-          tableId: "tbl-1",
-          guestName: b.guestName || "siddharth",
+          tableId: foundTable.id,
+          guestName: b.guestName || "Guest",
           guestCount: 2,
           notes: b.note || null,
           cancelReason: null,
@@ -1361,15 +1412,15 @@ const server = http.createServer((req, res) => {
           totalAmount: total.toFixed(2),
           createdAt: new Date().toISOString(),
           billedAt: null,
-          table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
-          customer: { id: `cust-${Date.now()}`, name: b.guestName || "siddharth", phone: "+91 9876543210" },
+          table: { id: foundTable.id, name: foundTable.name, number: foundTable.number },
+          customer: { id: `cust-${Date.now()}`, name: b.guestName || "Guest", phone: "+91 9876543210" },
           items,
           kots: [
             {
               id: `kot-${Date.now()}`,
               ticketNumber: demoOrders.length + 1,
               status: "ACCEPTED",
-              notes: "Table 1 (Window) - QR Order",
+              notes: `${foundTable.name} - QR Order`,
               createdAt: new Date().toISOString(),
               sentAt: new Date().toISOString(),
               items: items.map((it) => ({
@@ -1385,29 +1436,21 @@ const server = http.createServer((req, res) => {
 
         demoOrders.unshift(newOrder);
 
-        activeCustomerOrder = {
-          orderNumber: orderNum,
-          status: "ACCEPTED",
-          acceptance: "ACCEPTED",
-          items: items.map((it) => ({
-            id: it.id,
-            nameSnapshot: it.nameSnapshot,
-            quantity: it.quantity,
-            status: "ACCEPTED",
-            kitchenNote: it.kitchenNote,
-          })),
-        };
-
         demoNotifications.unshift({
           id: `notif-${Date.now()}`,
           entity: "Order",
           entityId: `ord-${orderNum}`,
-          title: `New Online Order #${orderNum} — Table 1 (Window)`,
-          body: `${b.guestName || "Guest"} placed order at Table 1 (${items.length} items • ₹${total.toFixed(2)})`,
-          message: `${b.guestName || "Guest"} placed order at Table 1 (${items.length} items)`,
+          title: `🟢 New Online Order #${orderNum} — ${foundTable.name}`,
+          body: `${b.guestName || "Guest"} placed order at ${foundTable.name} (${items.length} items • ₹${total.toFixed(2)})`,
+          message: `${b.guestName || "Guest"} placed order at ${foundTable.name} (${items.length} items)`,
           createdAt: new Date().toISOString(),
           readAt: null,
         });
+
+        // Mark table occupied in floor plan
+        foundTable.status = "OCCUPIED";
+        foundTable.customerName = b.guestName || "Guest";
+        foundTable.statusSince = new Date().toISOString();
 
         return send({ orderNumber: orderNum });
       });
@@ -1417,35 +1460,36 @@ const server = http.createServer((req, res) => {
     if (req.method === "POST" && pathname.endsWith("/request")) {
       return getBody().then((b) => {
         const type = b.type; // "WAITER" | "BILL"
-        if (!openServiceRequests.includes(type)) {
-          openServiceRequests.push(type);
+        if (!tState.openRequests.includes(type)) {
+          tState.openRequests.push(type);
         }
         if (type === "WAITER") {
-          waiterAcknowledged = false;
+          tState.waiterAcknowledged = false;
         }
         activeTableRequests.unshift({
           id: `req-${Date.now()}`,
           type,
           createdAt: new Date().toISOString(),
-          table: { id: "tbl-1", number: "1", name: "Table 1 (Window)" },
+          table: { id: foundTable.id, number: foundTable.number, name: foundTable.name },
         });
         demoNotifications.unshift({
           id: `notif-${Date.now()}`,
           entity: "ServiceRequest",
-          entityId: "tbl-1",
-          title: type === "WAITER" ? "🔔 Table 1 (Window) — Waiter Called" : "🧾 Table 1 (Window) — Bill Requested",
-          body: `Table 1 (Window) requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
-          message: `Table 1 (Window) requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
+          entityId: foundTable.id,
+          title: type === "WAITER" ? `🔔 ${foundTable.name} — Waiter Called` : `🧾 ${foundTable.name} — Bill Requested`,
+          body: `${foundTable.name} requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
+          message: `${foundTable.name} requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
           createdAt: new Date().toISOString(),
           readAt: null,
         });
-        return send({ success: true, openRequests: openServiceRequests });
+        return send({ success: true, openRequests: tState.openRequests });
       });
     }
 
     return send({
       branchName: restaurantSettings.name,
-      tableName: "Table 1 (Window)",
+      tableName: foundTable.name || `Table ${foundTable.number}`,
+      tableNumber: foundTable.number,
       categories: demoCategories.map((c) => ({
         id: c.id,
         name: c.name,
@@ -1454,7 +1498,6 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // --- Orders Management & POS Endpoints ---
   if (pathname.includes("/orders/manage")) {
     const tab = url.searchParams.get("tab") || "active";
     const channel = url.searchParams.get("channel");
