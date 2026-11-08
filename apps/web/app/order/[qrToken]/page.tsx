@@ -862,6 +862,16 @@ export default function ZomatoStyleCustomerMenu({
             );
           })
         )}
+
+        {/* Designer Brand Credit */}
+        <div className="mt-10 mb-20 flex flex-col items-center justify-center gap-1.5 py-6 border-t border-neutral-800/80 text-center">
+          <div className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/designer-logo.png" alt="SG" className="h-5 w-5 object-contain" />
+            <span className="text-xs font-semibold text-neutral-300">Designed by SG Design &amp; Tech</span>
+          </div>
+          <p className="text-[10px] text-neutral-500">Contactless QR Dine-in • Hotel Sanjog</p>
+        </div>
       </main>
 
       {/* 5. FLOATING "🍽 MENU" PILL */}

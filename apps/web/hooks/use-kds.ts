@@ -107,7 +107,10 @@ export function useUpdateKotStatus(branchId: string | null) {
     },
     // Also on error: a 409 means the ticket moved on another screen, and the
     // board must show where it really is rather than the stale step.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["kds"] }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["kds"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
   });
 }
 

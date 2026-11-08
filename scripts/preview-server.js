@@ -204,12 +204,12 @@ let demoFloors = [
     name: "Main Dining Hall",
     sortOrder: 1,
     tables: [
-      { id: "tbl-1", floorId: "floor-1", number: "1", name: "Table 1 (Window)", capacity: 4, status: "OCCUPIED", statusSince: new Date(Date.now() - 35 * 60000).toISOString(), posX: 50, posY: 50, width: 80, height: 80, rotation: 0, shape: "square", qrToken: "qr-table-1", assignedWaiter: { id: "w-1", name: "Rajesh" } },
-      { id: "tbl-2", floorId: "floor-1", number: "2", name: "Table 2", capacity: 4, status: "FREE", statusSince: new Date(Date.now() - 120 * 60000).toISOString(), posX: 180, posY: 50, width: 80, height: 80, rotation: 0, shape: "square", qrToken: "qr-table-2", assignedWaiter: null },
-      { id: "tbl-3", floorId: "floor-1", number: "3", name: "Table 3", capacity: 6, status: "OCCUPIED", statusSince: new Date(Date.now() - 15 * 60000).toISOString(), posX: 310, posY: 50, width: 120, height: 80, rotation: 0, shape: "rect", qrToken: "qr-table-3", assignedWaiter: { id: "w-2", name: "Pooja" } },
-      { id: "tbl-4", floorId: "floor-1", number: "4", name: "Table 4", capacity: 2, status: "FREE", statusSince: new Date(Date.now() - 40 * 60000).toISOString(), posX: 50, posY: 180, width: 60, height: 60, rotation: 0, shape: "round", qrToken: "qr-table-4", assignedWaiter: null },
-      { id: "tbl-5", floorId: "floor-1", number: "5", name: "Table 5 (Booth)", capacity: 6, status: "RESERVED", statusSince: new Date(Date.now() - 10 * 60000).toISOString(), posX: 180, posY: 180, width: 120, height: 80, rotation: 0, shape: "rect", qrToken: "qr-table-5", assignedWaiter: null },
-      { id: "tbl-6", floorId: "floor-1", number: "6", name: "Family Lounge", capacity: 8, status: "FREE", statusSince: new Date().toISOString(), posX: 330, posY: 180, width: 140, height: 90, rotation: 0, shape: "rect", qrToken: "qr-table-6", assignedWaiter: null },
+      { id: "tbl-1", floorId: "floor-1", number: "1", name: "Table 1 (Window)", capacity: 4, status: "OCCUPIED", customerName: "siddharth", statusSince: new Date(Date.now() - 35 * 60000).toISOString(), posX: 50, posY: 50, width: 80, height: 80, rotation: 0, shape: "square", qrToken: "qr-table-1", assignedWaiter: { id: "w-1", name: "Rajesh" } },
+      { id: "tbl-2", floorId: "floor-1", number: "2", name: "Table 2", capacity: 4, status: "FREE", customerName: null, statusSince: new Date(Date.now() - 120 * 60000).toISOString(), posX: 180, posY: 50, width: 80, height: 80, rotation: 0, shape: "square", qrToken: "qr-table-2", assignedWaiter: null },
+      { id: "tbl-3", floorId: "floor-1", number: "3", name: "Table 3", capacity: 6, status: "OCCUPIED", customerName: "Amit Sharma", statusSince: new Date(Date.now() - 15 * 60000).toISOString(), posX: 310, posY: 50, width: 120, height: 80, rotation: 0, shape: "rect", qrToken: "qr-table-3", assignedWaiter: { id: "w-2", name: "Pooja" } },
+      { id: "tbl-4", floorId: "floor-1", number: "4", name: "Table 4", capacity: 2, status: "FREE", customerName: null, statusSince: new Date(Date.now() - 40 * 60000).toISOString(), posX: 50, posY: 180, width: 60, height: 60, rotation: 0, shape: "round", qrToken: "qr-table-4", assignedWaiter: null },
+      { id: "tbl-5", floorId: "floor-1", number: "5", name: "Table 5 (Booth)", capacity: 6, status: "RESERVED", customerName: "Pooja Verma", statusSince: new Date(Date.now() - 10 * 60000).toISOString(), posX: 180, posY: 180, width: 120, height: 80, rotation: 0, shape: "rect", qrToken: "qr-table-5", assignedWaiter: null },
+      { id: "tbl-6", floorId: "floor-1", number: "6", name: "Family Lounge", capacity: 8, status: "FREE", customerName: null, statusSince: new Date().toISOString(), posX: 330, posY: 180, width: 140, height: 90, rotation: 0, shape: "rect", qrToken: "qr-table-6", assignedWaiter: null },
     ],
   },
 ];
@@ -440,6 +440,21 @@ let demoPromotions = [
     startTime: "16:00",
     endTime: "19:00",
     isActive: true,
+  },
+];
+
+let demoBackups = [
+  {
+    id: "bk-1",
+    status: "VERIFIED",
+    sizeBytes: 1048576 * 2.4,
+    s3KeyDb: "backups/2026-11-08-full.sql.gz",
+    s3KeyUploads: "backups/2026-11-08-uploads.tar.gz",
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    triggeredById: "u-admin",
+    failureReason: null,
+    createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
+    verifiedAt: new Date(Date.now() - 3600000 * 12 + 60000).toISOString(),
   },
 ];
 
@@ -1035,6 +1050,21 @@ const server = http.createServer((req, res) => {
         const found = demoTickets.find((t) => t.id === ticketId);
         if (found) {
           found.status = b.status;
+          // Live sync to demoOrders
+          const order = demoOrders.find((o) => o.orderNumber === found.order?.orderNumber || o.id === found.orderId);
+          if (order) {
+            if (b.status === "SERVED") {
+              order.status = "COMPLETED";
+              order.billedAt = order.billedAt || new Date().toISOString();
+            } else if (b.status === "READY") {
+              order.status = "OPEN";
+            }
+            if (Array.isArray(order.items)) {
+              for (const item of order.items) {
+                item.status = b.status;
+              }
+            }
+          }
         }
         return send(found || { success: true });
       });
@@ -1792,10 +1822,67 @@ const server = http.createServer((req, res) => {
 
   // --- 10. System, Settings, Backups, Sync ---
   if (pathname.includes("/backups")) {
-    if (pathname.includes("/status")) {
-      return send({ configured: false, autoBackupsEnabled: false, lastRun: null });
+    if (pathname.includes("/export") || pathname.includes("/download")) {
+      const backupData = JSON.stringify({
+        software: "EasyDine POS",
+        version: "2.4.0",
+        exportedAt: new Date().toISOString(),
+        designer: "SG Design & Tech",
+        restaurant: restaurantSettings,
+        branch: branchSettings,
+        categories: demoCategories,
+        menuItems: demoMenuItems,
+        floors: demoFloors,
+        orders: demoOrders,
+        coupons: demoCoupons,
+        campaigns: demoCampaigns,
+      }, null, 2);
+      res.setHeader("Content-Disposition", `attachment; filename="easydine-backup-${Date.now()}.json"`);
+      res.setHeader("Content-Type", "application/json");
+      res.writeHead(200);
+      res.end(backupData);
+      return;
     }
-    return send([]);
+
+    if (pathname.includes("/status")) {
+      return send({
+        configured: true,
+        source: "database",
+        endpoint: "https://s3.ap-south-1.amazonaws.com",
+        bucket: "easydine-backups",
+        region: "ap-south-1",
+        accessKeyIdMasked: "AKIA••••••••••••1234",
+        intervalDays: 1,
+        retainCount: 7,
+        lastBackup: demoBackups[0] || null,
+        nextScheduledAt: new Date(Date.now() + 24 * 3600000).toISOString(),
+      });
+    }
+
+    if (req.method === "POST" && pathname.endsWith("/backups")) {
+      const newBackup = {
+        id: `bk-${Date.now()}`,
+        status: "VERIFIED",
+        sizeBytes: 1048576 * (2.1 + Math.random() * 0.5),
+        s3KeyDb: `backups/${new Date().toISOString().slice(0, 10)}-manual.sql.gz`,
+        s3KeyUploads: null,
+        sha256: "f4b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b899",
+        triggeredById: "u-admin",
+        failureReason: null,
+        createdAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
+      };
+      demoBackups.unshift(newBackup);
+      return send(newBackup);
+    }
+
+    if (req.method === "POST" && pathname.includes("/restore")) {
+      const parts = pathname.split("/");
+      const id = parts[parts.indexOf("backups") + 1];
+      return send({ ok: true, restoredFrom: id });
+    }
+
+    return send(demoBackups);
   }
 
   if (pathname.includes("/sync/status")) {

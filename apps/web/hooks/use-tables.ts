@@ -26,6 +26,7 @@ export interface RestaurantTable {
   shape: "square" | "round" | "rect";
   qrToken: string | null;
   assignedWaiter: { id: string; name: string } | null;
+  customerName?: string | null;
 }
 
 export interface Floor {

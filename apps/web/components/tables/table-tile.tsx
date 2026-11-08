@@ -86,6 +86,11 @@ export function TableTile({
         >
           <TableShapeIcon shape={table.shape} capacity={table.capacity} className="h-6 w-6" />
           <span className="text-sm font-semibold">{table.name ?? `T${table.number}`}</span>
+          {table.customerName && (
+            <span className="truncate max-w-[85%] text-[10.5px] font-semibold text-foreground/90 bg-background/60 px-1.5 py-0.5 rounded shadow-xs" title={`Guest: ${table.customerName}`}>
+              👤 {table.customerName}
+            </span>
+          )}
           <span className="flex items-center gap-1 text-[11px] opacity-80">
             <Users className="h-3 w-3" />
             {table.capacity}
