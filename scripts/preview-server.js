@@ -223,8 +223,114 @@ let activeTableRequests = [
   },
 ];
 let openServiceRequests = ["WAITER"];
+let waiterAcknowledged = false;
+
+
+let demoShifts = [
+  {
+    id: "shift-1",
+    userId: "u-cashier",
+    user: { id: "u-cashier", name: "Lead Cashier" },
+    startsAt: new Date(new Date().setHours(9, 0, 0, 0)).toISOString(),
+    endsAt: new Date(new Date().setHours(17, 0, 0, 0)).toISOString(),
+    clockIn: new Date(new Date().setHours(9, 2, 0, 0)).toISOString(),
+    clockOut: null,
+    status: "ACTIVE",
+    note: "Counter 1 & Takeaway",
+  },
+  {
+    id: "shift-2",
+    userId: "u-admin",
+    user: { id: "u-admin", name: "Restaurant Owner" },
+    startsAt: new Date(new Date().setHours(11, 0, 0, 0)).toISOString(),
+    endsAt: new Date(new Date().setHours(20, 0, 0, 0)).toISOString(),
+    clockIn: new Date(new Date().setHours(11, 0, 0, 0)).toISOString(),
+    clockOut: null,
+    status: "ACTIVE",
+    note: "Floor & Operations",
+  },
+];
+
+let demoAttendance = [
+  {
+    id: "att-1",
+    branchId: "branch-1",
+    userId: "u-cashier",
+    user: { id: "u-cashier", name: "Lead Cashier" },
+    clockInAt: new Date(new Date().setHours(9, 2, 0, 0)).toISOString(),
+    clockOutAt: null,
+    note: "Shift on Counter 1",
+  },
+  {
+    id: "att-2",
+    branchId: "branch-1",
+    userId: "u-admin",
+    user: { id: "u-admin", name: "Restaurant Owner" },
+    clockInAt: new Date(new Date().setHours(11, 0, 0, 0)).toISOString(),
+    clockOutAt: null,
+    note: "Morning management",
+  },
+];
 
 let demoOrders = [
+  {
+    id: "ord-1067",
+    orderNumber: "1067",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "ONLINE",
+    acceptance: "PENDING",
+    tableId: "tbl-1",
+    guestName: "s (2524234342)",
+    guestCount: 2,
+    notes: null,
+    cancelReason: null,
+    subtotal: "920.00",
+    taxAmount: "46.00",
+    discountAmount: "0.00",
+    tipAmount: "0.00",
+    totalAmount: "966.00",
+    createdAt: new Date(Date.now() - 2 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
+    customer: { id: "cust-1067", name: "s (2524234342)", phone: "+91 9876543210" },
+    items: [
+      {
+        id: "item-1067-1",
+        menuItemId: "item-3",
+        nameSnapshot: "Crispy Corn & Water Chestnut",
+        quantity: 1,
+        unitPriceSnapshot: "290.00",
+        lineTotal: "290.00",
+        status: "PENDING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-1067-2",
+        menuItemId: "item-1",
+        nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
+        quantity: 1,
+        unitPriceSnapshot: "340.00",
+        lineTotal: "340.00",
+        status: "PENDING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-1067-3",
+        menuItemId: "item-3",
+        nameSnapshot: "Crispy Corn & Water Chestnut",
+        quantity: 1,
+        unitPriceSnapshot: "290.00",
+        lineTotal: "290.00",
+        status: "PENDING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+    ],
+    kots: [],
+  },
   {
     id: "ord-1042",
     orderNumber: "1042",
@@ -443,6 +549,39 @@ let demoPromotions = [
   },
 ];
 
+
+let backupSnapshots = new Map();
+
+// 1-minute auto backup timer
+setInterval(() => {
+  const backupId = `bk-auto-${Date.now()}`;
+  const snapshot = {
+    restaurant: JSON.parse(JSON.stringify(restaurantSettings)),
+    branch: JSON.parse(JSON.stringify(branchSettings)),
+    categories: JSON.parse(JSON.stringify(demoCategories)),
+    menuItems: JSON.parse(JSON.stringify(demoMenuItems)),
+    floors: JSON.parse(JSON.stringify(demoFloors)),
+    orders: JSON.parse(JSON.stringify(demoOrders)),
+    shifts: JSON.parse(JSON.stringify(demoShifts)),
+  };
+  backupSnapshots.set(backupId, snapshot);
+
+  const entry = {
+    id: backupId,
+    status: "VERIFIED",
+    sizeBytes: 1048576 * (2.1 + (demoOrders.length * 0.05)),
+    s3KeyDb: `backups/${new Date().toISOString().slice(0, 10)}-auto-1min.sql.gz`,
+    s3KeyUploads: null,
+    sha256: "f4b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b899",
+    triggeredById: null, // scheduled auto
+    failureReason: null,
+    createdAt: new Date().toISOString(),
+    verifiedAt: new Date().toISOString(),
+  };
+  demoBackups.unshift(entry);
+  if (demoBackups.length > 100) demoBackups.pop();
+}, 60000);
+
 let demoBackups = [
   {
     id: "bk-1",
@@ -543,7 +682,38 @@ let demoTickets = [
   },
 ];
 
-let demoNotifications = [];
+let demoNotifications = [
+  {
+    id: "notif-1",
+    entity: "ServiceRequest",
+    entityId: "tbl-1",
+    title: "🔔 Table 1 (Window) — Waiter Called",
+    body: "Guest at Table 1 (Window) called for waiter assistance",
+    message: "Guest at Table 1 (Window) called for waiter assistance",
+    createdAt: new Date(Date.now() - 60000).toISOString(),
+    readAt: null,
+  },
+  {
+    id: "notif-2",
+    entity: "ServiceRequest",
+    entityId: "tbl-3",
+    title: "🧾 Table 3 — Bill Requested",
+    body: "Table 3 requested their final bill (₹882.00)",
+    message: "Table 3 requested their final bill (₹882.00)",
+    createdAt: new Date(Date.now() - 120000).toISOString(),
+    readAt: null,
+  },
+  {
+    id: "notif-3",
+    entity: "Order",
+    entityId: "ord-1042",
+    title: "🟢 Table 1 (Window) — New Order #1042",
+    body: "Siddharth placed order at Table 1 (Window) (₹1,008.00)",
+    message: "Siddharth placed order at Table 1 (Window) (₹1,008.00)",
+    createdAt: new Date(Date.now() - 180000).toISOString(),
+    readAt: null,
+  },
+];
 let activeCustomerOrder = {
   orderNumber: "1042",
   status: "PREPARING",
@@ -688,6 +858,7 @@ const server = http.createServer((req, res) => {
       activeTableRequests = activeTableRequests.filter((r) => r.id !== reqId);
       if (!activeTableRequests.some((r) => r.type === "WAITER")) {
         openServiceRequests = openServiceRequests.filter((t) => t !== "WAITER");
+        waiterAcknowledged = true;
       }
       if (!activeTableRequests.some((r) => r.type === "BILL")) {
         openServiceRequests = openServiceRequests.filter((t) => t !== "BILL");
@@ -1145,6 +1316,7 @@ const server = http.createServer((req, res) => {
       return send({
         order: activeCustomerOrder,
         openRequests: openServiceRequests,
+        waiterAcknowledged,
       });
     }
 
@@ -1176,7 +1348,7 @@ const server = http.createServer((req, res) => {
           type: "DINE_IN",
           status: "OPEN",
           channel: "ONLINE",
-          acceptance: "ACCEPTED",
+          acceptance: "PENDING",
           tableId: "tbl-1",
           guestName: b.guestName || "siddharth",
           guestCount: 2,
@@ -1247,6 +1419,9 @@ const server = http.createServer((req, res) => {
         const type = b.type; // "WAITER" | "BILL"
         if (!openServiceRequests.includes(type)) {
           openServiceRequests.push(type);
+        }
+        if (type === "WAITER") {
+          waiterAcknowledged = false;
         }
         activeTableRequests.unshift({
           id: `req-${Date.now()}`,
@@ -1340,6 +1515,24 @@ const server = http.createServer((req, res) => {
     if (order) {
       order.acceptance = "ACCEPTED";
       order.status = "OPEN";
+      if (!order.kots) order.kots = [];
+      order.kots.push({
+        id: `kot-${Date.now()}`,
+        ticketNumber: order.kots.length + 1,
+        status: "PREPARING",
+        notes: order.table ? order.table.name : "Dine-in",
+        createdAt: new Date().toISOString(),
+        sentAt: new Date().toISOString(),
+      });
+      if (Array.isArray(order.items)) {
+        order.items.forEach((it) => { it.status = "PREPARING"; });
+      }
+      activeCustomerOrder = {
+        orderNumber: order.orderNumber,
+        status: "PREPARING",
+        acceptance: "ACCEPTED",
+        items: order.items,
+      };
       return send({ ok: true, order });
     }
     return send({ ok: true });
@@ -1672,15 +1865,58 @@ const server = http.createServer((req, res) => {
       ]);
     }
     if (pathname.includes("/shifts")) {
-      return send([
-        {
-          id: "shift-1",
-          userId: "u-cashier",
-          user: { id: "u-cashier", name: "Lead Cashier" },
-          startsAt: new Date().toISOString(),
-          endsAt: new Date(Date.now() + 8 * 3600000).toISOString(),
-        },
-      ]);
+      if (req.method === "POST") {
+        return getBody().then((b) => {
+          const staffMember = b.userId === "u-admin"
+            ? { id: "u-admin", name: "Restaurant Owner" }
+            : { id: "u-cashier", name: "Lead Cashier" };
+          const newShift = {
+            id: `shift-${Date.now()}`,
+            userId: b.userId,
+            user: staffMember,
+            startsAt: b.startsAt,
+            endsAt: b.endsAt,
+            clockIn: null,
+            clockOut: null,
+            status: "SCHEDULED",
+            note: b.note || null,
+          };
+          demoShifts.push(newShift);
+          return send(newShift);
+        });
+      }
+
+      if (req.method === "PATCH") {
+        const parts = pathname.split("/");
+        const id = parts[parts.indexOf("shifts") + 1]?.split("?")[0];
+        return getBody().then((b) => {
+          const s = demoShifts.find((x) => x.id === id);
+          if (s) {
+            if (b.startsAt) s.startsAt = b.startsAt;
+            if (b.endsAt) s.endsAt = b.endsAt;
+            if (b.userId) {
+              s.userId = b.userId;
+              s.user = b.userId === "u-admin" ? { id: "u-admin", name: "Restaurant Owner" } : { id: "u-cashier", name: "Lead Cashier" };
+            }
+            if (b.clockIn !== undefined) s.clockIn = b.clockIn;
+            if (b.clockOut !== undefined) s.clockOut = b.clockOut;
+            if (b.note !== undefined) s.note = b.note;
+            if (s.clockIn && !s.clockOut) s.status = "ACTIVE";
+            if (s.clockIn && s.clockOut) s.status = "COMPLETED";
+            return send(s);
+          }
+          return send({ ok: true });
+        });
+      }
+
+      if (req.method === "DELETE") {
+        const parts = pathname.split("/");
+        const id = parts[parts.indexOf("shifts") + 1]?.split("?")[0];
+        demoShifts = demoShifts.filter((x) => x.id !== id);
+        return send({ ok: true, deleted: id });
+      }
+
+      return send(demoShifts);
     }
     if (pathname.includes("/leave")) return send([]);
     if (pathname.includes("/payroll")) return send([]);
@@ -1827,7 +2063,7 @@ const server = http.createServer((req, res) => {
         software: "EasyDine POS",
         version: "2.4.0",
         exportedAt: new Date().toISOString(),
-        designer: "SG Design & Tech",
+        designer: "SG",
         restaurant: restaurantSettings,
         branch: branchSettings,
         categories: demoCategories,
@@ -1876,10 +2112,37 @@ const server = http.createServer((req, res) => {
       return send(newBackup);
     }
 
+    if (pathname.includes("/export-csv") || pathname.includes("/export-excel")) {
+      const header = "Order ID,Order #,Table,Customer,Phone,Items Count,Subtotal (INR),Tax (INR),Total (INR),Status,Channel,Date\n";
+      const rows = demoOrders.map((o) => {
+        const tableName = o.table ? (o.table.name || o.table.number) : "Dine-in";
+        const custName = (o.guestName || o.customer?.name || "Walk-in").replace(/,/g, " ");
+        const custPhone = o.customer?.phone || "";
+        const itemsCount = o.items ? o.items.length : 0;
+        return `"${o.id}","${o.orderNumber}","${tableName}","${custName}","${custPhone}",${itemsCount},${o.subtotal},${o.taxAmount},${o.totalAmount},"${o.status}","${o.channel}","${o.createdAt}"`;
+      }).join("\n");
+
+      res.setHeader("Content-Disposition", 'attachment; filename="easydine-data-backup.csv"');
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.writeHead(200);
+      res.end(header + rows);
+      return;
+    }
+
     if (req.method === "POST" && pathname.includes("/restore")) {
       const parts = pathname.split("/");
-      const id = parts[parts.indexOf("backups") + 1];
-      return send({ ok: true, restoredFrom: id });
+      const id = parts[parts.indexOf("backups") + 1]?.split("?")[0];
+      const snapshot = backupSnapshots.get(id);
+      if (snapshot) {
+        restaurantSettings = JSON.parse(JSON.stringify(snapshot.restaurant));
+        branchSettings = JSON.parse(JSON.stringify(snapshot.branch));
+        demoCategories = JSON.parse(JSON.stringify(snapshot.categories));
+        demoMenuItems = JSON.parse(JSON.stringify(snapshot.menuItems));
+        demoFloors = JSON.parse(JSON.stringify(snapshot.floors));
+        demoOrders = JSON.parse(JSON.stringify(snapshot.orders));
+        demoShifts = JSON.parse(JSON.stringify(snapshot.shifts));
+      }
+      return send({ ok: true, restoredFrom: id, ordersRestored: demoOrders.length });
     }
 
     return send(demoBackups);
@@ -1924,11 +2187,12 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname.includes("/roles")) {
+    const makePerms = (list) => list.map((k) => ({ permission: { key: k, label: k, category: "General" } }));
     return send([
-      { id: "role-admin", name: "ADMIN", label: "Owner / Administrator", permissions: ["*"] },
-      { id: "role-cashier", name: "CASHIER", label: "Lead Cashier", permissions: ["orders.*", "pos.*", "billing.*"] },
-      { id: "role-chef", name: "CHEF", label: "Head Chef", permissions: ["kds.*"] },
-      { id: "role-waiter", name: "WAITER", label: "Floor Waiter", permissions: ["tables.*", "orders.create"] },
+      { id: "role-admin", name: "ADMIN", label: "Owner / Administrator", isSystem: true, createdAt: new Date().toISOString(), permissions: makePerms(["*"]) },
+      { id: "role-cashier", name: "CASHIER", label: "Lead Cashier", isSystem: false, createdAt: new Date().toISOString(), permissions: makePerms(["orders.*", "pos.*", "billing.*"]) },
+      { id: "role-chef", name: "CHEF", label: "Head Chef", isSystem: false, createdAt: new Date().toISOString(), permissions: makePerms(["kds.*"]) },
+      { id: "role-waiter", name: "WAITER", label: "Floor Waiter", isSystem: false, createdAt: new Date().toISOString(), permissions: makePerms(["tables.*", "orders.create"]) },
     ]);
   }
 
@@ -1980,8 +2244,29 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname.includes("/attendance")) {
-    if (pathname.includes("/me")) return send(null);
-    return send([]);
+    if (pathname.includes("/me")) {
+      const active = demoAttendance.find((a) => a.userId === demoUser.id && !a.clockOutAt);
+      return send(active || demoAttendance[0] || null);
+    }
+    if (req.method === "POST" && pathname.includes("/clock-in")) {
+      const rec = {
+        id: `att-${Date.now()}`,
+        branchId: "branch-1",
+        userId: demoUser.id,
+        user: { id: demoUser.id, name: demoUser.name },
+        clockInAt: new Date().toISOString(),
+        clockOutAt: null,
+        note: "Web cashier clock-in",
+      };
+      demoAttendance.unshift(rec);
+      return send(rec);
+    }
+    if (req.method === "POST" && pathname.includes("/clock-out")) {
+      const rec = demoAttendance.find((a) => a.userId === demoUser.id && !a.clockOutAt);
+      if (rec) rec.clockOutAt = new Date().toISOString();
+      return send(rec || { ok: true });
+    }
+    return send(demoAttendance);
   }
 
   // If method is GET and path asks for list or collection, return array to prevent client crashes

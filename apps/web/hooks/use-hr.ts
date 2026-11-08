@@ -10,6 +10,9 @@ export interface Shift {
   startsAt: string;
   endsAt: string;
   note: string | null;
+  clockIn?: string | null;
+  clockOut?: string | null;
+  status?: "SCHEDULED" | "ACTIVE" | "COMPLETED" | "ABSENT";
 }
 export interface LeaveRow {
   id: string;
@@ -115,6 +118,18 @@ export function useHrActions(branchId: string | null) {
   const qc = useQueryClient();
   const done = () => qc.invalidateQueries({ queryKey: ["hr"] });
   return {
+    updateShift: useMutation({
+      mutationFn: (v: {
+        id: string;
+        startsAt?: string;
+        endsAt?: string;
+        userId?: string;
+        note?: string | null;
+        clockIn?: string | null;
+        clockOut?: string | null;
+      }) => api.patch(`/hr/shifts/${v.id}?${q(branchId)}`, v),
+      onSuccess: done,
+    }),
     addShift: useMutation({
       mutationFn: (dto: { userId: string; startsAt: string; endsAt: string; note?: string }) =>
         api.post(`/hr/shifts?${q(branchId)}`, dto),

@@ -178,7 +178,7 @@ function GeneralSettingsForm({
 }) {
   const [name, setName] = useState(restaurant.name);
   const [legalName, setLegalName] = useState(restaurant.legalName ?? "");
-  const [logoUrl, setLogoUrl] = useState<string | null>(restaurant.logoUrl);
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => restaurant.logoUrl || (typeof window !== "undefined" ? localStorage.getItem("easydine_custom_logo") : null));
   const [currency, setCurrency] = useState(restaurant.currency);
   const [timezone, setTimezone] = useState(restaurant.timezone);
   const [upiVpa, setUpiVpa] = useState(restaurant.upiVpa ?? "");

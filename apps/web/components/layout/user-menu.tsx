@@ -1,7 +1,7 @@
 "use client";
 
 import type { SessionUser } from "@easydine/types";
-import { LogOut, Moon, Server, Sun, Trash2 } from "lucide-react";
+import { Download, LogOut, Moon, Server, Sun, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DeleteAccountDialog } from "@/components/layout/delete-account-dialog";
+import { InstallAppDialog } from "@/components/layout/install-app-dialog";
 import { useLogout } from "@/hooks/use-auth";
 import { changeServer, isNativeApp } from "@/lib/native";
 
@@ -33,6 +34,7 @@ export function UserMenu({ user }: { user?: SessionUser }) {
   const logout = useLogout();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
 
   return (
     <div className="flex items-center gap-2">
@@ -82,6 +84,7 @@ export function UserMenu({ user }: { user?: SessionUser }) {
         </DropdownMenuContent>
       </DropdownMenu>
       <DeleteAccountDialog open={deleting} onOpenChange={setDeleting} />
+      <InstallAppDialog open={installOpen} onOpenChange={setInstallOpen} />
     </div>
   );
 }

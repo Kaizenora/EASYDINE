@@ -1,5 +1,7 @@
 "use client";
 
+import { TableRequestsBar } from "@/components/tables/table-requests-bar";
+
 import { Clock, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -104,6 +106,7 @@ function OrdersView() {
         </p>
       </div>
 
+      <TableRequestsBar branchId={branchId} />
       <ScanOrderInput branchId={branchId} />
 
       <div className="flex flex-wrap gap-2">
@@ -232,7 +235,7 @@ function OrderRow({
   onToggle: () => void;
 }) {
   const name = order.guestName ?? order.customer?.name ?? "Walk-in guest";
-  const summary = order.items.map((i) => `${i.quantity}× ${i.nameSnapshot}`).join(", ");
+  const summary = Array.isArray(order.items) ? order.items.map((i) => `${i.quantity}× ${i.nameSnapshot}`).join(", ") : "—";
   const rejected = order.acceptance === "REJECTED";
   return (
     <div

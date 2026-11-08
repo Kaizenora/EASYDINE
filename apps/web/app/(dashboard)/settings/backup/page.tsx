@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FileSpreadsheet, ShieldCheck, Download } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { RestoreBackupDialog } from "@/components/settings/restore-backup-dialog";
 import { SettingsTabs } from "@/components/settings/settings-tabs";

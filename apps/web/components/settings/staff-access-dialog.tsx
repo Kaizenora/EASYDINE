@@ -45,7 +45,7 @@ export function StaffAccessDialog({ member }: { member: StaffMember }) {
 
   const initial = useMemo(() => {
     const m: Record<string, Choice> = {};
-    for (const o of member.permissionOverrides) m[o.permission.key] = o.effect;
+    for (const o of (member.permissionOverrides || [])) { const k = o?.permission?.key || o?.key; if (k && o?.effect) m[k] = o.effect; }
     return m;
   }, [member.permissionOverrides]);
 
@@ -54,7 +54,7 @@ export function StaffAccessDialog({ member }: { member: StaffMember }) {
   const [reason, setReason] = useState(() => member.permissionOverrides.find((o) => o.reason)?.reason ?? "");
 
   const roleKeys = useMemo(
-    () => new Set(roles?.find((r) => r.id === member.roleId)?.permissions.map((p) => p.permission.key) ?? []),
+    () => new Set(roles?.find((r) => r.id === member.roleId)?.permissions?.map((p) => p?.permission?.key || (typeof p === "string" ? p : p?.key)).filter(Boolean) ?? []),
     [roles, member.roleId],
   );
   const myKeys = useMemo(() => new Set(me?.user.permissions ?? []), [me]);
@@ -66,7 +66,7 @@ export function StaffAccessDialog({ member }: { member: StaffMember }) {
   }, []);
 
   const changed = Object.entries(choices).filter(([, v]) => v !== "DEFAULT");
-  const isOwner = member.role.name === "OWNER";
+  const isOwner = member.role?.name === "OWNER" || member.role?.name === "ADMIN";
 
   const onOpenChange = (next: boolean) => {
     if (next) setChoices(initial);

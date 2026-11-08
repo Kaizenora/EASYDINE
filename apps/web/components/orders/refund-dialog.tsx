@@ -158,7 +158,7 @@ export function RefundDialog({
               <p className="text-xs text-muted-foreground">
                 A refund alone does not change stock. Enter only the units that physically came back and can be reused.
               </p>
-              {order.items.map((item) => (
+              {(order.items || []).map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
                   <Label htmlFor={`ret-${item.id}`} className="min-w-0 flex-1 truncate">
                     {item.nameSnapshot} <span className="text-muted-foreground">(sold {item.quantity})</span>

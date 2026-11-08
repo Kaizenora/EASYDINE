@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { AdjustLineDialog, PayRunDialog, SlipButton } from "@/components/team/payroll-dialogs";
+import { EditShiftDialog, DeleteShiftConfirmDialog } from "@/components/team/edit-shift-dialog";
+import { Pencil, Trash2, Clock, CheckCircle2 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ import {
   usePayrollRuns,
   usePerformance,
   useShifts,
+  type Shift,
 } from "@/hooks/use-hr";
 import { ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
@@ -36,8 +39,10 @@ function Schedule({ branchId }: { branchId: string | null }) {
   const to = iso(addDays(new Date(from), 6));
   const { data: shifts, isLoading } = useShifts(branchId, from, to);
   const { data: staff } = usePay(branchId);
-  const { addShift, deleteShift } = useHrActions(branchId);
+  const { addShift, updateShift, deleteShift } = useHrActions(branchId);
   const [form, setForm] = useState({ userId: "", date: iso(new Date()), start: "09:00", end: "17:00" });
+  const [editingShift, setEditingShift] = useState<Shift | null>(null);
+  const [deletingShift, setDeletingShift] = useState<Shift | null>(null);
 
   const submit = () => {
     if (!form.userId) return toast.error("Pick a staff member");
@@ -81,19 +86,95 @@ function Schedule({ branchId }: { branchId: string | null }) {
         {isLoading ? (
           <Skeleton className="m-4 h-12" />
         ) : Array.isArray(shifts) && shifts.length > 0 ? (
-          shifts.map((s) => (
-            <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-              <span className="font-medium text-foreground">{s.user.name}</span>
-              <span className="text-muted-foreground">
-                {fmtDate(s.startsAt)} · {fmtTime(s.startsAt)} – {fmtTime(s.endsAt)}
-              </span>
-              <Button size="sm" variant="outline" onClick={() => deleteShift.mutate(s.id)}>Remove</Button>
-            </div>
-          ))
+          shifts.map((s) => {
+            const hasClockIn = !!s.clockIn;
+            const hasClockOut = !!s.clockOut;
+            return (
+              <div key={s.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground">{s.user.name}</span>
+                    <span className="rounded-full bg-secondary/80 px-2 py-0.5 text-xs text-muted-foreground">
+                      {fmtDate(s.startsAt)}
+                    </span>
+                    {hasClockIn && !hasClockOut && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Clocked In
+                      </span>
+                    )}
+                    {hasClockOut && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500">
+                        <CheckCircle2 className="h-3 w-3" /> Completed
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                    <span>
+                      Scheduled: <strong>{fmtTime(s.startsAt)} – {fmtTime(s.endsAt)}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      In: <strong className={hasClockIn ? "text-emerald-500" : ""}>{hasClockIn ? fmtTime(s.clockIn!) : "—"}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Out: <strong className={hasClockOut ? "text-blue-500" : ""}>{hasClockOut ? fmtTime(s.clockOut!) : "—"}</strong>
+                    </span>
+                    {s.note && (
+                      <>
+                        <span>•</span>
+                        <span className="italic">{s.note}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => setEditingShift(s)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeletingShift(s)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                  </Button>
+                </div>
+              </div>
+            );
+          })
         ) : (
           <p className="p-6 text-center text-sm text-muted-foreground">No shifts this week.</p>
         )}
       </Card>
+
+      <EditShiftDialog
+        shift={editingShift}
+        staffList={Array.isArray(staff) ? staff : []}
+        open={!!editingShift}
+        onOpenChange={(o) => !o && setEditingShift(null)}
+        onSave={async (updated) => {
+          await updateShift.mutateAsync(updated);
+        }}
+      />
+
+      <DeleteShiftConfirmDialog
+        shift={deletingShift}
+        open={!!deletingShift}
+        onOpenChange={(o) => !o && setDeletingShift(null)}
+        onConfirm={async () => {
+          if (deletingShift) {
+            await deleteShift.mutateAsync(deletingShift.id);
+          }
+        }}
+      />
     </div>
   );
 }

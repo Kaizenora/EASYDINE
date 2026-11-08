@@ -99,7 +99,7 @@ export function EditBillDialog({
         ) : (
           <div className="flex min-w-0 flex-col gap-5">
             <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
-              {order.items.map((item) => {
+              {(order.items || []).map((item) => {
                 const locked = startedItems.has(item.id);
                 return (
                   <div key={item.id} className="flex flex-col gap-2 px-3 py-2">

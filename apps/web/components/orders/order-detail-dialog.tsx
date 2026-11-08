@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, MessageCircle, Pencil, Phone, X } from "lucide-react";
+import { Check, Printer, MessageCircle, Pencil, Phone, X } from "lucide-react";
 import { useState } from "react";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,7 @@ export function OrderDetailDialog({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [acceptConfirmOpen, setAcceptConfirmOpen] = useState(false);
   const customerName = order?.guestName ?? order?.customer?.name ?? "Walk-in guest";
   const pending = order?.status === "OPEN" && order?.acceptance === "PENDING";
   const canCancel = order?.status === "OPEN" && !pending;
@@ -179,11 +180,11 @@ export function OrderDetailDialog({
             {pending && canAnswer && (
               <div className="flex gap-2">
                 <Button
-                  className="h-11 flex-1"
+                  className="h-11 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                   disabled={accept.isPending}
-                  onClick={() => run(() => accept.mutateAsync(order.id), "Order accepted — sent to the kitchen")}
+                  onClick={() => setAcceptConfirmOpen(true)}
                 >
-                  <Check className="mr-1.5 h-4 w-4" /> Accept order
+                  <Printer className="mr-1.5 h-4 w-4" /> Accept & Print KOT
                 </Button>
                 <Button variant="destructive" className="h-11 flex-1" onClick={() => setDeclineOpen(true)}>
                   <X className="mr-1.5 h-4 w-4" /> Decline
@@ -254,6 +255,38 @@ export function OrderDetailDialog({
           </div>
         )}
       </DialogContent>
+      <Dialog open={acceptConfirmOpen} onOpenChange={setAcceptConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Accept Order #{order?.orderNumber}?</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-sm text-muted-foreground space-y-2">
+            <p>
+              Confirm accepting order for <strong>{customerName}</strong>
+              {order?.table ? ` (${order.table.name ?? order.table.number})` : ""}?
+            </p>
+            <div className="rounded-lg bg-secondary/50 p-2.5 text-xs text-foreground space-y-1">
+              <div>• {order?.items?.length || 0} item(s) will be sent to the Kitchen Display (KDS)</div>
+              <div>• KOT ticket will be queued for printing</div>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end mt-2">
+            <Button variant="outline" onClick={() => setAcceptConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={accept.isPending}
+              onClick={() => {
+                setAcceptConfirmOpen(false);
+                run(() => accept.mutateAsync(order!.id), "✅ Order accepted & KOT sent to kitchen!");
+              }}
+            >
+              <Check className="mr-1.5 h-4 w-4" /> Confirm & Send KOT
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

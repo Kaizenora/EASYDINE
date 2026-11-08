@@ -95,7 +95,7 @@ export function useUpdateRestaurantSettings(branchId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: RestaurantSettingsDto) => api.patch("/settings/restaurant", dto),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["settings", branchId] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["settings"] }); },
   });
 }
 
