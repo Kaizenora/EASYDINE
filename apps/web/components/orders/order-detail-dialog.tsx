@@ -98,23 +98,29 @@ export function OrderDetailDialog({
                 Items
               </div>
               <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-foreground">
-                        {item.quantity}× {item.nameSnapshot}
-                      </span>
-                      {item.modifiers.length > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          {item.modifiers.map((m) => m.nameSnapshot).join(", ")}
+                {Array.isArray(order.items) && order.items.length > 0 ? (
+                  order.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">
+                          {item.quantity}× {item.nameSnapshot}
                         </span>
-                      )}
+                        {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {item.modifiers.map((m) => m.nameSnapshot).join(", ")}
+                          </span>
+                        )}
+                      </div>
+                      <span className="tabular-nums text-foreground">
+                        {formatCurrency(item.lineTotal)}
+                      </span>
                     </div>
-                    <span className="tabular-nums text-foreground">
-                      {formatCurrency(item.lineTotal)}
-                    </span>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-xs text-muted-foreground italic">
+                    No items in this order
                   </div>
-                ))}
+                )}
               </div>
             </div>
 

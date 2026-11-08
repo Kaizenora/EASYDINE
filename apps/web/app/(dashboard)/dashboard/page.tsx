@@ -19,6 +19,7 @@ import { openEntity } from "@/lib/entity-events";
 import { CustomizePanel } from "@/components/dashboard/customize-panel";
 import {
   DEFAULT_DASHBOARD_PREFS,
+  type DashboardPrefs,
   useDashboardPrefs,
   useDashboardSummary,
   useDashboardTrends,
@@ -127,7 +128,16 @@ export default function DashboardPage() {
   const { branchId } = useBranch();
   const { data, isLoading } = useDashboardSummary(branchId);
   const { data: prefsData } = useDashboardPrefs();
-  const prefs = (prefsData && !Array.isArray(prefsData) && Array.isArray(prefsData.topOrder)) ? prefsData : DEFAULT_DASHBOARD_PREFS;
+  const rawPrefs = (prefsData && typeof prefsData === "object" && !Array.isArray(prefsData))
+    ? (prefsData as Partial<DashboardPrefs>)
+    : {};
+  const prefs: DashboardPrefs = {
+    ...DEFAULT_DASHBOARD_PREFS,
+    ...rawPrefs,
+    topOrder: Array.isArray(rawPrefs.topOrder) ? rawPrefs.topOrder : DEFAULT_DASHBOARD_PREFS.topOrder,
+    cardOrder: Array.isArray(rawPrefs.cardOrder) ? rawPrefs.cardOrder : DEFAULT_DASHBOARD_PREFS.cardOrder,
+    hidden: Array.isArray(rawPrefs.hidden) ? rawPrefs.hidden : DEFAULT_DASHBOARD_PREFS.hidden,
+  };
   const savePrefs = useSaveDashboardPrefs();
   const { data: trends, isLoading: trendsLoading } = useDashboardTrends(branchId, prefs.trendDays);
   const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
@@ -142,14 +152,14 @@ export default function DashboardPage() {
   // Layout only: where a widget sits and whether it shows. CSS `order` keeps
   // the existing markup in place, and a hidden widget is simply not displayed.
   const slot = (group: "top" | "card", id: string, className = "") => {
-    const list = group === "top" ? prefs.topOrder : prefs.cardOrder;
+    const list = (group === "top" ? prefs.topOrder : prefs.cardOrder) || [];
     const index = Math.max(list.indexOf(id), 0);
     // Inline display:none always beats a utility class like `flex` or `grid`.
     return {
       className,
       style: {
         order: (group === "top" ? 10 : 100) + index,
-        ...(prefs.hidden.includes(id) ? { display: "none" } : {}),
+        ...((prefs.hidden || []).includes(id) ? { display: "none" } : {}),
       },
     };
   };

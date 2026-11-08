@@ -30,7 +30,7 @@ let restaurantSettings = {
   id: "rest-1",
   name: "Hotel Sanjog",
   legalName: "Hotel Sanjog Hospitality Pvt Ltd",
-  logoUrl: null,
+  logoUrl: "/logo.png",
   currency: "INR",
   timezone: "Asia/Kolkata",
   upiVpa: "hotelsanjog@upi",
@@ -223,6 +223,165 @@ let activeTableRequests = [
   },
 ];
 let openServiceRequests = ["WAITER"];
+
+let demoOrders = [
+  {
+    id: "ord-1042",
+    orderNumber: "1042",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "ONLINE",
+    acceptance: "ACCEPTED",
+    tableId: "tbl-1",
+    guestName: "siddharth",
+    guestCount: 2,
+    notes: "Serve piping hot",
+    cancelReason: null,
+    subtotal: "960.00",
+    taxAmount: "48.00",
+    discountAmount: "0.00",
+    tipAmount: "0.00",
+    totalAmount: "1008.00",
+    createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
+    customer: { id: "cust-1", name: "siddharth", phone: "+91 9876543210" },
+    items: [
+      {
+        id: "item-1",
+        menuItemId: "item-1",
+        nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
+        quantity: 2,
+        unitPriceSnapshot: "340.00",
+        lineTotal: "680.00",
+        status: "PREPARING",
+        kitchenNote: "Extra spicy",
+        modifiers: [],
+      },
+      {
+        id: "item-2",
+        menuItemId: "item-4",
+        nameSnapshot: "Dal Makhani (Slow Cooked 24h)",
+        quantity: 1,
+        unitPriceSnapshot: "280.00",
+        lineTotal: "280.00",
+        status: "ACCEPTED",
+        kitchenNote: "No onion",
+        modifiers: [],
+      },
+    ],
+    kots: [
+      {
+        id: "kot-1",
+        ticketNumber: 1,
+        status: "PREPARING",
+        notes: "Table 1 (Window)",
+        createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
+        sentAt: new Date(Date.now() - 20 * 60000).toISOString(),
+        items: [
+          { id: "koti-1", nameSnapshot: "Paneer Tikka (Charcoal Smoked)", quantity: 2, status: "PREPARING" },
+          { id: "koti-2", nameSnapshot: "Dal Makhani (Slow Cooked 24h)", quantity: 1, status: "ACCEPTED" },
+        ],
+      },
+    ],
+    payments: [],
+  },
+  {
+    id: "ord-1043",
+    orderNumber: "1043",
+    type: "DINE_IN",
+    status: "OPEN",
+    channel: "STAFF",
+    acceptance: "ACCEPTED",
+    tableId: "tbl-3",
+    guestName: "Amit Sharma",
+    guestCount: 4,
+    notes: null,
+    cancelReason: null,
+    subtotal: "840.00",
+    taxAmount: "42.00",
+    discountAmount: "0.00",
+    tipAmount: "0.00",
+    totalAmount: "882.00",
+    createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
+    billedAt: null,
+    table: { id: "tbl-3", name: "Table 3", number: "3" },
+    customer: { id: "cust-2", name: "Amit Sharma", phone: "+91 9811223344" },
+    items: [
+      {
+        id: "item-3",
+        menuItemId: "item-3",
+        nameSnapshot: "Murgh Malai Kebab",
+        quantity: 2,
+        unitPriceSnapshot: "420.00",
+        lineTotal: "840.00",
+        status: "SERVED",
+        kitchenNote: "Mild spicy",
+        modifiers: [],
+      },
+    ],
+    kots: [
+      {
+        id: "kot-2",
+        ticketNumber: 2,
+        status: "SERVED",
+        notes: "Table 3",
+        createdAt: new Date(Date.now() - 14 * 60000).toISOString(),
+        sentAt: new Date(Date.now() - 14 * 60000).toISOString(),
+        items: [
+          { id: "koti-3", nameSnapshot: "Murgh Malai Kebab", quantity: 2, status: "SERVED" },
+        ],
+      },
+    ],
+    payments: [],
+  },
+  {
+    id: "ord-1041",
+    orderNumber: "1041",
+    type: "TAKEAWAY",
+    status: "COMPLETED",
+    channel: "STAFF",
+    acceptance: "ACCEPTED",
+    tableId: null,
+    guestName: "Vikram Malhotra",
+    guestCount: 1,
+    notes: null,
+    cancelReason: null,
+    subtotal: "534.00",
+    taxAmount: "26.70",
+    discountAmount: "50.00",
+    tipAmount: "0.00",
+    totalAmount: "510.70",
+    createdAt: new Date(Date.now() - 120 * 60000).toISOString(),
+    billedAt: new Date(Date.now() - 100 * 60000).toISOString(),
+    table: null,
+    customer: { id: "cust-3", name: "Vikram Malhotra", phone: "+91 9988776655" },
+    items: [
+      {
+        id: "item-4",
+        menuItemId: "item-5",
+        nameSnapshot: "Veg Biryani (Claypot)",
+        quantity: 2,
+        unitPriceSnapshot: "267.00",
+        lineTotal: "534.00",
+        status: "SERVED",
+        kitchenNote: null,
+        modifiers: [],
+      },
+    ],
+    kots: [],
+    payments: [
+      {
+        id: "pay-1",
+        method: "UPI",
+        amount: "510.70",
+        tendered: "510.70",
+        changeGiven: "0.00",
+        createdAt: new Date(Date.now() - 100 * 60000).toISOString(),
+      },
+    ],
+  },
+];
 let demoCoupons = [
   {
     id: "cpn-1",
@@ -447,7 +606,7 @@ const server = http.createServer((req, res) => {
 
   // --- Restaurant logo upload ---
   if (pathname.includes("/settings/restaurant/logo")) {
-    const url = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300&auto=format&fit=crop&q=80";
+    const url = "/logo.png";
     restaurantSettings.logoUrl = url;
     return send({ url });
   }
@@ -962,30 +1121,92 @@ const server = http.createServer((req, res) => {
     if (req.method === "POST" && pathname.endsWith("/order")) {
       return getBody().then((b) => {
         const orderNum = String(1040 + Math.floor(Math.random() * 50));
+        const items = (b.items || []).map((it, idx) => {
+          const found = demoMenuItems.find((m) => m.id === it.menuItemId);
+          const price = found ? parseFloat(found.price) : 250;
+          return {
+            id: `ord-item-${Date.now()}-${idx}`,
+            menuItemId: it.menuItemId,
+            nameSnapshot: found?.name || "Delicious Dish",
+            quantity: it.quantity,
+            unitPriceSnapshot: price.toFixed(2),
+            lineTotal: (price * it.quantity).toFixed(2),
+            status: "ACCEPTED",
+            kitchenNote: it.kitchenNote || null,
+            modifiers: [],
+          };
+        });
+        const subtotal = items.reduce((sum, it) => sum + parseFloat(it.lineTotal), 0);
+        const tax = subtotal * 0.05;
+        const total = subtotal + tax;
+
+        const newOrder = {
+          id: `ord-${orderNum}`,
+          orderNumber: orderNum,
+          type: "DINE_IN",
+          status: "OPEN",
+          channel: "ONLINE",
+          acceptance: "ACCEPTED",
+          tableId: "tbl-1",
+          guestName: b.guestName || "siddharth",
+          guestCount: 2,
+          notes: b.note || null,
+          cancelReason: null,
+          subtotal: subtotal.toFixed(2),
+          taxAmount: tax.toFixed(2),
+          discountAmount: "0.00",
+          tipAmount: "0.00",
+          totalAmount: total.toFixed(2),
+          createdAt: new Date().toISOString(),
+          billedAt: null,
+          table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
+          customer: { id: `cust-${Date.now()}`, name: b.guestName || "siddharth", phone: "+91 9876543210" },
+          items,
+          kots: [
+            {
+              id: `kot-${Date.now()}`,
+              ticketNumber: demoOrders.length + 1,
+              status: "ACCEPTED",
+              notes: "Table 1 (Window) - QR Order",
+              createdAt: new Date().toISOString(),
+              sentAt: new Date().toISOString(),
+              items: items.map((it) => ({
+                id: `koti-${it.id}`,
+                nameSnapshot: it.nameSnapshot,
+                quantity: it.quantity,
+                status: "ACCEPTED",
+              })),
+            },
+          ],
+          payments: [],
+        };
+
+        demoOrders.unshift(newOrder);
+
         activeCustomerOrder = {
           orderNumber: orderNum,
           status: "ACCEPTED",
           acceptance: "ACCEPTED",
-          items: (b.items || []).map((it, idx) => {
-            const found = demoMenuItems.find((m) => m.id === it.menuItemId);
-            return {
-              id: `pi-${idx}`,
-              nameSnapshot: found?.name || "Delicious Dish",
-              quantity: it.quantity,
-              status: "ACCEPTED",
-              kitchenNote: it.kitchenNote,
-            };
-          }),
+          items: items.map((it) => ({
+            id: it.id,
+            nameSnapshot: it.nameSnapshot,
+            quantity: it.quantity,
+            status: "ACCEPTED",
+            kitchenNote: it.kitchenNote,
+          })),
         };
+
         demoNotifications.unshift({
           id: `notif-${Date.now()}`,
           entity: "Order",
           entityId: `ord-${orderNum}`,
-          title: `New Online Order #${orderNum}`,
-          message: `${b.guestName || "Guest"} placed order at Table 1 (${activeCustomerOrder.items.length} items)`,
+          title: `New Online Order #${orderNum} — Table 1 (Window)`,
+          body: `${b.guestName || "Guest"} placed order at Table 1 (${items.length} items • ₹${total.toFixed(2)})`,
+          message: `${b.guestName || "Guest"} placed order at Table 1 (${items.length} items)`,
           createdAt: new Date().toISOString(),
           readAt: null,
         });
+
         return send({ orderNumber: orderNum });
       });
     }
@@ -1007,8 +1228,9 @@ const server = http.createServer((req, res) => {
           id: `notif-${Date.now()}`,
           entity: "ServiceRequest",
           entityId: "tbl-1",
-          title: type === "WAITER" ? "🔔 Call Waiter Alert" : "🧾 Bill Requested",
-          message: `Table 1 requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
+          title: type === "WAITER" ? "🔔 Table 1 (Window) — Waiter Called" : "🧾 Table 1 (Window) — Bill Requested",
+          body: `Table 1 (Window) requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
+          message: `Table 1 (Window) requested ${type === "WAITER" ? "waiter assistance" : "final bill"}`,
           createdAt: new Date().toISOString(),
           readAt: null,
         });
@@ -1025,6 +1247,293 @@ const server = http.createServer((req, res) => {
         items: demoMenuItems.filter((i) => i.categoryId === c.id && i.isActive),
       })),
     });
+  }
+
+  // --- Orders Management & POS Endpoints ---
+  if (pathname.includes("/orders/manage")) {
+    const tab = parsedUrl.searchParams.get("tab") || "active";
+    const channel = parsedUrl.searchParams.get("channel");
+    const type = parsedUrl.searchParams.get("type");
+
+    let list = demoOrders.filter((o) => {
+      if (tab === "pending") {
+        return o.status === "OPEN" && o.acceptance === "PENDING";
+      }
+      if (tab === "active") {
+        return o.status === "OPEN" && o.acceptance !== "PENDING";
+      }
+      if (tab === "history") {
+        return o.status === "COMPLETED" || o.status === "CANCELLED" || o.status === "BILLED";
+      }
+      return true;
+    });
+
+    if (channel) {
+      list = list.filter((o) => o.channel === channel);
+    }
+    if (type) {
+      list = list.filter((o) => o.type === type);
+    }
+
+    const mapped = list.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      type: o.type,
+      status: o.status,
+      channel: o.channel,
+      acceptance: o.acceptance,
+      guestName: o.guestName,
+      totalAmount: o.totalAmount,
+      createdAt: o.createdAt,
+      table: o.table ? { id: o.table.id, name: o.table.name, number: parseInt(o.table.number, 10) || 1 } : null,
+      customer: o.customer,
+      items: (o.items || []).map((it) => ({
+        id: it.id,
+        nameSnapshot: it.nameSnapshot,
+        quantity: it.quantity,
+      })),
+    }));
+
+    return send(mapped);
+  }
+
+  if (pathname.includes("/orders/open-for-table/")) {
+    const tableId = pathname.split("/").pop().split("?")[0];
+    const order = demoOrders.find((o) => o.tableId === tableId && o.status === "OPEN");
+    return send(order || null);
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/accept/)) {
+    const parts = pathname.split("/");
+    const id = parts[parts.indexOf("orders") + 1];
+    const order = demoOrders.find((o) => o.id === id || o.orderNumber === id);
+    if (order) {
+      order.acceptance = "ACCEPTED";
+      order.status = "OPEN";
+      return send({ ok: true, order });
+    }
+    return send({ ok: true });
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/reject/)) {
+    const parts = pathname.split("/");
+    const id = parts[parts.indexOf("orders") + 1];
+    const order = demoOrders.find((o) => o.id === id || o.orderNumber === id);
+    if (order) {
+      order.acceptance = "REJECTED";
+      order.status = "CANCELLED";
+      return send({ ok: true, order });
+    }
+    return send({ ok: true });
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/cancel/)) {
+    const parts = pathname.split("/");
+    const id = parts[parts.indexOf("orders") + 1];
+    const order = demoOrders.find((o) => o.id === id || o.orderNumber === id);
+    if (order) {
+      order.status = "CANCELLED";
+      return send({ ok: true, order });
+    }
+    return send({ ok: true });
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/bill-preview/)) {
+    const parts = pathname.split("/");
+    const id = parts[parts.indexOf("orders") + 1];
+    const order = demoOrders.find((o) => o.id === id || o.orderNumber === id);
+    const subtotal = order ? parseFloat(order.subtotal) : 960;
+    const tax = subtotal * 0.05;
+    return send({
+      locked: false,
+      status: order ? order.status : "OPEN",
+      subtotal,
+      discountAmount: 0,
+      discountPercent: 0,
+      discountType: null,
+      discountValue: null,
+      couponCode: null,
+      promotionName: null,
+      taxAmount: tax,
+      loyaltyPointsRedeemed: 0,
+      loyaltyDiscountAmount: 0,
+      tipAmount: 0,
+      deliveryFee: 0,
+      totalDue: subtotal + tax,
+      amountPaid: 0,
+      balanceDue: subtotal + tax,
+    });
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/checkout/)) {
+    const parts = pathname.split("/");
+    const id = parts[parts.indexOf("orders") + 1];
+    const order = demoOrders.find((o) => o.id === id || o.orderNumber === id);
+    if (order) {
+      order.status = "COMPLETED";
+      order.billedAt = new Date().toISOString();
+    }
+    const total = order ? parseFloat(order.totalAmount) : 1008;
+    return send({
+      id: order ? order.id : `ord-${id}`,
+      orderNumber: order ? order.orderNumber : id,
+      subtotal: order ? order.subtotal : "960.00",
+      taxAmount: order ? order.taxAmount : "48.00",
+      discountAmount: "0.00",
+      tipAmount: "0.00",
+      loyaltyPointsRedeemed: 0,
+      loyaltyDiscountAmount: "0.00",
+      totalAmount: order ? order.totalAmount : "1008.00",
+      status: "COMPLETED",
+      settlement: {
+        amountDue: total,
+        amountPaid: total,
+        balanceDue: 0,
+        changeDue: 0,
+        fullyPaid: true,
+      },
+    });
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/print\/kot/)) {
+    return send({
+      ok: true,
+      printed: [{ id: "kot-1", ticketNumber: "1", reprint: 0 }],
+      escpos: ["1b40", "1b6101", "4b4f54205469636b6574", "0a", "1d5600"],
+    });
+  }
+
+  if (pathname.match(/\/orders\/[^/]+\/print\/usb/)) {
+    return send({
+      ok: true,
+      unsupportedChars: [],
+      escpos: ["1b40", "1b6101", "42696c6c20536c6970", "0a", "1d5600"],
+    });
+  }
+
+  if (req.method === "POST" && pathname.endsWith("/orders")) {
+    return getBody().then((b) => {
+      const orderNum = String(1040 + Math.floor(Math.random() * 50));
+      const items = (b.items || []).map((it, idx) => {
+        const found = demoMenuItems.find((m) => m.id === it.menuItemId);
+        const price = found ? parseFloat(found.price) : 250;
+        return {
+          id: `ord-item-${Date.now()}-${idx}`,
+          menuItemId: it.menuItemId,
+          nameSnapshot: found?.name || "Dish",
+          quantity: it.quantity,
+          unitPriceSnapshot: price.toFixed(2),
+          lineTotal: (price * it.quantity).toFixed(2),
+          status: "ACCEPTED",
+          kitchenNote: it.kitchenNote || null,
+          modifiers: it.modifiers || [],
+        };
+      });
+      const subtotal = items.reduce((sum, it) => sum + parseFloat(it.lineTotal), 0);
+      const tax = subtotal * 0.05;
+      const total = subtotal + tax;
+
+      const order = {
+        id: `ord-${orderNum}`,
+        orderNumber: orderNum,
+        type: b.type || "DINE_IN",
+        status: "OPEN",
+        channel: "STAFF",
+        acceptance: "ACCEPTED",
+        tableId: b.tableId || null,
+        guestName: b.guestName || "Walk-in Guest",
+        guestCount: b.guestCount || 1,
+        notes: b.notes || null,
+        cancelReason: null,
+        subtotal: subtotal.toFixed(2),
+        taxAmount: tax.toFixed(2),
+        discountAmount: "0.00",
+        tipAmount: "0.00",
+        totalAmount: total.toFixed(2),
+        createdAt: new Date().toISOString(),
+        billedAt: null,
+        table: b.tableId ? { id: b.tableId, name: `Table ${b.tableId}`, number: "1" } : null,
+        customer: b.customerId ? { id: b.customerId, name: "Customer", phone: "" } : null,
+        items,
+        kots: [],
+        payments: [],
+      };
+
+      demoOrders.unshift(order);
+      return send({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        subtotal: order.subtotal,
+        taxAmount: order.taxAmount,
+        discountAmount: order.discountAmount,
+        tipAmount: order.tipAmount,
+        loyaltyPointsRedeemed: 0,
+        loyaltyDiscountAmount: "0.00",
+        totalAmount: order.totalAmount,
+        status: "OPEN",
+      });
+    });
+  }
+
+  // Single order detail
+  if (req.method === "GET" && pathname.match(/\/orders\/([^/?]+)$/)) {
+    const parts = pathname.split("/");
+    const id = parts[parts.length - 1].split("?")[0];
+    if (id !== "manage" && id !== "print" && id !== "export") {
+      const order = demoOrders.find((o) => o.id === id || o.orderNumber === id);
+      if (order) {
+        return send(order);
+      }
+      // If not found in demo, return a realistic fallback order so nothing crashes
+      return send({
+        id,
+        orderNumber: id.replace("ord-", ""),
+        type: "DINE_IN",
+        status: "OPEN",
+        channel: "ONLINE",
+        acceptance: "ACCEPTED",
+        tableId: "tbl-1",
+        guestName: "Guest",
+        guestCount: 2,
+        notes: null,
+        cancelReason: null,
+        subtotal: "620.00",
+        taxAmount: "31.00",
+        discountAmount: "0.00",
+        tipAmount: "0.00",
+        totalAmount: "651.00",
+        createdAt: new Date().toISOString(),
+        billedAt: null,
+        table: { id: "tbl-1", name: "Table 1 (Window)", number: "1" },
+        customer: { id: "cust-1", name: "Guest", phone: "" },
+        items: [
+          {
+            id: "it-fallback-1",
+            menuItemId: "item-1",
+            nameSnapshot: "Paneer Tikka (Charcoal Smoked)",
+            quantity: 1,
+            unitPriceSnapshot: "340.00",
+            lineTotal: "340.00",
+            status: "ACCEPTED",
+            kitchenNote: null,
+            modifiers: [],
+          },
+          {
+            id: "it-fallback-2",
+            menuItemId: "item-4",
+            nameSnapshot: "Dal Makhani (Slow Cooked 24h)",
+            quantity: 1,
+            unitPriceSnapshot: "280.00",
+            lineTotal: "280.00",
+            status: "ACCEPTED",
+            kitchenNote: null,
+            modifiers: [],
+          },
+        ],
+        kots: [],
+        payments: [],
+      });
+    }
   }
 
   // --- Thermal & Kitchen Printer Services ---
