@@ -69,6 +69,39 @@ function ModifierPickerBody({
   });
   const customPrice = prices[portionKind];
   const [selected, setSelected] = useState<Record<string, Set<string>>>(() => defaultSelection(item));
+  const [cashierExtras, setCashierExtras] = useState<{ id: string; name: string; price: number }[]>([]);
+  const [customExtraName, setCustomExtraName] = useState("");
+  const [customExtraPrice, setCustomExtraPrice] = useState("40");
+
+  const PRESET_EXTRAS = [
+    { id: "ex-cheese", name: "Extra Cheese", price: 40 },
+    { id: "ex-butter", name: "Extra Butter", price: 20 },
+    { id: "ex-raita", name: "Extra Raita", price: 30 },
+    { id: "ex-dip", name: "Extra Dip / Mayo", price: 25 },
+    { id: "ex-roti", name: "Extra Pav / Roti", price: 25 },
+    { id: "ex-spicy", name: "Extra Spicy", price: 0 },
+    { id: "no-onion", name: "No Onion Garlic", price: 0 },
+  ];
+
+  const toggleCashierExtra = (extra: { id: string; name: string; price: number }) => {
+    setCashierExtras((prev) => {
+      const exists = prev.some((e) => e.name === extra.name);
+      if (exists) {
+        return prev.filter((e) => e.name !== extra.name);
+      }
+      return [...prev, extra];
+    });
+  };
+
+  const addCustomExtra = () => {
+    const name = customExtraName.trim();
+    if (!name) return;
+    const price = Math.max(0, Number(customExtraPrice) || 0);
+    const newExtra = { id: `custom-${Date.now()}`, name, price };
+    setCashierExtras((prev) => [...prev, newExtra]);
+    setCustomExtraName("");
+    setCustomExtraPrice("40");
+  };
 
   const groups = item.modifierGroups.map((g) => g.modifierGroup);
 
@@ -108,11 +141,29 @@ function ModifierPickerBody({
       }
     }
     const allSelected = groups.flatMap((g) => [...(selected[g.id] ?? [])]);
-    const label = groups
+    const groupLabels = groups
       .flatMap((g) => [...(selected[g.id] ?? [])].map((id) => g.modifiers.find((m) => m.id === id)?.name))
-      .filter(Boolean)
-      .join(", ");
-    onConfirm(allSelected, label, portion);
+      .filter(Boolean);
+    
+    const extraLabels = cashierExtras.map((e) => (e.price > 0 ? `${e.name} (+₹${e.price})` : e.name));
+    const totalExtraPrice = cashierExtras.reduce((sum, e) => sum + e.price, 0);
+    const finalLabel = [...groupLabels, ...extraLabels].filter(Boolean).join(", ");
+
+    let finalPortion = portion;
+    if (finalPortion) {
+      finalPortion = {
+        ...finalPortion,
+        customPrice: (finalPortion.customPrice ?? Number(item.price || 0)) + totalExtraPrice,
+      };
+    } else if (totalExtraPrice > 0) {
+      finalPortion = {
+        kind: "CUSTOM",
+        customPrice: Number(item.price || 0) + totalExtraPrice,
+        customLabel: finalLabel || "With Extras",
+      };
+    }
+
+    onConfirm(allSelected, finalLabel, finalPortion);
   };
 
   return (
@@ -212,6 +263,71 @@ function ModifierPickerBody({
             </div>
           </div>
         ))}
+
+        {/* Cashier Extras & Add-ons (e.g. Extra Cheese ₹40) */}
+        <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-muted/30 p-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Extras & Add-ons</h3>
+            <span className="text-xs text-muted-foreground">Cashier custom options</span>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {PRESET_EXTRAS.map((extra) => {
+              const active = cashierExtras.some((e) => e.name === extra.name);
+              return (
+                <button
+                  key={extra.id}
+                  type="button"
+                  onClick={() => toggleCashierExtra(extra)}
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground font-semibold shadow-sm"
+                      : "border-border bg-card text-foreground hover:bg-secondary"
+                  )}
+                >
+                  <span>{extra.name}</span>
+                  {extra.price > 0 && (
+                    <span className={active ? "text-primary-foreground/90 font-bold" : "text-primary font-semibold"}>
+                      +₹{extra.price}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Extra Input */}
+          <div className="mt-1 flex items-center gap-2 pt-1 border-t border-border/50">
+            <Input
+              placeholder="Custom extra (e.g. Extra Cheese)"
+              value={customExtraName}
+              onChange={(e) => setCustomExtraName(e.target.value)}
+              className="h-8 text-xs"
+            />
+            <div className="relative w-24 shrink-0">
+              <span className="absolute left-2 top-2 text-xs text-muted-foreground">₹</span>
+              <Input
+                type="number"
+                min="0"
+                placeholder="40"
+                value={customExtraPrice}
+                onChange={(e) => setCustomExtraPrice(e.target.value)}
+                className="h-8 pl-5 text-xs"
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={addCustomExtra}
+              disabled={!customExtraName.trim()}
+              className="h-8 shrink-0 text-xs"
+            >
+              + Add
+            </Button>
+          </div>
+        </div>
       </div>
 
       <DialogFooter>

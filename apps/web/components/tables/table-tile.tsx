@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useUpdateTableStatus, type RestaurantTable } from "@/hooks/use-tables";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { BillTableDialog } from "./bill-table-dialog";
 import { ElapsedTimer } from "./elapsed-timer";
@@ -52,6 +53,27 @@ export function TableTile({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [billOpen, setBillOpen] = useState(false);
 
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem(`easydine.tablePayment.${table.id}`) || null;
+    }
+    return null;
+  });
+
+  const handleMarkPayment = (method: string | null) => {
+    if (typeof window !== "undefined") {
+      if (method) {
+        window.localStorage.setItem(`easydine.tablePayment.${table.id}`, method);
+        setPaymentStatus(method);
+        toast.success(`Table ${table.name ?? table.number} marked as Paid via ${method}`);
+      } else {
+        window.localStorage.removeItem(`easydine.tablePayment.${table.id}`);
+        setPaymentStatus(null);
+        toast.info(`Payment status cleared for Table ${table.name ?? table.number}`);
+      }
+    }
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -70,6 +92,11 @@ export function TableTile({
           </span>
           {(table.status === "OCCUPIED" || table.status === "RESERVED") && (
             <ElapsedTimer since={table.statusSince} className="flex items-center gap-1 text-[10px] opacity-70" />
+          )}
+          {paymentStatus && table.status === "OCCUPIED" && (
+            <span className="rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-500/40">
+              {paymentStatus === "CASH" ? "💵 Cash Paid" : paymentStatus === "CARD" ? "💳 Card Paid" : "📱 UPI Paid"}
+            </span>
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent>
@@ -110,6 +137,24 @@ export function TableTile({
                 <Merge className="h-4 w-4" />
                 Merge another table&apos;s bill here
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Payment Status
+              </div>
+              <DropdownMenuItem onClick={() => handleMarkPayment("CASH")}>
+                💵 Mark Paid: Cash
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleMarkPayment("CARD")}>
+                💳 Mark Paid: Card
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleMarkPayment("UPI")}>
+                📱 Mark Paid: UPI / Online
+              </DropdownMenuItem>
+              {paymentStatus && (
+                <DropdownMenuItem onClick={() => handleMarkPayment(null)} className="text-muted-foreground">
+                  ⏳ Clear Payment (Unpaid)
+                </DropdownMenuItem>
+              )}
             </>
           )}
         </DropdownMenuContent>

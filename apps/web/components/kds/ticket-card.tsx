@@ -1,8 +1,9 @@
 "use client";
 
 import { ApiError } from "@/lib/api";
-import { CloudOff, Flame, Globe, Printer, Star, Timer, X } from "lucide-react";
+import { CloudOff, Flame, Globe, Printer, RotateCcw, Star, Timer, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,7 +18,16 @@ import {
   useUpdateKotStatus,
   type KotTicket,
 } from "@/hooks/use-kds";
+import type { KotStatusDto } from "@easydine/types";
 import { cn } from "@/lib/utils";
+
+const STATUS_NAMES: Record<string, string> = {
+  NEW: "Ordered (New)",
+  ACCEPTED: "Ordered",
+  PREPARING: "Preparing in Kitchen",
+  READY: "Ready to Serve",
+  SERVED: "Served & Delivered",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   NEW: "Accept",
@@ -62,6 +72,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const isFresh = ticket.status === "NEW" && elapsed < FRESH_MINUTES;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [confirmStatus, setConfirmStatus] = useState<KotStatusDto | null>(null);
   const reject = useRejectKot(branchId);
   const { data: me } = useCurrentUser();
   // Rejecting before cooking starts is for anyone on the kitchen screen; food
@@ -175,13 +186,18 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           <button
             type="button"
             disabled={updateStatus.isPending}
-            onClick={() => updateStatus.mutate({ id: ticket.id, status: "ACCEPTED" })}
+            onClick={() => {
+              if (ticket.status !== "NEW" && ticket.status !== "ACCEPTED") {
+                setConfirmStatus("ACCEPTED");
+              }
+            }}
             className={cn(
-              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all",
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer",
               ticket.status === "NEW" || ticket.status === "ACCEPTED"
-                ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm font-bold"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"
             )}
+            title="Click to revert to 1. Ordered"
           >
             1. Ordered
           </button>
@@ -189,13 +205,18 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           <button
             type="button"
             disabled={updateStatus.isPending}
-            onClick={() => updateStatus.mutate({ id: ticket.id, status: "PREPARING" })}
+            onClick={() => {
+              if (ticket.status !== "PREPARING") {
+                setConfirmStatus("PREPARING");
+              }
+            }}
             className={cn(
-              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all",
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer",
               ticket.status === "PREPARING"
-                ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm font-bold"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"
             )}
+            title="Click to set to 2. Preparing"
           >
             2. Preparing
           </button>
@@ -203,43 +224,119 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           <button
             type="button"
             disabled={updateStatus.isPending}
-            onClick={() => updateStatus.mutate({ id: ticket.id, status: "READY" })}
+            onClick={() => {
+              if (ticket.status !== "READY") {
+                setConfirmStatus("READY");
+              }
+            }}
             className={cn(
-              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all",
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer",
               ticket.status === "READY"
-                ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm font-bold"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"
             )}
+            title="Click to set to 3. Ready"
           >
             3. Ready
           </button>
         </div>
 
-        {/* Primary Step Action Button */}
-        {ticket.status !== "READY" ? (
-          <Button
-            className="h-10 w-full text-sm font-semibold"
-            disabled={updateStatus.isPending}
-            onClick={() => {
-              const target = (ticket.status === "NEW" || ticket.status === "ACCEPTED") ? "PREPARING" : "READY";
-              updateStatus.mutate({ id: ticket.id, status: target });
-            }}
-          >
-            {updateStatus.isPending
-              ? "Updating…"
-              : (ticket.status === "NEW" || ticket.status === "ACCEPTED")
-                ? "Start Preparing"
-                : "Mark Ready to Serve"}
-          </Button>
-        ) : (
-          <Button
-            className="h-10 w-full bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
-            disabled={updateStatus.isPending}
-            onClick={() => updateStatus.mutate({ id: ticket.id, status: "SERVED" })}
-          >
-            {updateStatus.isPending ? "Updating…" : "✓ Served & Delivered"}
-          </Button>
-        )}
+        {/* Action Button Row with Reversible Step-Back option */}
+        <div className="flex gap-2">
+          {ticket.status === "PREPARING" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={updateStatus.isPending}
+              onClick={() => setConfirmStatus("ACCEPTED")}
+              className="h-10 px-3 text-xs gap-1 font-medium text-muted-foreground hover:text-foreground"
+              title="Move back to Ordered"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Back
+            </Button>
+          )}
+
+          {ticket.status === "READY" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={updateStatus.isPending}
+              onClick={() => setConfirmStatus("PREPARING")}
+              className="h-10 px-3 text-xs gap-1 font-medium text-muted-foreground hover:text-foreground"
+              title="Move back to Preparing"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Back to Prep
+            </Button>
+          )}
+
+          {ticket.status !== "READY" ? (
+            <Button
+              className="h-10 flex-1 text-sm font-semibold"
+              disabled={updateStatus.isPending}
+              onClick={() => {
+                const target = (ticket.status === "NEW" || ticket.status === "ACCEPTED") ? "PREPARING" : "READY";
+                setConfirmStatus(target);
+              }}
+            >
+              {updateStatus.isPending
+                ? "Updating…"
+                : (ticket.status === "NEW" || ticket.status === "ACCEPTED")
+                  ? "Start Preparing →"
+                  : "Mark Ready to Serve →"}
+            </Button>
+          ) : (
+            <Button
+              className="h-10 flex-1 bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
+              disabled={updateStatus.isPending}
+              onClick={() => setConfirmStatus("SERVED")}
+            >
+              {updateStatus.isPending ? "Updating…" : "✓ Served & Delivered"}
+            </Button>
+          )}
+        </div>
+
+        {/* Status Change Confirmation Dialog */}
+        <Dialog open={confirmStatus !== null} onOpenChange={(open) => !open && setConfirmStatus(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirm Kitchen Status Change</DialogTitle>
+            </DialogHeader>
+            <div className="py-3 text-sm text-muted-foreground">
+              Are you sure you want to move Ticket <strong className="text-foreground">#{ticket.order.orderNumber}</strong> to{" "}
+              <strong className="text-primary">{confirmStatus ? (STATUS_NAMES[confirmStatus] || confirmStatus) : ""}</strong>?
+            </div>
+            <DialogFooter className="flex gap-2 sm:justify-end">
+              <Button variant="outline" onClick={() => setConfirmStatus(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (confirmStatus) {
+                    updateStatus.mutate(
+                      { id: ticket.id, status: confirmStatus },
+                      {
+                        onSuccess: () => {
+                          toast.success(`Ticket #${ticket.order.orderNumber} updated to ${STATUS_NAMES[confirmStatus] || confirmStatus}`);
+                          setConfirmStatus(null);
+                        },
+                        onError: () => {
+                          toast.error("Could not update ticket status");
+                          setConfirmStatus(null);
+                        },
+                      }
+                    );
+                  }
+                }}
+              >
+                Confirm Change
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex items-center gap-2">
         {canReject && (

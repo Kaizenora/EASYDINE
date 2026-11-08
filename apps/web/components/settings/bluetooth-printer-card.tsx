@@ -2,6 +2,7 @@
 
 import { Bluetooth, CheckCircle2, ChefHat, Printer, RefreshCw, Smartphone, Sparkles, Unplug } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -46,6 +47,7 @@ export function BluetoothPrinterCard() {
   const [note, setNote] = useState<string | null>(null);
   const [pairingCashier, setPairingCashier] = useState(false);
   const [pairingKitchen, setPairingKitchen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
   const native = canPrintOnDevice();
   const savedPrinter = raw ? savedBtPrinter() : null;
@@ -173,9 +175,14 @@ export function BluetoothPrinterCard() {
               variant="secondary"
               disabled={testReceipt.isPending}
               onClick={() =>
-                testReceipt.mutate(undefined, {
-                  onSuccess: () => toast.success("Test bill slip printed on Cashier printer!"),
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Print test failed"),
+                setConfirmAction({
+                  title: "Confirm Test Bill Print",
+                  message: `Send a test receipt slip to ${cashierPrinterName}?`,
+                  onConfirm: () =>
+                    testReceipt.mutate(undefined, {
+                      onSuccess: () => toast.success("Test bill slip printed on Cashier printer!"),
+                      onError: (e) => toast.error(e instanceof Error ? e.message : "Print test failed"),
+                    }),
                 })
               }
               className="gap-1.5 text-xs"
@@ -190,9 +197,14 @@ export function BluetoothPrinterCard() {
               variant="ghost"
               disabled={openDrawer.isPending}
               onClick={() =>
-                openDrawer.mutate(branchId, {
-                  onSuccess: () => toast.success("Cash drawer kick pulse sent!"),
-                  onError: () => toast.error("Cash drawer pulse error"),
+                setConfirmAction({
+                  title: "Confirm Open Cash Drawer",
+                  message: "Trigger cash drawer kick pulse on the connected receipt printer?",
+                  onConfirm: () =>
+                    openDrawer.mutate(branchId, {
+                      onSuccess: () => toast.success("Cash drawer kick pulse sent!"),
+                      onError: () => toast.error("Cash drawer pulse error"),
+                    }),
                 })
               }
               className="text-xs"
@@ -250,9 +262,14 @@ export function BluetoothPrinterCard() {
               variant="secondary"
               disabled={testKot.isPending}
               onClick={() =>
-                testKot.mutate(undefined, {
-                  onSuccess: () => toast.success("Test KOT ticket printed to Kitchen!"),
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Kitchen print failed"),
+                setConfirmAction({
+                  title: "Confirm Kitchen KOT Test Print",
+                  message: `Send a sample kitchen order ticket to ${kitchenPrinterName}?`,
+                  onConfirm: () =>
+                    testKot.mutate(undefined, {
+                      onSuccess: () => toast.success("Test KOT ticket printed to Kitchen!"),
+                      onError: (e) => toast.error(e instanceof Error ? e.message : "Kitchen print failed"),
+                    }),
                 })
               }
               className="gap-1.5 text-xs"
@@ -273,6 +290,32 @@ export function BluetoothPrinterCard() {
           Save Printer Settings
         </Button>
       </div>
+
+      {/* Confirmation Dialog for Printer Operations */}
+      <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmAction?.title}</DialogTitle>
+          </DialogHeader>
+          <p className="py-2 text-sm text-muted-foreground">
+            {confirmAction?.message}
+          </p>
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button variant="outline" size="sm" onClick={() => setConfirmAction(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                confirmAction?.onConfirm();
+                setConfirmAction(null);
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

@@ -112,12 +112,12 @@ export default function StaffPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-normal">
-                      {member.role.label}
+                      {member.role?.label ?? member.role?.name ?? "Staff"}
                     </Badge>
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">{member.department?.name ?? "—"}</TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">
-                    {member.branches.map((b) => b.branch.name).join(", ") || "—"}
+                    {Array.isArray(member.branches) ? member.branches.map((b) => b?.branch?.name ?? "Main Dining").join(", ") : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Switch

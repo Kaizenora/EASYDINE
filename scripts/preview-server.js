@@ -1837,13 +1837,58 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname.includes("/roles")) {
-    return send([{ id: "role-admin", name: "Administrator", permissions: ["*"] }]);
+    return send([
+      { id: "role-admin", name: "ADMIN", label: "Owner / Administrator", permissions: ["*"] },
+      { id: "role-cashier", name: "CASHIER", label: "Lead Cashier", permissions: ["orders.*", "pos.*", "billing.*"] },
+      { id: "role-chef", name: "CHEF", label: "Head Chef", permissions: ["kds.*"] },
+      { id: "role-waiter", name: "WAITER", label: "Floor Waiter", permissions: ["tables.*", "orders.create"] },
+    ]);
   }
 
   if (pathname.includes("/staff") || pathname.includes("/users")) {
     return send([
-      { id: "u-admin", name: "Restaurant Owner", email: "admin@easydine.com", roleName: "ADMIN", isActive: true },
-      { id: "u-cashier", name: "Lead Cashier", email: "cashier@easydine.com", roleName: "CASHIER", isActive: true },
+      {
+        id: "u-admin",
+        name: "Restaurant Owner",
+        email: "owner@hotelsanjog.com",
+        phone: "+91 98765 43210",
+        isActive: true,
+        createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
+        roleId: "role-admin",
+        role: { id: "role-admin", name: "ADMIN", label: "Owner / Administrator" },
+        branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+        departmentId: "dept-mgmt",
+        department: { id: "dept-mgmt", name: "Management" },
+        permissionOverrides: [],
+      },
+      {
+        id: "u-cashier",
+        name: "Rahul Sharma (Cashier)",
+        email: "cashier@hotelsanjog.com",
+        phone: "+91 98123 45678",
+        isActive: true,
+        createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+        roleId: "role-cashier",
+        role: { id: "role-cashier", name: "CASHIER", label: "Lead Cashier" },
+        branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+        departmentId: "dept-front",
+        department: { id: "dept-front", name: "Front of House" },
+        permissionOverrides: [],
+      },
+      {
+        id: "u-chef",
+        name: "Chef Sanjeev",
+        email: "chef@hotelsanjog.com",
+        phone: "+91 98234 56789",
+        isActive: true,
+        createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
+        roleId: "role-chef",
+        role: { id: "role-chef", name: "CHEF", label: "Head Chef" },
+        branches: [{ branch: { id: "branch-1", name: "Hotel Sanjog (Main Dining)" } }],
+        departmentId: "dept-kitchen",
+        department: { id: "dept-kitchen", name: "Kitchen" },
+        permissionOverrides: [],
+      },
     ]);
   }
 
