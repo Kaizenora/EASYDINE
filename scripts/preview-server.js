@@ -1251,9 +1251,9 @@ const server = http.createServer((req, res) => {
 
   // --- Orders Management & POS Endpoints ---
   if (pathname.includes("/orders/manage")) {
-    const tab = parsedUrl.searchParams.get("tab") || "active";
-    const channel = parsedUrl.searchParams.get("channel");
-    const type = parsedUrl.searchParams.get("type");
+    const tab = url.searchParams.get("tab") || "active";
+    const channel = url.searchParams.get("channel");
+    const type = url.searchParams.get("type");
 
     let list = demoOrders.filter((o) => {
       if (tab === "pending") {
