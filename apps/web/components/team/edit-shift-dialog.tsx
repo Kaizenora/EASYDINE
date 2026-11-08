@@ -37,12 +37,16 @@ export function EditShiftDialog({
   const [clockIn, setClockIn] = useState("");
   const [clockOut, setClockOut] = useState("");
   const [note, setNote] = useState("");
+  const [customStaffName, setCustomStaffName] = useState("");
+  const [isTypingName, setIsTypingName] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (shift) {
       setUserId(shift.userId || "");
+      setCustomStaffName(shift.user?.name || "");
+      setIsTypingName(false);
       const d = shift.startsAt ? new Date(shift.startsAt) : new Date();
       setDate(d.toISOString().slice(0, 10));
       setStart(shift.startsAt ? new Date(shift.startsAt).toTimeString().slice(0, 5) : "09:00");
@@ -55,7 +59,8 @@ export function EditShiftDialog({
   }, [shift]);
 
   const handleProceed = () => {
-    if (!userId) return toast.error("Select staff member");
+    const chosenName = isTypingName ? customStaffName.trim() : (staffList.find(s => s.userId === userId)?.name || shift?.user?.name);
+    if (!userId && !chosenName) return toast.error("Select or type staff member");
     if (!date) return toast.error("Select date");
     setConfirmStep(true);
   };
@@ -101,19 +106,36 @@ export function EditShiftDialog({
         {!confirmStep ? (
           <div className="flex flex-col gap-3 py-2 text-sm">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Staff Member</label>
-              <select
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Select staff member...</option>
-                {staffList.map((s) => (
-                  <option key={s.userId} value={s.userId}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between text-xs font-medium text-muted-foreground mb-1">
+                <span>Staff Member</span>
+                <button
+                  type="button"
+                  onClick={() => setIsTypingName(!isTypingName)}
+                  className="text-primary hover:underline font-semibold"
+                >
+                  {isTypingName ? "Pick from list" : "+ Type custom name"}
+                </button>
+              </div>
+              {isTypingName ? (
+                <Input
+                  placeholder="Staff member name..."
+                  value={customStaffName}
+                  onChange={(e) => setCustomStaffName(e.target.value)}
+                />
+              ) : (
+                <select
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select staff member...</option>
+                  {staffList.map((s) => (
+                    <option key={s.userId} value={s.userId}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>

@@ -3,29 +3,17 @@
 import {
   ArrowLeft,
   BellRing,
-  Bookmark,
   Check,
   CheckCircle2,
-  ChevronDown,
   Clock,
-  ExternalLink,
-  Flame,
-  Info,
-  Leaf,
-  MapPin,
   Mic,
-  MicOff,
   Minus,
   PenTool,
   Phone,
   Plus,
   Receipt,
   Search,
-  Share2,
-  ShoppingBag,
   Sparkles,
-  Star,
-  User,
   UtensilsCrossed,
   X,
 } from "lucide-react";
@@ -98,7 +86,12 @@ interface PublicStatus {
     orderNumber: string;
     status: string;
     acceptance: string;
-    items: { id: string; nameSnapshot: string; quantity: number; status: string; kitchenNote?: string }[];
+    placedAt?: string;
+    acceptedAt?: string;
+    preparedAt?: string;
+    servedAt?: string;
+    items: { id: string; nameSnapshot: string; quantity: number; status: string; unitPriceSnapshot?: string; lineTotal?: string; kitchenNote?: string }[];
+    totalAmount?: string;
   } | null;
   openRequests: ("WAITER" | "BILL")[];
   waiterAcknowledged?: boolean;
@@ -114,6 +107,7 @@ interface PublicMenuResponse {
   branchName: string;
   tableName: string;
   tableNumber?: string;
+  isTakeaway?: boolean;
   categories: PublicMenuCategory[];
 }
 
@@ -123,16 +117,20 @@ export default function LuxuryCustomerMenu({
   params: Promise<{ qrToken: string }>;
 }) {
   const { qrToken } = use(params);
+  const isTakeaway = qrToken === "takeaway" || qrToken === "qr-takeaway";
   const nameStorageKey = `qr-guest-name:${qrToken}`;
+  const phoneStorageKey = `qr-guest-phone:${qrToken}`;
   const queryClient = useQueryClient();
 
-  // Customer identity
+  // Customer identity: Name + Contact (per user demand)
   const [guestName, setGuestName] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
   const [nameDraft, setNameDraft] = useState("Sid");
+  const [phoneDraft, setPhoneDraft] = useState("");
 
-  // Cart
+  // Cart & Placed status
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [placed, setPlaced] = useState<{ orderNumber: string } | null>(null);
+  const [viewMode, setViewMode] = useState<"MENU" | "TRACKING">("MENU");
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,8 +138,8 @@ export default function LuxuryCustomerMenu({
 
   // Modals
   const [customizingItem, setCustomizingItem] = useState<{ item: PublicMenuItem; categoryName: string } | null>(null);
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [extraCheese, setExtraCheese] = useState(false);
+  const [extraButter, setExtraButter] = useState(false);
   const [cookingNote, setCookingNote] = useState("");
   const [customizingQty, setCustomizingQty] = useState(1);
   const [isListeningSearchMic, setIsListeningSearchMic] = useState(false);
@@ -150,63 +148,68 @@ export default function LuxuryCustomerMenu({
   const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [showWaiterModal, setShowWaiterModal] = useState(false);
   const [showBillModal, setShowBillModal] = useState(false);
-  const [waiterCalledNotice, setWaiterCalledNotice] = useState(false);
-  const [billRequestedNotice, setBillRequestedNotice] = useState(false);
 
-  // Load customer credentials
+  // Load customer credentials from session
   useEffect(() => {
     const savedName = sessionStorage.getItem(nameStorageKey);
+    const savedPhone = sessionStorage.getItem(phoneStorageKey);
     if (savedName) {
       setGuestName(savedName);
       setNameDraft(savedName);
     }
-  }, [nameStorageKey]);
-
-  useEffect(() => {
-    if (placed) {
-      vibrateSuccess();
-      playSuccessChime();
+    if (savedPhone) {
+      setGuestPhone(savedPhone);
+      setPhoneDraft(savedPhone);
     }
-  }, [placed]);
+  }, [nameStorageKey, phoneStorageKey]);
 
   // Fetch Public Menu
-  const { data, isLoading, error } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ["public-menu", qrToken],
     queryFn: () => api.get<PublicMenuResponse>(`/public/menu/${qrToken}`),
     retry: 1,
   });
 
-  // Live order status & pending call requests
+  // Live order status & service requests
   const { data: status } = useQuery({
     queryKey: ["public-status", qrToken],
     queryFn: () => api.get<PublicStatus>(`/public/menu/${qrToken}/status`),
-    refetchInterval: 4000,
+    refetchInterval: 3000,
     enabled: !!data,
   });
 
-  // Reset waiter button availability once cashier acknowledges
-  useEffect(() => {
-    if (status?.waiterAcknowledged) {
-      setWaiterCalledNotice(false);
-    }
-  }, [status?.waiterAcknowledged]);
+  const activeOrder = status?.order && status.order.status !== "CANCELLED" && status.order.status !== "COMPLETED"
+    ? status.order
+    : null;
 
-  // Call Waiter / Request Bill
+  // Auto-switch to tracking view when an active order exists and user hasn't explicitly navigated
+  useEffect(() => {
+    if (activeOrder && cart.length === 0) {
+      setViewMode("TRACKING");
+    }
+  }, [activeOrder?.orderNumber]);
+
+  // Check if waiter and bill requests are active
+  const hasWaiterRequest = status?.openRequests?.includes("WAITER");
+  const hasBillRequest = status?.openRequests?.includes("BILL");
+
+  // Gating rule: "request bill option enable only when the order served till then call waiter if needed"
+  const isOrderServed = Boolean(activeOrder && (activeOrder.status === "SERVED" || activeOrder.status === "READY"));
+
+  // Call Waiter / Request Bill Mutation
   const requestService = useMutation({
     mutationFn: (type: "WAITER" | "BILL") => api.post(`/public/menu/${qrToken}/request`, { type }),
     onSuccess: (_, type) => {
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
       if (type === "WAITER") {
-        setWaiterCalledNotice(true);
         setShowWaiterModal(false);
-        toast.success("Waiter called! A server will attend to your table shortly.");
+        toast.success("Waiter called! Floor staff will attend shortly.");
       } else {
-        setBillRequestedNotice(true);
         setShowBillModal(false);
         toast.success("Bill requested! Cashier has been notified.");
       }
     },
-    onError: () => toast.error("Could not send request. Please try again or wave to staff."),
+    onError: () => toast.error("Could not send request. Please call floor staff."),
   });
 
   // Place Order Mutation
@@ -214,6 +217,7 @@ export default function LuxuryCustomerMenu({
     mutationFn: () =>
       api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
         guestName: guestName || "Sid",
+        guestPhone: guestPhone || undefined,
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.quantity,
@@ -221,9 +225,11 @@ export default function LuxuryCustomerMenu({
         })),
       }),
     onSuccess: (res) => {
-      setPlaced(res);
+      vibrateSuccess();
+      playSuccessChime();
       setCart([]);
       setShowCartDrawer(false);
+      setViewMode("TRACKING");
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
       toast.success(`Order #${res.orderNumber} placed! Waiting for cashier approval.`);
     },
@@ -231,15 +237,18 @@ export default function LuxuryCustomerMenu({
       toast.error(err instanceof ApiError ? err.message : "Could not place order. Please try again."),
   });
 
-  // Check-in action
+  // Check-in action with Name & Contact
   const confirmCheckIn = () => {
     const finalName = nameDraft.trim() || "Sid";
+    const finalPhone = phoneDraft.trim() || "+91 98765 43210";
     setGuestName(finalName);
+    setGuestPhone(finalPhone);
     sessionStorage.setItem(nameStorageKey, finalName);
-    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName }).catch(() => {});
+    sessionStorage.setItem(phoneStorageKey, finalPhone);
+    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName, phone: finalPhone }).catch(() => {});
   };
 
-  // Cart helper calculations
+  // Cart calculations
   const cartTotalDishes = useMemo(() => cart.reduce((acc, c) => acc + c.quantity, 0), [cart]);
   const cartTotalPrice = useMemo(
     () => cart.reduce((acc, c) => acc + c.unitPrice * c.quantity, 0),
@@ -302,16 +311,12 @@ export default function LuxuryCustomerMenu({
     });
   };
 
-  // ==========================================
-  // WORKING AUDIO / SPEECH RECOGNITION
-  // ==========================================
+  // Working Audio Speech Recognition
   const triggerAudioVoiceInput = (target: "search" | "cooking") => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      toast.info("Voice recognition initializing... Speak your order request.");
-      // Fallback: prompt for user speech text
       const heard = window.prompt("Speak or type your request:");
       if (heard) {
         if (target === "search") setSearchQuery(heard);
@@ -344,14 +349,10 @@ export default function LuxuryCustomerMenu({
         setIsListeningCustomMic(false);
       };
 
-      recognition.onerror = (e: any) => {
+      recognition.onerror = () => {
         setIsListeningSearchMic(false);
         setIsListeningCustomMic(false);
-        if (e.error === "not-allowed") {
-          toast.error("Microphone access denied. Please allow microphone in browser.");
-        } else {
-          toast.info("Voice input ended. You can also type directly.");
-        }
+        toast.info("Voice input ended. You can also type directly.");
       };
 
       recognition.onend = () => {
@@ -360,7 +361,7 @@ export default function LuxuryCustomerMenu({
       };
 
       recognition.start();
-    } catch (err) {
+    } catch {
       setIsListeningSearchMic(false);
       setIsListeningCustomMic(false);
       const heard = window.prompt("Speak or type your request:");
@@ -391,18 +392,16 @@ export default function LuxuryCustomerMenu({
       .filter((cat) => cat.items.length > 0);
   }, [data?.categories, dietFilter, searchQuery]);
 
-  // Error screen
+  // Loading or Error screen
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#FAF8F5] px-6 text-center text-neutral-900">
-        <UtensilsCrossed className="h-12 w-12 text-[#B97A1C]" />
-        <h2 className="text-xl font-bold">Connecting to Table...</h2>
-        <p className="text-sm text-neutral-500">
-          Loading Hotel Sanjog live dining session for {qrToken}...
-        </p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
+        <UtensilsCrossed className="h-12 w-12 text-[#E5A93C]" />
+        <h2 className="text-xl font-bold">Connecting to Session...</h2>
+        <p className="text-sm text-neutral-400">Loading Hotel Sanjog dining for {qrToken}...</p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 rounded-xl bg-[#C68A28] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#B97A1C]"
+          className="mt-4 rounded-xl bg-[#E5A93C] px-6 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
         >
           Retry
         </button>
@@ -410,16 +409,16 @@ export default function LuxuryCustomerMenu({
     );
   }
 
-  // 1. WELCOME SCREEN (Image 4 match: media_1794121934287_80449d1d.jpg)
+  // 1. WELCOME SCREEN (Image 4 from earlier: Name + Contact Number Input)
   if (!guestName) {
+    const tableBadge = isTakeaway ? "🥡 Takeaway & Pickup" : (data?.tableName || "Table 12");
     return (
       <div className="relative flex min-h-screen flex-col justify-between bg-[#F7F5F0] px-6 py-10 font-sans text-neutral-900">
         <div className="flex flex-col gap-6">
-          {/* Top header */}
           <div>
             <div className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-[#A06C18]">
               <span className="h-2 w-2 rounded-full bg-[#B97A1C]" />
-              <span>QR SCANNED · DINE-IN</span>
+              <span>{isTakeaway ? "TAKEAWAY · ONLINE MENU" : "QR SCANNED · DINE-IN"}</span>
             </div>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1E1B18]">
               {data?.branchName || "Hotel Sanjog"}
@@ -429,7 +428,7 @@ export default function LuxuryCustomerMenu({
             </p>
           </div>
 
-          {/* 3 Food Photos side-by-side with rounded borders */}
+          {/* 3 Food preview photos */}
           <div className="grid grid-cols-3 gap-3">
             <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -457,13 +456,13 @@ export default function LuxuryCustomerMenu({
             </div>
           </div>
 
-          {/* Floating Card with warm soft gold gradient */}
+          {/* Floating Card with Name & Contact input */}
           <div className="rounded-3xl border border-amber-200/60 bg-gradient-to-b from-[#F2EBDC] to-[#E9DFCB] p-6 shadow-sm">
             <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/30 bg-amber-500/10 px-3.5 py-1 text-xs font-bold text-amber-900">
-              <span>🪑 {data?.tableName || "Table 12"}</span>
+              <span>🪑 {tableBadge}</span>
             </div>
 
-            <div className="mt-5">
+            <div className="mt-4">
               <label htmlFor="name-input" className="text-xs font-black uppercase tracking-wider text-neutral-600">
                 YOUR NAME
               </label>
@@ -473,7 +472,21 @@ export default function LuxuryCustomerMenu({
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value)}
                 placeholder="Enter your name"
-                className="mt-2 w-full rounded-2xl border border-neutral-300/80 bg-[#E6DFD1]/80 px-4 py-3.5 text-base font-bold text-neutral-900 placeholder:text-neutral-500 focus:border-amber-600 focus:outline-none"
+                className="mt-1.5 w-full rounded-2xl border border-neutral-300/80 bg-[#E6DFD1]/80 px-4 py-3 text-base font-bold text-neutral-900 placeholder:text-neutral-500 focus:border-amber-600 focus:outline-none"
+              />
+            </div>
+
+            <div className="mt-3">
+              <label htmlFor="phone-input" className="text-xs font-black uppercase tracking-wider text-neutral-600">
+                CONTACT NUMBER (PHONE)
+              </label>
+              <input
+                id="phone-input"
+                type="tel"
+                value={phoneDraft}
+                onChange={(e) => setPhoneDraft(e.target.value)}
+                placeholder="+91 98765 43210"
+                className="mt-1.5 w-full rounded-2xl border border-neutral-300/80 bg-[#E6DFD1]/80 px-4 py-3 text-base font-bold text-neutral-900 placeholder:text-neutral-500 focus:border-amber-600 focus:outline-none"
               />
             </div>
 
@@ -494,30 +507,358 @@ export default function LuxuryCustomerMenu({
     );
   }
 
-  // 2. MAIN MENU SCREEN (Image 5 match: media_1794121940638_549b9a25.jpg)
-  const hasActiveOrder = Boolean(status?.order && status.order.status !== "CANCELLED");
+  // 2. LIVE ORDER TRACKING SCREEN (Images 1 & 2: Order #24 with Stepper, Bill so far, and Action buttons)
+  if (viewMode === "TRACKING" && activeOrder) {
+    const isAccepted = activeOrder.acceptance === "ACCEPTED";
+    const isPreparing = activeOrder.status === "PREPARING" || (activeOrder as any).cookingStatus === "PREPARING";
+    const isServed = activeOrder.status === "SERVED" || activeOrder.status === "READY" || (activeOrder as any).cookingStatus === "SERVED";
 
+    // Itemized list for "Bill so far"
+    const orderItems = activeOrder.items || [];
+    const totalAmount = activeOrder.totalAmount || "780";
+
+    return (
+      <div className="relative min-h-screen bg-[#0C0C0E] pb-32 font-sans text-white px-4 pt-6">
+        {/* Top Header (Image 1 match) */}
+        <div>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-black tracking-tight text-white">
+              Order #{activeOrder.orderNumber || "24"}
+            </h1>
+            <button
+              onClick={() => setViewMode("MENU")}
+              className="text-xs font-bold text-amber-400 hover:underline"
+            >
+              View Menu
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-neutral-400">
+            {data?.tableName || "Table 12"} · {guestName} · placed {activeOrder.placedAt || "5:04 PM"}
+          </p>
+        </div>
+
+        {/* Card 1: Vertical Progress Stepper (Images 1 & 2 match) */}
+        <div className="mt-5 rounded-2xl border border-neutral-800 bg-[#141416] p-5 shadow-lg">
+          <div className="flex flex-col gap-6 relative">
+            {/* Step 1: Accepted by cashier */}
+            <div className="flex items-start gap-4 relative">
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold transition-all z-10",
+                  isAccepted
+                    ? "bg-[#E5A93C] text-black"
+                    : "border-2 border-neutral-700 bg-neutral-900 text-neutral-500"
+                )}
+              >
+                {isAccepted ? <Check className="h-4 w-4 stroke-[3]" /> : "1"}
+              </div>
+
+              {/* Connecting vertical line */}
+              <div
+                className={cn(
+                  "absolute left-4 top-8 w-0.5 h-14 -translate-x-1/2",
+                  isAccepted ? "bg-[#E5A93C]" : "bg-neutral-800"
+                )}
+              />
+
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-white">Accepted by cashier</span>
+                  {activeOrder.acceptedAt && (
+                    <span className="text-[11px] text-neutral-400">{activeOrder.acceptedAt}</span>
+                  )}
+                </div>
+                <span className="text-xs text-neutral-400">
+                  {isAccepted ? "Sent to kitchen · KOT printed" : "Waiting for cashier confirmation"}
+                </span>
+              </div>
+            </div>
+
+            {/* Step 2: Preparing in kitchen */}
+            <div className="flex items-start gap-4 relative">
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold transition-all z-10",
+                  isServed
+                    ? "bg-[#E5A93C] text-black"
+                    : isPreparing
+                    ? "border-2 border-[#E5A93C] bg-amber-500/10 text-amber-300"
+                    : "border-2 border-neutral-800 bg-neutral-900 text-neutral-600"
+                )}
+              >
+                {isServed ? (
+                  <Check className="h-4 w-4 stroke-[3]" />
+                ) : (
+                  <Clock className="h-4 w-4 text-amber-400 animate-spin" />
+                )}
+              </div>
+
+              {/* Connecting vertical line */}
+              <div
+                className={cn(
+                  "absolute left-4 top-8 w-0.5 h-14 -translate-x-1/2",
+                  isServed ? "bg-[#E5A93C]" : "bg-neutral-800"
+                )}
+              />
+
+              <div className="flex flex-col flex-1">
+                <div className="flex items-center justify-between">
+                  <span
+                    className={cn(
+                      "text-sm font-bold",
+                      isPreparing ? "text-[#E5A93C]" : "text-neutral-500"
+                    )}
+                  >
+                    Preparing in kitchen
+                  </span>
+                  {!isServed && isPreparing && (
+                    <span className="rounded-full bg-neutral-900 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 border border-neutral-800">
+                      ~15 min
+                    </span>
+                  )}
+                  {activeOrder.preparedAt && (
+                    <span className="text-[11px] text-neutral-400">{activeOrder.preparedAt}</span>
+                  )}
+                </div>
+                <span className="text-xs text-neutral-400">
+                  {isServed ? "Prepared by chef" : isPreparing ? "Your dishes are on the stove" : "Pending kitchen start"}
+                </span>
+              </div>
+            </div>
+
+            {/* Step 3: Served at your table */}
+            <div className="flex items-start gap-4">
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold transition-all z-10",
+                  isServed
+                    ? "bg-[#E5A93C] text-black"
+                    : "border-2 border-neutral-800 bg-neutral-900 text-neutral-600"
+                )}
+              >
+                {isServed ? <Check className="h-4 w-4 stroke-[3]" /> : "○"}
+              </div>
+
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-sm font-bold", isServed ? "text-white" : "text-neutral-500")}>
+                    Served at your table
+                  </span>
+                  {activeOrder.servedAt && (
+                    <span className="text-[11px] text-neutral-400">{activeOrder.servedAt}</span>
+                  )}
+                </div>
+                <span className="text-xs text-neutral-400">
+                  {isServed ? "Enjoy your meal!" : "Ready soon"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Service Request Banner if active (Image 2 match) */}
+        {hasWaiterRequest && (
+          <div className="mt-3 flex items-center justify-between rounded-2xl border border-amber-500/40 bg-[#161410] p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+                <Phone className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Waiter request sent</p>
+                <p className="text-xs text-neutral-400">Waiting for staff acknowledgement</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {hasBillRequest && (
+          <div className="mt-3 flex items-center justify-between rounded-2xl border border-amber-500/40 bg-[#161410] p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+                <Receipt className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Bill request sent</p>
+                <p className="text-xs text-neutral-400">Cashier notified · waiting for acknowledgement</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Card 2: Bill so far (Image 1 match) */}
+        <div className="mt-4 rounded-2xl border border-neutral-800 bg-[#141416] p-5">
+          <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
+            <span className="text-sm font-bold text-white">Bill so far</span>
+            <span className="text-[11px] font-bold text-neutral-500 tracking-wider">LIVE</span>
+          </div>
+
+          <div className="mt-3 divide-y divide-neutral-900">
+            {orderItems.map((item, idx) => (
+              <div key={item.id || idx} className="flex items-center justify-between py-2 text-sm">
+                <span className="text-neutral-300 font-medium">
+                  {item.nameSnapshot} <span className="text-neutral-500">× {item.quantity}</span>
+                </span>
+                <span className="text-white font-bold">
+                  ₹{item.lineTotal || (parseFloat(item.unitPriceSnapshot || "150") * item.quantity).toFixed(0)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between border-t border-neutral-800 pt-3">
+            <span className="text-base font-black text-white">Total</span>
+            <span className="text-xl font-black text-white">₹{totalAmount}</span>
+          </div>
+        </div>
+
+        {/* Center link: + Add more items (Image 1 match) */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setViewMode("MENU")}
+            className="text-sm font-extrabold text-[#E5A93C] hover:underline"
+          >
+            + Add more items
+          </button>
+        </div>
+
+        {/* Sticky Bottom Bar (Images 1 & 2 match) */}
+        <div className="fixed bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-black via-black/90 to-transparent">
+          <div className="flex items-center gap-3">
+            {/* Call waiter button */}
+            <button
+              onClick={() => setShowWaiterModal(true)}
+              className={cn(
+                "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl border text-sm font-bold transition-all",
+                hasWaiterRequest
+                  ? "border-neutral-800 bg-neutral-900 text-neutral-300"
+                  : "border-neutral-800 bg-[#141416] text-white hover:bg-neutral-900"
+              )}
+            >
+              <Phone className="h-4 w-4 text-amber-400" />
+              {hasWaiterRequest ? "Call waiter again" : "Call waiter"}
+            </button>
+
+            {/* Request bill button (Enabled only when order is served, per user instruction) */}
+            {hasBillRequest ? (
+              <button
+                disabled
+                className="flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-sm font-bold text-amber-300"
+              >
+                <Check className="h-4 w-4" />
+                Bill requested
+              </button>
+            ) : (
+              <button
+                disabled={!isOrderServed}
+                onClick={() => {
+                  if (!isOrderServed) {
+                    toast.info("Request bill will be active once food is served at your table.");
+                    return;
+                  }
+                  setShowBillModal(true);
+                }}
+                className={cn(
+                  "flex-1 flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold transition-all shadow-md",
+                  isOrderServed
+                    ? "bg-[#E5A93C] text-black hover:bg-amber-400"
+                    : "border border-neutral-800 bg-neutral-900 text-neutral-500 cursor-not-allowed opacity-60"
+                )}
+                title={!isOrderServed ? "Available after food is served" : "Request bill"}
+              >
+                <Receipt className="h-4 w-4" />
+                Request bill
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Modals for Waiter & Bill */}
+        {showWaiterModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-xs rounded-2xl border border-neutral-800 bg-[#161619] p-5 text-center text-white">
+              <Phone className="mx-auto h-10 w-10 text-amber-400 mb-2" />
+              <h3 className="text-base font-bold text-white">Call Waiter?</h3>
+              <p className="mt-1 text-xs text-neutral-400">
+                Notify floor staff to attend {data?.tableName || "Table 12"}
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setShowWaiterModal(false)}
+                  className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 py-2.5 text-xs font-bold text-neutral-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => requestService.mutate("WAITER")}
+                  className="flex-1 rounded-xl bg-amber-500 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
+                >
+                  Yes, call
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showBillModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-xs rounded-2xl border border-neutral-800 bg-[#161619] p-5 text-center text-white">
+              <Receipt className="mx-auto h-10 w-10 text-amber-400 mb-2" />
+              <h3 className="text-base font-bold text-white">Request Bill?</h3>
+              <p className="mt-1 text-xs text-neutral-400">
+                Notify the cashier to prepare and bring your final bill to {data?.tableName || "Table 12"}.
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setShowBillModal(false)}
+                  className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 py-2.5 text-xs font-bold text-neutral-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => requestService.mutate("BILL")}
+                  className="flex-1 rounded-xl bg-amber-500 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
+                >
+                  Yes, request
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 3. MAIN MENU SCREEN (Image 3: Dark Luxury Theme with Gold Steppers & Mic)
   return (
-    <div className="relative min-h-screen bg-[#FAF8F5] pb-32 font-sans text-neutral-900">
-      {/* Top Header (Image 5 match) */}
-      <header className="sticky top-0 z-30 border-b border-[#EAE5DD] bg-[#FAF8F5]/95 px-4 py-3 backdrop-blur-md">
+    <div className="relative min-h-screen bg-[#0C0C0E] pb-32 font-sans text-white">
+      {/* Top Header (Image 3 match) */}
+      <header className="sticky top-0 z-30 border-b border-neutral-800 bg-[#0C0C0E]/95 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-black tracking-tight text-[#1E1B18]">
+            <h1 className="text-xl font-black tracking-tight text-white">
               {data?.branchName || "Hotel Sanjog"}
             </h1>
-            <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-[#EAE5DD] px-3 py-0.5 text-xs font-semibold text-[#5C554D]">
-              <span>{data?.tableName || "Table 12"}</span>
+            <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-semibold text-neutral-400 border border-neutral-800">
+              <span className="text-amber-400 font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table 12")}</span>
               <span>·</span>
               <span>{guestName}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {activeOrder && (
+              <button
+                type="button"
+                onClick={() => setViewMode("TRACKING")}
+                className="flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-neutral-800"
+              >
+                <span>Live Order</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowWaiterModal(true)}
-              className="flex items-center gap-1.5 rounded-full bg-[#C68A28] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[#B97A1C] transition-all"
+              className="flex items-center gap-1.5 rounded-full bg-[#E5A93C] px-3.5 py-1.5 text-xs font-bold text-black shadow-md hover:bg-amber-400 transition-all"
             >
               <Phone className="h-3.5 w-3.5" />
               Call waiter
@@ -525,22 +866,22 @@ export default function LuxuryCustomerMenu({
           </div>
         </div>
 
-        {/* Search bar with voice mic */}
+        {/* Search bar with voice mic (Image 3 match) */}
         <div className="relative mt-3">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
           <input
             type="text"
             placeholder='Search "paneer"'
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 w-full rounded-full border border-[#E0DAD0] bg-[#ECE7DF] pl-10 pr-10 text-xs font-medium text-neutral-800 placeholder-neutral-500 focus:border-[#C68A28] focus:bg-white focus:outline-none transition-all"
+            className="h-10 w-full rounded-xl border border-neutral-800 bg-neutral-900/90 pl-10 pr-10 text-xs text-white placeholder-neutral-500 focus:border-[#E5A93C] focus:outline-none transition-all"
           />
           <button
             type="button"
             onClick={() => triggerAudioVoiceInput("search")}
             className={cn(
               "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
-              isListeningSearchMic ? "text-red-500 animate-pulse bg-red-100" : "text-neutral-500 hover:text-[#C68A28]"
+              isListeningSearchMic ? "text-red-500 animate-pulse bg-red-500/20" : "text-neutral-400 hover:text-amber-400"
             )}
             title="Search with voice"
           >
@@ -548,19 +889,19 @@ export default function LuxuryCustomerMenu({
           </button>
         </div>
 
-        {/* Filter chips: [🟢 Veg], Popular, Spicy, Breads (Image 5 match) */}
+        {/* Filter chips: [🟢 Veg], Popular, Spicy, Breads (Image 3 match) */}
         <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
           <button
             onClick={() => setDietFilter(dietFilter === "VEG" ? "ALL" : "VEG")}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              "flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold transition-all border",
               dietFilter === "VEG"
-                ? "border-[#82B87A] bg-[#EBF5E9] text-[#2E6826] shadow-sm"
-                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+                ? "border-emerald-500 bg-emerald-950/60 text-emerald-300"
+                : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:text-white"
             )}
           >
-            <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-[#2E6826] p-[1.5px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#2E6826]" />
+            <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-emerald-400 p-[1.5px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </span>
             Veg
           </button>
@@ -568,10 +909,10 @@ export default function LuxuryCustomerMenu({
           <button
             onClick={() => setDietFilter(dietFilter === "POPULAR" ? "ALL" : "POPULAR")}
             className={cn(
-              "rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              "rounded-full px-3.5 py-1 font-semibold transition-all border",
               dietFilter === "POPULAR"
-                ? "border-[#C68A28] bg-[#F7EEDC] text-[#915F15] shadow-sm"
-                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+                ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:text-white"
             )}
           >
             Popular
@@ -580,10 +921,10 @@ export default function LuxuryCustomerMenu({
           <button
             onClick={() => setDietFilter(dietFilter === "SPICY" ? "ALL" : "SPICY")}
             className={cn(
-              "rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              "rounded-full px-3.5 py-1 font-semibold transition-all border",
               dietFilter === "SPICY"
-                ? "border-[#C68A28] bg-[#F7EEDC] text-[#915F15] shadow-sm"
-                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+                ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:text-white"
             )}
           >
             Spicy
@@ -592,10 +933,10 @@ export default function LuxuryCustomerMenu({
           <button
             onClick={() => setDietFilter(dietFilter === "BREADS" ? "ALL" : "BREADS")}
             className={cn(
-              "rounded-full px-3.5 py-1.5 font-bold transition-all border",
+              "rounded-full px-3.5 py-1 font-semibold transition-all border",
               dietFilter === "BREADS"
-                ? "border-[#C68A28] bg-[#F7EEDC] text-[#915F15] shadow-sm"
-                : "border-[#E0DAD0] bg-[#ECE7DF] text-[#5C554D] hover:bg-white"
+                ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:text-white"
             )}
           >
             Breads
@@ -603,139 +944,17 @@ export default function LuxuryCustomerMenu({
         </div>
       </header>
 
-      {/* Alert Notices */}
-      <div className="flex flex-col gap-2 px-4 pt-3">
-        {waiterCalledNotice && (
-          <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-sm">
-            <div className="flex items-center gap-2">
-              <BellRing className="h-4 w-4 shrink-0 text-amber-600" />
-              <span>Waiter notified — someone is coming to {data?.tableName || "Table 12"}.</span>
-            </div>
-            <button onClick={() => setWaiterCalledNotice(false)} className="text-neutral-400 hover:text-black">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        {billRequestedNotice && (
-          <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Receipt className="h-4 w-4 shrink-0 text-emerald-600" />
-              <span>Bill requested — cashier has been notified.</span>
-            </div>
-            <button onClick={() => setBillRequestedNotice(false)} className="text-neutral-400 hover:text-black">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* LIVE ORDER TRACKING CARD (When an order is placed) */}
-      {hasActiveOrder && (
-        <div className="mx-4 mt-3 rounded-2xl border border-amber-300 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                LIVE ORDER TRACKING
-              </span>
-              <p className="text-sm font-black text-neutral-900">Order #{status?.order?.orderNumber || "24"}</p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-              {status?.order?.status === "PREPARING"
-                ? "Cooking in Kitchen"
-                : status?.order?.status === "SERVED"
-                ? "Served at Table"
-                : "Accepted by Cashier"}
-            </span>
-          </div>
-
-          {/* Stepper */}
-          <div className="my-4 flex items-center justify-between text-xs">
-            <div className="flex flex-col items-center gap-1 text-center">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
-                <Check className="h-4 w-4 stroke-[3]" />
-              </div>
-              <span className="text-[11px] font-bold text-emerald-700">Accepted</span>
-            </div>
-
-            <div className="h-0.5 flex-1 bg-amber-200 mx-2" />
-
-            <div className="flex flex-col items-center gap-1 text-center">
-              <div
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full text-white font-bold",
-                  status?.order?.status === "PREPARING" || status?.order?.status === "SERVED"
-                    ? "bg-[#C68A28]"
-                    : "bg-neutral-200 text-neutral-400"
-                )}
-              >
-                <Clock className="h-4 w-4" />
-              </div>
-              <span
-                className={cn(
-                  "text-[11px] font-bold",
-                  status?.order?.status === "PREPARING" || status?.order?.status === "SERVED"
-                    ? "text-[#A06C18]"
-                    : "text-neutral-400"
-                )}
-              >
-                Cooking
-              </span>
-            </div>
-
-            <div className="h-0.5 flex-1 bg-neutral-200 mx-2" />
-
-            <div className="flex flex-col items-center gap-1 text-center">
-              <div
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
-                  status?.order?.status === "SERVED"
-                    ? "bg-emerald-500 text-white"
-                    : "bg-neutral-200 text-neutral-400"
-                )}
-              >
-                ○
-              </div>
-              <span
-                className={cn(
-                  "text-[11px] font-bold",
-                  status?.order?.status === "SERVED" ? "text-emerald-700" : "text-neutral-400"
-                )}
-              >
-                Served
-              </span>
-            </div>
-          </div>
-
-          {/* Request Bill Button — ONLY available after food is ordered and confirmed */}
-          <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-3">
-            <button
-              onClick={() => setShowWaiterModal(true)}
-              className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 py-2.5 text-xs font-bold text-neutral-700 hover:bg-neutral-100"
-            >
-              📞 Call waiter
-            </button>
-            <button
-              onClick={() => setShowBillModal(true)}
-              className="flex-1 rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#B97A1C]"
-            >
-              🧾 Request bill
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* DISH SECTIONS (Image 5 match: Recommended, Main Course, etc.) */}
+      {/* DISH SECTIONS (Image 3 match) */}
       <main className="px-4 py-4 space-y-6">
         {filteredCategories.map((cat) => (
           <section key={cat.id} id={`cat-${cat.id}`}>
-            <div className="flex items-center justify-between pb-2">
-              <h2 className="text-xl font-bold tracking-tight text-[#1E1B18]">
+            <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2">
+              <h2 className="text-lg font-bold text-white">
                 {cat.name.includes("Starters") ? "Recommended" : cat.name}
               </h2>
             </div>
 
-            <div className="divide-y divide-[#EAE5DD]">
+            <div className="divide-y divide-neutral-900">
               {cat.items.map((item) => {
                 const qtyInCart = getItemQuantityInCart(item.id);
                 const dishImg = getDishImage(item, cat.name);
@@ -746,38 +965,36 @@ export default function LuxuryCustomerMenu({
                     <div className="flex-1 pr-2">
                       <div className="flex items-center gap-2">
                         {item.isVeg ? (
-                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-[#2E6826] p-[1.5px]">
-                            <span className="h-2 w-2 rounded-full bg-[#2E6826]" />
+                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-emerald-500 p-[1px]">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
                           </span>
                         ) : (
-                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-rose-600 p-[1.5px]">
-                            <span className="h-2 w-2 rounded-full bg-rose-600" />
+                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-rose-500 p-[1px]">
+                            <span className="h-2 w-2 rounded-full bg-rose-500" />
                           </span>
                         )}
+                        <span className="text-[11px] font-semibold text-amber-400">
+                          ― Highly reordered
+                        </span>
                       </div>
 
-                      <h3 className="mt-1 text-base font-bold text-[#1E1B18] leading-snug">
+                      <h3 className="mt-1 text-sm font-bold text-white leading-snug">
                         {item.name}
                       </h3>
-
-                      <span className="text-xs font-semibold text-[#B5791E]">
-                        ― Highly reordered
-                      </span>
-
-                      <div className="mt-1 text-base font-bold text-[#1E1B18]">
+                      <div className="mt-1 text-sm font-bold text-white">
                         {formatCurrency(item.price)}
                       </div>
 
                       {item.description && (
-                        <p className="mt-1 text-xs text-[#736B63] line-clamp-2 leading-relaxed">
+                        <p className="mt-1 text-xs text-neutral-400 line-clamp-2 leading-relaxed">
                           {item.description}
                         </p>
                       )}
                     </div>
 
-                    {/* Right: Dish Photo & Stepper (Image 5 match) */}
+                    {/* Right: Dish Photo & Gold Stepper (Image 3 match) */}
                     <div className="relative shrink-0 flex flex-col items-center">
-                      <div className="h-24 w-24 overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/40">
+                      <div className="h-24 w-24 overflow-hidden rounded-2xl bg-neutral-800 shadow-md">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={dishImg}
@@ -786,10 +1003,9 @@ export default function LuxuryCustomerMenu({
                         />
                       </div>
 
-                      {/* Stepper with solid gold background or ADD button */}
                       <div className="-mt-3.5">
                         {qtyInCart > 0 ? (
-                          <div className="flex h-8 items-center gap-3 rounded-xl bg-[#C68A28] px-3 shadow-md text-white font-black text-xs">
+                          <div className="flex h-8 items-center gap-3 rounded-xl bg-[#E5A93C] px-3 shadow-lg text-black font-extrabold text-xs">
                             <button
                               onClick={() => removeSimpleItem(item.id)}
                               className="px-1 text-sm hover:opacity-80"
@@ -812,14 +1028,15 @@ export default function LuxuryCustomerMenu({
                               setCustomizingQty(1);
                               setCookingNote("");
                               setExtraCheese(false);
+                              setExtraButter(false);
                             }}
-                            className="flex h-8 items-center rounded-xl bg-[#C68A28] px-4 text-xs font-bold text-white shadow-md hover:bg-[#B97A1C]"
+                            className="flex h-8 items-center rounded-xl bg-[#E5A93C] px-3.5 text-xs font-bold text-black shadow-lg hover:bg-amber-400"
                           >
                             ADD +
                           </button>
                         )}
                       </div>
-                      <span className="mt-1 text-[10px] font-medium text-[#8A8278]">customisable</span>
+                      <span className="mt-1 text-[10px] text-neutral-500">customisable</span>
                     </div>
                   </div>
                 );
@@ -829,73 +1046,111 @@ export default function LuxuryCustomerMenu({
         ))}
       </main>
 
-      {/* Floating Category Menu Button (Image 5 match: [ ☰ Menu ]) */}
+      {/* Floating Category Menu Button (Image 3 match: [ ☰ Menu ]) */}
       <div className="fixed bottom-20 left-1/2 z-30 -translate-x-1/2">
         <button
           onClick={() => setShowCategorySheet(true)}
-          className="flex items-center gap-2 rounded-full border border-neutral-300 bg-[#EAE5DD] px-4 py-2 text-xs font-bold text-[#1E1B18] shadow-lg backdrop-blur-md hover:bg-white transition-all"
+          className="flex items-center gap-2 rounded-full border border-neutral-700 bg-neutral-900/90 px-4 py-2 text-xs font-bold text-white shadow-2xl backdrop-blur-md hover:bg-neutral-800"
         >
           <span>☰ Menu</span>
         </button>
       </div>
 
-      {/* Sticky Bottom Bar (Image 5 match: 3 dishes · ₹620   View order >) */}
+      {/* Sticky Bottom Bar (Image 3 match: 3 dishes · ₹620   View order >) */}
       {cartTotalDishes > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent">
+        <div className="fixed bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
           <div
             onClick={() => setShowCartDrawer(true)}
-            className="flex cursor-pointer items-center justify-between rounded-2xl bg-[#B97A1C] px-5 py-4 font-bold text-white shadow-xl hover:bg-[#A06C18] transition-all"
+            className="flex cursor-pointer items-center justify-between rounded-2xl bg-[#E5A93C] p-4 font-bold text-black shadow-xl hover:bg-amber-400"
           >
             <div className="flex flex-col">
-              <span className="text-xs font-medium uppercase tracking-wider text-amber-200">
+              <span className="text-xs font-semibold text-black/80">
                 {cartTotalDishes} {cartTotalDishes === 1 ? "dish" : "dishes"} · ₹{cartTotalPrice.toFixed(0)}
               </span>
               <span className="text-base font-black">View order</span>
             </div>
 
-            <div className="flex items-center gap-1 text-lg font-black">
+            <div className="flex items-center gap-1 text-base font-extrabold">
               <span>›</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* CUSTOMISE MODAL WITH AUDIO MIC */}
+      {/* CATEGORIES MODAL (Image 4 match: media_1794128524574_6508c099.png) */}
+      {showCategorySheet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-[#161619] p-5 text-white shadow-2xl">
+            <div className="flex flex-col divide-y divide-neutral-800/80">
+              {(data?.categories || []).map((cat, idx) => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setShowCategorySheet(false);
+                    const el = document.getElementById(`cat-${cat.id}`);
+                    el?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="flex items-center justify-between py-3.5 text-sm font-bold text-left hover:text-amber-400 transition-colors"
+                >
+                  <span className={idx === 0 ? "text-[#E5A93C]" : "text-white"}>
+                    {cat.name}
+                  </span>
+                  <span className={idx === 0 ? "text-[#E5A93C]" : "text-neutral-500"}>
+                    {cat.items.length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setShowCategorySheet(false)}
+                className="flex items-center gap-1.5 rounded-full bg-[#E5A93C] px-5 py-2 text-xs font-bold text-black hover:bg-amber-400 shadow-md"
+              >
+                <span>✕</span>
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOMISE MODAL WITH AUDIO MIC & EXTRAS */}
       {customizingItem && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-200 bg-white p-5 text-neutral-900 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-neutral-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-800 bg-[#141416] p-5 text-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-neutral-800 pb-3">
               <div>
-                <h3 className="text-base font-bold text-neutral-900">{customizingItem.item.name}</h3>
-                <p className="text-sm font-black text-[#B97A1C]">
+                <h3 className="text-base font-bold text-white">{customizingItem.item.name}</h3>
+                <p className="text-sm font-black text-[#E5A93C]">
                   {formatCurrency(customizingItem.item.price)}
                 </p>
               </div>
               <button
                 onClick={() => setCustomizingItem(null)}
-                className="rounded-full bg-neutral-100 p-1 text-neutral-500 hover:text-black"
+                className="rounded-full bg-neutral-800 p-1 text-neutral-400 hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Cooking Request input + Audio Mic */}
+            {/* Cooking Request input + Audio Voice Mic */}
             <div className="mt-4">
-              <label className="text-xs font-bold text-neutral-700">Cooking request</label>
+              <label className="text-xs font-bold text-neutral-300">Cooking request</label>
               <div className="relative mt-1.5">
                 <input
                   type="text"
                   value={cookingNote}
                   onChange={(e) => setCookingNote(e.target.value)}
                   placeholder='e.g. "Extra spicy, less oil"'
-                  className="w-full rounded-xl border border-neutral-300 bg-neutral-50 py-3 pl-3 pr-10 text-xs text-neutral-900 placeholder-neutral-400 focus:border-[#C68A28] focus:bg-white focus:outline-none"
+                  className="w-full rounded-xl border border-neutral-800 bg-neutral-900 py-3 pl-3 pr-10 text-xs text-white placeholder-neutral-500 focus:border-[#E5A93C] focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => triggerAudioVoiceInput("cooking")}
                   className={cn(
                     "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
-                    isListeningCustomMic ? "text-red-500 animate-pulse bg-red-100" : "text-neutral-500 hover:text-[#C68A28]"
+                    isListeningCustomMic ? "text-red-500 animate-pulse bg-red-500/20" : "text-neutral-400 hover:text-amber-400"
                   )}
                   title="Speak cooking instructions"
                 >
@@ -904,18 +1159,31 @@ export default function LuxuryCustomerMenu({
               </div>
             </div>
 
-            {/* Add-ons */}
+            {/* Add-ons & Extras */}
             <div className="mt-4 flex flex-col gap-2">
-              <label className="text-xs font-bold text-neutral-700">Add-ons</label>
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs">
-                <span className="font-medium text-neutral-800">Extra cheese</span>
+              <label className="text-xs font-bold text-neutral-300">Add-ons & Extras</label>
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-xs">
+                <span>Extra cheese</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-[#B97A1C]">+₹40</span>
+                  <span className="font-semibold text-amber-400">+₹40</span>
                   <input
                     type="checkbox"
                     checked={extraCheese}
                     onChange={(e) => setExtraCheese(e.target.checked)}
-                    className="h-4 w-4 rounded accent-[#C68A28]"
+                    className="h-4 w-4 rounded accent-[#E5A93C]"
+                  />
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-xs">
+                <span>Extra butter</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-amber-400">+₹20</span>
+                  <input
+                    type="checkbox"
+                    checked={extraButter}
+                    onChange={(e) => setExtraButter(e.target.checked)}
+                    className="h-4 w-4 rounded accent-[#E5A93C]"
                   />
                 </div>
               </label>
@@ -923,17 +1191,17 @@ export default function LuxuryCustomerMenu({
 
             {/* Quantity Stepper & Add Button */}
             <div className="mt-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm font-bold text-neutral-800">
+              <div className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm font-bold">
                 <button
                   onClick={() => setCustomizingQty((q) => Math.max(1, q - 1))}
-                  className="text-neutral-500 hover:text-black"
+                  className="text-neutral-400 hover:text-white"
                 >
                   −
                 </button>
                 <span>{customizingQty}</span>
                 <button
                   onClick={() => setCustomizingQty((q) => q + 1)}
-                  className="text-neutral-500 hover:text-black"
+                  className="text-neutral-400 hover:text-white"
                 >
                   +
                 </button>
@@ -943,9 +1211,12 @@ export default function LuxuryCustomerMenu({
                 type="button"
                 onClick={() => {
                   const basePrice = parseFloat(customizingItem.item.price);
-                  const extra = extraCheese ? 40 : 0;
+                  const extra = (extraCheese ? 40 : 0) + (extraButter ? 20 : 0);
                   const unitPrice = basePrice + extra;
                   const lineId = `line-${customizingItem.item.id}-${Date.now()}`;
+                  const extrasList: string[] = [];
+                  if (extraCheese) extrasList.push("Extra cheese (+₹40)");
+                  if (extraButter) extrasList.push("Extra butter (+₹20)");
 
                   setCart((prev) => [
                     ...prev,
@@ -955,8 +1226,8 @@ export default function LuxuryCustomerMenu({
                       name: customizingItem.item.name,
                       imageUrl: getDishImage(customizingItem.item, customizingItem.categoryName),
                       isVeg: customizingItem.item.isVeg,
-                      modifierIds: extraCheese ? ["extra-cheese"] : [],
-                      modifierLabel: extraCheese ? "Extra cheese (+₹40)" : "",
+                      modifierIds: [extraCheese && "cheese", extraButter && "butter"].filter(Boolean) as string[],
+                      modifierLabel: extrasList.join(", "),
                       unitPrice,
                       quantity: customizingQty,
                       cookingNote: cookingNote.trim(),
@@ -966,9 +1237,9 @@ export default function LuxuryCustomerMenu({
                   toast.success(`Added ${customizingItem.item.name}`);
                   setCustomizingItem(null);
                 }}
-                className="flex-1 rounded-xl bg-[#C68A28] py-3 text-sm font-black text-white hover:bg-[#B97A1C] shadow-md"
+                className="flex-1 rounded-xl bg-[#E5A93C] py-3 text-sm font-black text-black hover:bg-amber-400"
               >
-                Add item · ₹{((parseFloat(customizingItem.item.price) + (extraCheese ? 40 : 0)) * customizingQty).toFixed(0)}
+                Add item · ₹{((parseFloat(customizingItem.item.price) + (extraCheese ? 40 : 0) + (extraButter ? 20 : 0)) * customizingQty).toFixed(0)}
               </button>
             </div>
           </div>
@@ -977,47 +1248,47 @@ export default function LuxuryCustomerMenu({
 
       {/* CART / YOUR ORDER DRAWER */}
       {showCartDrawer && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-200 bg-white p-5 text-neutral-900 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-              <h3 className="text-base font-bold text-neutral-900">
-                Your order ({data?.tableName || "Table 12"})
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-800 bg-[#141416] p-5 text-white max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <h3 className="text-base font-bold text-white">
+                Your order ({isTakeaway ? "Takeaway" : (data?.tableName || "Table 12")})
               </h3>
               <button
                 onClick={() => setShowCartDrawer(false)}
-                className="rounded-full bg-neutral-100 p-1 text-neutral-500 hover:text-black"
+                className="rounded-full bg-neutral-800 p-1 text-neutral-400 hover:text-white"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Cart Items list */}
-            <div className="mt-4 divide-y divide-neutral-100">
+            <div className="mt-4 divide-y divide-neutral-900">
               {cart.map((line) => (
                 <div key={line.id} className="flex items-start justify-between py-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-100 shrink-0 border border-neutral-200">
+                    <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-800 shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={line.imageUrl} alt="" className="h-full w-full object-cover" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-neutral-900">{line.name}</h4>
+                      <h4 className="text-xs font-bold text-white">{line.name}</h4>
                       {line.modifierLabel && (
-                        <p className="text-[11px] text-[#A06C18] font-medium">{line.modifierLabel}</p>
+                        <p className="text-[11px] text-amber-300 font-medium">{line.modifierLabel}</p>
                       )}
                       {line.cookingNote && (
-                        <p className="text-[10px] text-neutral-500">Note: &ldquo;{line.cookingNote}&rdquo;</p>
+                        <p className="text-[10px] text-neutral-400">Note: &ldquo;{line.cookingNote}&rdquo;</p>
                       )}
-                      <p className="mt-1 text-xs font-bold text-neutral-900">₹{line.unitPrice * line.quantity}</p>
+                      <p className="mt-1 text-xs font-bold text-white">₹{line.unitPrice * line.quantity}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs font-bold text-neutral-800">
-                    <button onClick={() => updateCartQuantity(line.id, -1)} className="px-1 text-neutral-500 hover:text-black">
+                  <div className="flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs font-bold">
+                    <button onClick={() => updateCartQuantity(line.id, -1)} className="px-1 text-neutral-400">
                       −
                     </button>
                     <span>{line.quantity}</span>
-                    <button onClick={() => updateCartQuantity(line.id, 1)} className="px-1 text-neutral-500 hover:text-black">
+                    <button onClick={() => updateCartQuantity(line.id, 1)} className="px-1 text-neutral-400">
                       +
                     </button>
                   </div>
@@ -1027,15 +1298,15 @@ export default function LuxuryCustomerMenu({
 
             <button
               onClick={() => setShowCartDrawer(false)}
-              className="mt-3 text-xs font-bold text-[#A06C18] hover:underline"
+              className="mt-3 text-xs font-bold text-amber-400 hover:underline"
             >
               + Add more items
             </button>
 
-            <div className="mt-4 border-t border-neutral-100 pt-3">
-              <div className="flex justify-between text-sm font-bold text-neutral-900">
+            <div className="mt-4 border-t border-neutral-800 pt-3">
+              <div className="flex justify-between text-sm font-bold text-white">
                 <span>Total amount</span>
-                <span className="text-base font-black text-[#B97A1C]">₹{cartTotalPrice.toFixed(0)}</span>
+                <span className="text-base font-black text-amber-400">₹{cartTotalPrice.toFixed(0)}</span>
               </div>
             </div>
 
@@ -1043,7 +1314,7 @@ export default function LuxuryCustomerMenu({
               type="button"
               disabled={placeOrder.isPending}
               onClick={() => placeOrder.mutate()}
-              className="mt-5 flex h-13 w-full items-center justify-center rounded-2xl bg-[#C68A28] text-sm font-black text-white hover:bg-[#B97A1C] shadow-md disabled:opacity-50"
+              className="mt-5 flex h-13 w-full items-center justify-center rounded-2xl bg-[#E5A93C] text-sm font-black text-black hover:bg-amber-400 disabled:opacity-50"
             >
               {placeOrder.isPending ? "Sending order..." : "Place order"}
             </button>
@@ -1051,86 +1322,27 @@ export default function LuxuryCustomerMenu({
         </div>
       )}
 
-      {/* CATEGORIES MODAL (Image 5 match: [ ☰ Menu ]) */}
-      {showCategorySheet && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-3xl border border-neutral-200 bg-white p-5 text-neutral-900 shadow-2xl">
-            <h3 className="text-base font-bold text-neutral-900 mb-3">Categories</h3>
-            <div className="flex flex-col gap-2">
-              {(data?.categories || []).map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    setShowCategorySheet(false);
-                    const el = document.getElementById(`cat-${cat.id}`);
-                    el?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="flex items-center justify-between rounded-xl bg-neutral-50 border border-neutral-200 p-3 text-xs font-semibold text-neutral-800 hover:bg-[#FAF8F5]"
-                >
-                  <span>{cat.name}</span>
-                  <span className="text-[#A06C18] font-bold">({cat.items.length})</span>
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowCategorySheet(false)}
-              className="mt-4 w-full rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white hover:bg-[#B97A1C]"
-            >
-              ✕ Close
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* CALL WAITER CONFIRMATION MODAL */}
       {showWaiterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xs rounded-2xl border border-neutral-200 bg-white p-5 text-center text-neutral-900 shadow-2xl">
-            <Phone className="mx-auto h-10 w-10 text-[#C68A28] mb-2" />
-            <h3 className="text-base font-bold text-neutral-900">Call Waiter?</h3>
-            <p className="mt-1 text-xs text-neutral-500">
-              Notify floor staff to come to {data?.tableName || "Table 12"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xs rounded-2xl border border-neutral-800 bg-[#161619] p-5 text-center text-white">
+            <Phone className="mx-auto h-10 w-10 text-amber-400 mb-2" />
+            <h3 className="text-base font-bold text-white">Call Waiter?</h3>
+            <p className="mt-1 text-xs text-neutral-400">
+              Notify floor staff to attend {isTakeaway ? "Takeaway counter" : (data?.tableName || "Table 12")}
             </p>
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() => setShowWaiterModal(false)}
-                className="flex-1 rounded-xl border border-neutral-200 bg-neutral-100 py-2.5 text-xs font-bold text-neutral-600 hover:bg-neutral-200"
+                className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 py-2.5 text-xs font-bold text-neutral-300"
               >
                 Cancel
               </button>
               <button
                 onClick={() => requestService.mutate("WAITER")}
-                className="flex-1 rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white hover:bg-[#B97A1C] shadow-sm"
+                className="flex-1 rounded-xl bg-amber-500 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
               >
                 Yes, call
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REQUEST BILL CONFIRMATION MODAL */}
-      {showBillModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xs rounded-2xl border border-neutral-200 bg-white p-5 text-center text-neutral-900 shadow-2xl">
-            <Receipt className="mx-auto h-10 w-10 text-[#C68A28] mb-2" />
-            <h3 className="text-base font-bold text-neutral-900">Request Bill?</h3>
-            <p className="mt-1 text-xs text-neutral-500">
-              Notify the cashier to prepare and bring your final bill to {data?.tableName || "Table 12"}.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => setShowBillModal(false)}
-                className="flex-1 rounded-xl border border-neutral-200 bg-neutral-100 py-2.5 text-xs font-bold text-neutral-600 hover:bg-neutral-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => requestService.mutate("BILL")}
-                className="flex-1 rounded-xl bg-[#C68A28] py-2.5 text-xs font-bold text-white hover:bg-[#B97A1C] shadow-sm"
-              >
-                Yes, request
               </button>
             </div>
           </div>

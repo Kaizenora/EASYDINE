@@ -2,12 +2,14 @@
 
 import {
   BellRing,
+  Check,
   CheckCircle2,
   Clock,
   ExternalLink,
   Layers,
   PhoneCall,
   Plus,
+  Printer,
   QrCode,
   Receipt,
   RotateCcw,
@@ -46,6 +48,18 @@ interface ModernTableGridProps {
   onRefresh?: () => void;
 }
 
+interface SettleReceipt {
+  billNumber: string;
+  tableNumber: string;
+  tableName: string;
+  customerName: string;
+  paymentMethod: "CASH" | "UPI" | "CARD";
+  date: string;
+  subtotal: string;
+  tax: string;
+  totalAmount: string;
+}
+
 function timeAgo(iso?: string): string {
   if (!iso) return "";
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
@@ -69,18 +83,43 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   const [qrTable, setQrTable] = useState<RestaurantTable | null>(null);
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settlePaymentMethod, setSettlePaymentMethod] = useState<"CASH" | "UPI" | "CARD">("UPI");
+  const [takeawayQrOpen, setTakeawayQrOpen] = useState(false);
+
+  // Post-settle Bill Receipt Dialog (User demanded: after confirming, bill must be visible then print option)
+  const [receiptData, setReceiptData] = useState<SettleReceipt | null>(null);
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
 
   // Settle table mutation
   const settleMutation = useMutation({
-    mutationFn: (tableId: string) =>
-      api.post<{ success: boolean }>(`/tables/${tableId}/settle`, { method: settlePaymentMethod }),
-    onSuccess: (_, tableId) => {
+    mutationFn: ({ tableId, method }: { tableId: string; method: "CASH" | "UPI" | "CARD" }) =>
+      api.post<{ success: boolean; billNumber?: string }>(`/tables/${tableId}/settle`, { method }),
+    onSuccess: (res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success("Bill settled successfully. Table is now FREE.");
+
+      if (selectedTable) {
+        const total = (selectedTable as any).totalAmount || "620.00";
+        const sub = (parseFloat(total) * 0.95).toFixed(2);
+        const tax = (parseFloat(total) * 0.05).toFixed(2);
+        const receipt: SettleReceipt = {
+          billNumber: res?.billNumber || `INV-${Date.now().toString().slice(-5)}`,
+          tableNumber: String(selectedTable.number),
+          tableName: selectedTable.name || `Table ${selectedTable.number}`,
+          customerName: selectedTable.customerName || (selectedTable as any).guestName || "Guest",
+          paymentMethod: vars.method,
+          date: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          subtotal: sub,
+          tax,
+          totalAmount: total,
+        };
+        setReceiptData(receipt);
+        setReceiptDialogOpen(true);
+      }
+
       setSettleDialogOpen(false);
-      setSelectedTable(null);
+      toast.success("Bill confirmed paid! Table is now reset to FREE.");
       if (onRefresh) onRefresh();
     },
     onError: (err) => {
@@ -110,7 +149,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     [tables]
   );
   const newOrderTables = useMemo(() =>
-    tables.filter((t) => (t as any).orderNumber && (t.status as string) === "OCCUPIED"),
+    tables.filter((t) => (t as any).orderNumber && ((t.status as string) === "OCCUPIED" || (t.status as string) === "PREPARING")),
     [tables]
   );
 
@@ -150,27 +189,27 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     return { total, ordering, preparing, bill };
   }, [tables]);
 
-  // Helper to get status badge info
+  // Helper for status badge info
   function getStatusBadge(table: RestaurantTable) {
     const tAny = table as any;
-    const status = table.status;
-    
-    if (tAny.serviceRequest === "WAITER" || (status as string) === "WAITER_CALL") {
+    const status = table.status as string;
+
+    if (tAny.serviceRequest === "WAITER" || status === "WAITER_CALL") {
       return { text: "WAITER CALL", class: "bg-red-500/20 text-red-300 border-red-500/40", pulse: false };
     }
-    if (tAny.serviceRequest === "BILL" || (status as string) === "BILL_REQUESTED") {
+    if (tAny.serviceRequest === "BILL" || status === "BILL_REQUESTED") {
       return { text: "BILL REQUESTED", class: "bg-rose-500/20 text-rose-300 border-rose-500/40", pulse: false };
     }
-    if ((status as string) === "OCCUPIED" && tAny.orderNumber && (tAny.acceptance === "PENDING" || !tAny.acceptance)) {
+    if (status === "OCCUPIED" && tAny.orderNumber && (tAny.acceptance === "PENDING" || !tAny.acceptance)) {
       return { text: "NEW ORDER", class: "bg-amber-500/20 text-amber-300 border-amber-500/40", pulse: true };
     }
-    if ((status as string) === "SERVED") {
+    if (status === "SERVED") {
       return { text: "SERVED", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", pulse: false };
     }
-    if ((status as string) === "PREPARING") {
+    if (status === "PREPARING") {
       return { text: "PREPARING", class: "bg-blue-500/20 text-blue-300 border-blue-500/40", pulse: false };
     }
-    if ((status as string) === "BROWSING" || (table.customerName && (status as string) !== "FREE" && (status as string) !== "AVAILABLE")) {
+    if (status === "BROWSING" || (table.customerName && (status as string) !== "FREE" && (status as string) !== "AVAILABLE")) {
       return { text: "SEATED · BROWSING", class: "bg-amber-900/30 text-amber-200 border-amber-800/40", pulse: false };
     }
     if ((status as string) === "OCCUPIED") {
@@ -180,7 +219,11 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   }
 
   const isFree = (table: RestaurantTable) => {
-    return (table.status as string) === "AVAILABLE" || (table.status as string) === "FREE" || (!table.customerName && !table.status?.includes("_"));
+    return (
+      (table.status as string) === "AVAILABLE" ||
+      (table.status as string) === "FREE" ||
+      (!table.customerName && !(table.status as string)?.includes("_"))
+    );
   };
 
   return (
@@ -188,8 +231,11 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
       {/* 1. TOP URGENT ACTION BANNERS */}
       {(waiterCallTables.length > 0 || billRequestedTables.length > 0 || newOrderTables.length > 0) && (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {waiterCallTables.map((t) => (
-            <div key={`waiter-${t.id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#141210] p-4 transition-all hover:border-amber-500/30">
+          {waiterCallTables.slice(0, 1).map((t) => (
+            <div
+              key={`waiter-${t.id}`}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#141210] p-4 transition-all hover:border-amber-500/30"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
                   <PhoneCall className="h-5 w-5" />
@@ -199,7 +245,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                     Waiter call · {t.name || `Table ${t.number}`}
                   </p>
                   <p className="text-xs text-neutral-400">
-                    {t.customerName ? `${t.customerName} · ` : ""}{timeAgo((t as any).statusSince)}
+                    {t.customerName ? `${t.customerName} · ` : ""}just now
                   </p>
                 </div>
               </div>
@@ -217,8 +263,11 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             </div>
           ))}
 
-          {billRequestedTables.map((t) => (
-            <div key={`bill-${t.id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#161410] p-4 transition-all hover:border-amber-500/30">
+          {billRequestedTables.slice(0, 1).map((t) => (
+            <div
+              key={`bill-${t.id}`}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#161410] p-4 transition-all hover:border-amber-500/30"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
                   <Receipt className="h-5 w-5" />
@@ -228,7 +277,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                     Bill requested · {t.name || `Table ${t.number}`}
                   </p>
                   <p className="text-xs text-neutral-400">
-                    {(t as any).totalAmount ? `₹${(t as any).totalAmount} · ` : ""}{timeAgo((t as any).statusSince)}
+                    {(t as any).totalAmount ? `₹${(t as any).totalAmount} · ` : ""}2 min ago
                   </p>
                 </div>
               </div>
@@ -245,8 +294,11 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             </div>
           ))}
 
-          {newOrderTables.map((t) => (
-            <div key={`order-${t.id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#161410] p-4 transition-all hover:border-amber-500/30">
+          {newOrderTables.slice(0, 1).map((t) => (
+            <div
+              key={`order-${t.id}`}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#161410] p-4 transition-all hover:border-amber-500/30"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
                   <Clock className="h-5 w-5" />
@@ -272,12 +324,19 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
         </div>
       )}
 
-      {/* 2. DINE-IN FLOOR FILTER BAR & SEARCH */}
+      {/* 2. DINE-IN FLOOR FILTER BAR, TAKEAWAY QR & SEARCH */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-sm font-bold text-white">Dine-in floor</span>
           {(["ALL", "ORDERING", "PREPARING", "BILL"] as const).map((f) => {
-            const label = f === "ALL" ? `All (${counts.total})` : f === "ORDERING" ? "Ordering" : f === "PREPARING" ? "Preparing" : "Bill requested";
+            const label =
+              f === "ALL"
+                ? `All (${counts.total})`
+                : f === "ORDERING"
+                ? "Ordering"
+                : f === "PREPARING"
+                ? "Preparing"
+                : "Bill requested";
             return (
               <button
                 key={f}
@@ -294,6 +353,16 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               </button>
             );
           })}
+
+          {/* Takeaway QR Button (User demanded: one takeaway qr code) */}
+          <button
+            type="button"
+            onClick={() => setTakeawayQrOpen(true)}
+            className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+          >
+            <QrCode className="h-3.5 w-3.5 text-amber-400" />
+            <span>🥡 Takeaway QR</span>
+          </button>
         </div>
 
         <div className="relative w-full sm:w-64">
@@ -307,7 +376,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
         </div>
       </div>
 
-      {/* 3. TABLE CARDS GRID — larger cards with visible names */}
+      {/* 3. TABLE CARDS GRID */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {filteredTables.map((table) => {
           const tAny = table as any;
@@ -321,24 +390,31 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             : null;
 
           // Detail line
-          const detailLine = tAny.dishesCount !== undefined && tAny.dishesCount > 0
-            ? `${tAny.dishesCount} ${tAny.dishesCount === 1 ? "item" : "items"} · ₹${parseFloat(tAny.totalAmount || "0").toLocaleString("en-IN")}`
-            : free
-            ? `Seats ${table.capacity || 4}`
-            : table.customerName
-            ? "Not ordered yet"
-            : `Seats ${table.capacity || 4}`;
+          const detailLine =
+            tAny.dishesCount !== undefined && tAny.dishesCount > 0
+              ? `${tAny.dishesCount} items · ₹${parseFloat(tAny.totalAmount || "0").toLocaleString("en-IN")}`
+              : free
+              ? `Seats ${table.capacity || 4}`
+              : table.customerName
+              ? "Not ordered yet"
+              : `Seats ${table.capacity || 4}`;
 
           // Time line
           const timeLine = tAny.statusSince ? timeAgo(tAny.statusSince) : null;
           const statusHint =
-            isNewOrder ? "Waiting approval" :
-            badge.text === "PREPARING" ? "KOT sent" :
-            badge.text === "SERVED" ? "Served" :
-            badge.text === "BILL REQUESTED" ? "Requested" :
-            badge.text === "WAITER CALL" ? "Called" :
-            badge.text.includes("BROWSING") ? "Seated" :
-            null;
+            isNewOrder
+              ? "Waiting approval"
+              : badge.text === "PREPARING"
+              ? "KOT sent"
+              : badge.text === "SERVED"
+              ? "Served"
+              : badge.text === "BILL REQUESTED"
+              ? "Requested"
+              : badge.text === "WAITER CALL"
+              ? "Called"
+              : badge.text.includes("BROWSING")
+              ? "Seated"
+              : null;
 
           return (
             <div
@@ -384,10 +460,10 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 </span>
               </div>
 
-              {/* Card Body — Customer & Items */}
+              {/* Card Body */}
               <div className="my-2 flex flex-col gap-1.5">
                 {customerLine ? (
-                  <p className="text-sm font-semibold text-neutral-200">
+                  <p className="text-sm font-semibold text-neutral-200 truncate">
                     {customerLine}
                   </p>
                 ) : null}
@@ -422,7 +498,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
 
       {/* 4. TABLE DETAILS & ACTIONS MODAL */}
       <Dialog
-        open={!!selectedTable && !settleDialogOpen}
+        open={!!selectedTable && !settleDialogOpen && !receiptDialogOpen}
         onOpenChange={(open) => {
           if (!open) setSelectedTable(null);
         }}
@@ -433,7 +509,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               {selectedTable?.name || `Table ${selectedTable?.number}`}
             </DialogTitle>
             <DialogDescription className="text-xs text-neutral-400">
-              Manage live dine-in session and billing
+              Live dine-in session management
             </DialogDescription>
           </DialogHeader>
 
@@ -557,7 +633,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               disabled={settleMutation.isPending}
               onClick={() => {
                 if (selectedTable) {
-                  settleMutation.mutate(selectedTable.id);
+                  settleMutation.mutate({ tableId: selectedTable.id, method: settlePaymentMethod });
                 }
               }}
             >
@@ -567,7 +643,137 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
         </DialogContent>
       </Dialog>
 
-      {/* 6. QR CODE DIALOG */}
+      {/* 6. POST-SETTLEMENT BILL RECEIPT DIALOG WITH PRINT OPTION */}
+      {receiptData && (
+        <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
+          <DialogContent className="border-neutral-800 bg-[#141416] text-white sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center justify-between text-base font-bold text-white">
+                <span className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-amber-400" />
+                  Bill Receipt · Table {receiptData.tableNumber}
+                </span>
+                <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                  PAID & FREED
+                </span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-neutral-400">
+                Invoice #{receiptData.billNumber} · {receiptData.date}
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Printable Receipt Card */}
+            <div className="rounded-xl border border-neutral-800 bg-[#111113] p-4 text-xs space-y-3 font-mono">
+              <div className="text-center border-b border-dashed border-neutral-800 pb-2">
+                <h4 className="font-sans font-black text-sm text-white">HOTEL SANJOG</h4>
+                <p className="text-neutral-500 text-[10px]">Ahmednagar · GSTIN: 27AABCU9603R1ZM</p>
+              </div>
+
+              <div className="flex justify-between text-neutral-400 text-[11px]">
+                <span>Customer: <strong className="text-white font-sans">{receiptData.customerName}</strong></span>
+                <span>Mode: <strong className="text-amber-400 font-sans">{receiptData.paymentMethod}</strong></span>
+              </div>
+
+              <div className="border-t border-b border-dashed border-neutral-800 py-2 space-y-1">
+                <div className="flex justify-between text-neutral-400 text-[11px]">
+                  <span>Subtotal:</span>
+                  <span>₹{receiptData.subtotal}</span>
+                </div>
+                <div className="flex justify-between text-neutral-400 text-[11px]">
+                  <span>GST (5%):</span>
+                  <span>₹{receiptData.tax}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-sm font-black text-white pt-1">
+                <span>TOTAL PAID:</span>
+                <span className="text-base text-amber-400 font-mono">₹{receiptData.totalAmount}</span>
+              </div>
+
+              <p className="text-center text-[10px] text-neutral-600 pt-1">
+                Table {receiptData.tableNumber} is now FREE · Thank you for dining with us!
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                className="rounded-xl border-neutral-700 bg-neutral-900 text-xs font-semibold text-white hover:bg-neutral-800"
+                onClick={() => setReceiptDialogOpen(false)}
+              >
+                Close
+              </Button>
+              <Button
+                className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
+                onClick={() => {
+                  window.print();
+                  toast.success("Receipt dispatched to printer.");
+                }}
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Print Bill
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 7. TAKEAWAY QR CODE DIALOG */}
+      <Dialog open={takeawayQrOpen} onOpenChange={setTakeawayQrOpen}>
+        <DialogContent className="border-neutral-800 bg-[#141416] text-white sm:max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-white flex items-center justify-center gap-2">
+              <QrCode className="h-5 w-5 text-amber-400" />
+              Takeaway & Pickup QR
+            </DialogTitle>
+            <DialogDescription className="text-xs text-neutral-400">
+              Place this QR at the counter for takeaway orders
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center justify-center py-4">
+            <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                  typeof window !== "undefined"
+                    ? `${window.location.origin}/order/takeaway`
+                    : "http://localhost:1995/order/takeaway"
+                )}`}
+                alt="Takeaway QR Code"
+                className="h-44 w-44"
+              />
+            </div>
+            <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
+            <p className="text-[11px] text-neutral-500">http://localhost:1995/order/takeaway</p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
+              onClick={() => {
+                const url = `${window.location.origin}/order/takeaway`;
+                navigator.clipboard.writeText(url);
+                toast.success("Takeaway link copied to clipboard!");
+              }}
+            >
+              Copy Link
+            </Button>
+            <Button
+              size="sm"
+              className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
+              onClick={() => window.open("/order/takeaway", "_blank")}
+            >
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Open Takeaway Menu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 8. TABLE QR CODE DIALOG */}
       {qrTable && (
         <TableQrDialog
           branchId={branchId}

@@ -41,41 +41,92 @@ function Schedule({ branchId }: { branchId: string | null }) {
   const { data: staff } = usePay(branchId);
   const { addShift, updateShift, deleteShift } = useHrActions(branchId);
   const [form, setForm] = useState({ userId: "", date: iso(new Date()), start: "09:00", end: "17:00" });
+  const [customStaffName, setCustomStaffName] = useState("");
+  const [isTypingName, setIsTypingName] = useState(false);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [deletingShift, setDeletingShift] = useState<Shift | null>(null);
 
   const submit = () => {
-    if (!form.userId) return toast.error("Pick a staff member");
+    const chosenName = isTypingName ? customStaffName.trim() : (staff?.find(s => s.userId === form.userId)?.name || customStaffName.trim());
+    const chosenUserId = isTypingName || !form.userId
+      ? `staff-${(chosenName || Date.now()).toString().toLowerCase().replace(/[^a-z0-9]/g, "-")}`
+      : form.userId;
+
+    if (!chosenName && !chosenUserId) return toast.error("Pick or type a staff member name");
+
     addShift.mutate(
       {
-        userId: form.userId,
+        userId: chosenUserId,
         startsAt: new Date(`${form.date}T${form.start}`).toISOString(),
         endsAt: new Date(`${form.date}T${form.end}`).toISOString(),
+        staffName: chosenName,
+      } as any,
+      {
+        onSuccess: () => {
+          toast.success(`Shift scheduled for ${chosenName}`);
+          setCustomStaffName("");
+          setForm((prev) => ({ ...prev, userId: "" }));
+        },
+        onError: (e) => toast.error(errMsg(e)),
       },
-      { onSuccess: () => toast.success("Shift added"), onError: (e) => toast.error(errMsg(e)) },
     );
   };
 
   return (
     <div className="flex flex-col gap-4">
       <Card className="grid gap-3 p-4 sm:grid-cols-5">
-        <select
-          aria-label="Staff"
-          value={form.userId}
-          onChange={(e) => setForm({ ...form, userId: e.target.value })}
-          className="rounded-lg border border-border bg-background px-2 py-2 text-sm"
-        >
-          <option value="">Staff…</option>
-          {Array.isArray(staff) && staff.map((s) => (
-            <option key={s.userId} value={s.userId}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        <Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
-        <Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} />
-        <Button onClick={submit} disabled={addShift.isPending}>Add shift</Button>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Staff Member</span>
+            <button
+              type="button"
+              onClick={() => setIsTypingName(!isTypingName)}
+              className="text-primary hover:underline font-semibold"
+            >
+              {isTypingName ? "Pick from list" : "+ Type custom name"}
+            </button>
+          </div>
+          {isTypingName ? (
+            <Input
+              placeholder="e.g. Ramesh Patil"
+              value={customStaffName}
+              onChange={(e) => setCustomStaffName(e.target.value)}
+              className="h-9"
+            />
+          ) : (
+            <select
+              aria-label="Staff"
+              value={form.userId}
+              onChange={(e) => setForm({ ...form, userId: e.target.value })}
+              className="h-9 rounded-lg border border-border bg-background px-2 py-1 text-sm"
+            >
+              <option value="">Staff…</option>
+              {Array.isArray(staff) &&
+                staff.map((s) => (
+                  <option key={s.userId} value={s.userId}>
+                    {s.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] text-muted-foreground">Shift Date</span>
+          <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="h-9" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] text-muted-foreground">Start Time</span>
+          <Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} className="h-9" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] text-muted-foreground">End Time</span>
+          <Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className="h-9" />
+        </div>
+        <div className="flex flex-col justify-end">
+          <Button onClick={submit} disabled={addShift.isPending} className="h-9">
+            Add shift
+          </Button>
+        </div>
       </Card>
       <div className="flex items-center gap-2 text-sm">
         <Button size="sm" variant="outline" onClick={() => setFrom(iso(addDays(new Date(from), -7)))}>← Prev</Button>

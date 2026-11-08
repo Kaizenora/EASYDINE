@@ -69,56 +69,212 @@ let branchSettings = {
 };
 
 let demoCategories = [
-  { id: "cat-1", name: "Starters & Appetizers", sortOrder: 1, isActive: true, showOnWebsite: true, _count: { items: 3 } },
-  { id: "cat-2", name: "Main Course", sortOrder: 2, isActive: true, showOnWebsite: true, _count: { items: 3 } },
-  { id: "cat-3", name: "Breads & Rice", sortOrder: 3, isActive: true, showOnWebsite: true, _count: { items: 2 } },
-  { id: "cat-4", name: "Beverages & Drinks", sortOrder: 4, isActive: true, showOnWebsite: true, _count: { items: 2 } },
+  { id: "cat-rec", name: "Recommended", sortOrder: 1, isActive: true, showOnWebsite: true, _count: { items: 6 } },
+  { id: "cat-1", name: "Starters", sortOrder: 2, isActive: true, showOnWebsite: true, _count: { items: 12 } },
+  { id: "cat-2", name: "Main Course", sortOrder: 3, isActive: true, showOnWebsite: true, _count: { items: 18 } },
+  { id: "cat-rice", name: "Rice & Biryani", sortOrder: 4, isActive: true, showOnWebsite: true, _count: { items: 8 } },
+  { id: "cat-3", name: "Breads", sortOrder: 5, isActive: true, showOnWebsite: true, _count: { items: 9 } },
+  { id: "cat-thali", name: "Thali", sortOrder: 6, isActive: true, showOnWebsite: true, _count: { items: 4 } },
+  { id: "cat-dessert", name: "Desserts", sortOrder: 7, isActive: true, showOnWebsite: true, _count: { items: 6 } },
+  { id: "cat-4", name: "Beverages", sortOrder: 8, isActive: true, showOnWebsite: true, _count: { items: 7 } },
 ];
+
+let demoCustomers = [
+  {
+    id: "cust-1",
+    name: "Rahul Sharma",
+    phone: "9876543210",
+    email: "rahul@example.com",
+    address: "Flat 402, Green Valley, Ahmednagar",
+    totalOrders: 5,
+    totalSpent: "3450.00",
+    walletBalance: "150.00",
+    loyaltyPoints: 345,
+    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+  },
+  {
+    id: "cust-2",
+    name: "Ananya Deshmukh",
+    phone: "9823456789",
+    email: "ananya@example.com",
+    address: "Pipeline Road, Ahmednagar",
+    totalOrders: 3,
+    totalSpent: "1890.00",
+    walletBalance: "50.00",
+    loyaltyPoints: 189,
+    createdAt: new Date(Date.now() - 15 * 86400000).toISOString(),
+  },
+  {
+    id: "cust-sid",
+    name: "Sid",
+    phone: "+91 98765 43210",
+    email: "sid@example.com",
+    address: "Ahmednagar",
+    totalOrders: 2,
+    totalSpent: "1400.00",
+    walletBalance: "0.00",
+    loyaltyPoints: 140,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "cust-mehta",
+    name: "Mehta family",
+    phone: "+91 98220 11223",
+    email: "mehta@example.com",
+    address: "Station Road, Ahmednagar",
+    totalOrders: 4,
+    totalSpent: "4200.00",
+    walletBalance: "200.00",
+    loyaltyPoints: 420,
+    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+  },
+  {
+    id: "cust-patil",
+    name: "Patil",
+    phone: "+91 94220 33445",
+    email: "patil@example.com",
+    address: "Savedi, Ahmednagar",
+    totalOrders: 1,
+    totalSpent: "960.00",
+    walletBalance: "0.00",
+    loyaltyPoints: 96,
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: "cust-joshi",
+    name: "Joshi",
+    phone: "+91 98600 55667",
+    email: "joshi@example.com",
+    address: "MIDC, Ahmednagar",
+    totalOrders: 3,
+    totalSpent: "3250.00",
+    walletBalance: "100.00",
+    loyaltyPoints: 325,
+    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+  },
+];
+
+function upsertCustomerFromOrder(guestName, guestPhone, orderTotal) {
+  if (!guestName && !guestPhone) return;
+  const name = (guestName || "Guest").trim();
+  const phone = (guestPhone || "").trim();
+  const amount = parseFloat(orderTotal) || 0;
+  let found = demoCustomers.find(
+    (c) =>
+      (phone && c.phone && c.phone.replace(/\D/g, '') === phone.replace(/\D/g, '')) ||
+      (name && c.name && c.name.toLowerCase() === name.toLowerCase())
+  );
+  if (found) {
+    found.totalOrders = (found.totalOrders || 0) + 1;
+    found.totalSpent = (parseFloat(found.totalSpent || "0") + amount).toFixed(2);
+    found.loyaltyPoints = Math.round(parseFloat(found.totalSpent) / 10);
+    if (phone && !found.phone) found.phone = phone;
+    if (name && (!found.name || found.name === "Guest")) found.name = name;
+  } else {
+    demoCustomers.unshift({
+      id: "cust-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+      name,
+      phone: phone || "+91 98000 00000",
+      email: name.toLowerCase().replace(/[^a-z0-9]/g, '') + "@gmail.com",
+      address: "Ahmednagar",
+      totalOrders: 1,
+      totalSpent: amount.toFixed(2),
+      walletBalance: "0.00",
+      loyaltyPoints: Math.round(amount / 10),
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
 
 let demoMenuItems = [
   {
     id: "item-1",
-    categoryId: "cat-1",
+    categoryId: "cat-rec",
     stationId: "station-1",
-    name: "Paneer Tikka (Charcoal Smoked)",
-    description: "Cottage cheese marinated in aromatic spices and grilled in clay tandoor",
-    price: "340.00",
+    name: "Paneer Tikka",
+    description: "Smoky char-grilled paneer in a spiced yogurt marinade",
+    price: "240.00",
     imageUrl: "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=500&auto=format&fit=crop&q=80",
     isVeg: true,
     isActive: true,
     isCombo: false,
-    category: { id: "cat-1", name: "Starters & Appetizers" },
+    category: { id: "cat-rec", name: "Recommended" },
     station: { id: "station-1", name: "Tandoor" },
-    modifierGroups: [
-      {
-        modifierGroup: {
-          id: "modg-1",
-          name: "Spiciness Level",
-          minSelect: 1,
-          maxSelect: 1,
-          isRequired: true,
-          modifiers: [
-            { id: "m-1", name: "Medium Spicy", priceAdjustment: "0.00", isDefault: true },
-            { id: "m-2", name: "Extra Spicy", priceAdjustment: "0.00", isDefault: false },
-            { id: "m-3", name: "Mild / Low Spice", priceAdjustment: "0.00", isDefault: false },
-          ],
-        },
-      },
-    ],
+    modifierGroups: [],
   },
   {
-    id: "item-2",
-    categoryId: "cat-1",
+    id: "item-4",
+    categoryId: "cat-rec",
     stationId: "station-1",
-    name: "Crispy Corn & Water Chestnut",
-    description: "Golden fried sweet corn tossed with scallions and crushed black pepper",
-    price: "290.00",
+    name: "Dal Fry",
+    description: "Yellow lentils tempered with ghee, garlic and spices",
+    price: "120.00",
     imageUrl: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80",
     isVeg: true,
     isActive: true,
     isCombo: false,
-    category: { id: "cat-1", name: "Starters & Appetizers" },
-    station: { id: "station-1", name: "Wok" },
+    category: { id: "cat-rec", name: "Recommended" },
+    station: { id: "station-1", name: "Curry" },
+    modifierGroups: [],
+  },
+  {
+    id: "item-6",
+    categoryId: "cat-3",
+    stationId: "station-1",
+    name: "Butter Roti",
+    description: "Soft tandoori flatbread brushed with fresh melted butter",
+    price: "25.00",
+    imageUrl: "https://images.unsplash.com/photo-1626074353765-517a681e40be?w=500&auto=format&fit=crop&q=80",
+    isVeg: true,
+    isActive: true,
+    isCombo: false,
+    category: { id: "cat-3", name: "Breads" },
+    station: { id: "station-1", name: "Tandoor" },
+    modifierGroups: [],
+  },
+  {
+    id: "item-vk",
+    categoryId: "cat-2",
+    stationId: "station-1",
+    name: "Veg Kolhapuri",
+    description: "Mixed vegetables cooked in a spicy Kolhapuri red chili gravy",
+    price: "210.00",
+    imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=500&auto=format&fit=crop&q=80",
+    isVeg: true,
+    isActive: true,
+    isCombo: false,
+    category: { id: "cat-2", name: "Main Course" },
+    station: { id: "station-1", name: "Curry" },
+    modifierGroups: [],
+  },
+  {
+    id: "item-gj",
+    categoryId: "cat-dessert",
+    stationId: "station-2",
+    name: "Gulab Jamun",
+    description: "Deep fried khoya dumplings soaked in warm rose cardamom syrup",
+    price: "80.00",
+    imageUrl: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80",
+    isVeg: true,
+    isActive: true,
+    isCombo: false,
+    category: { id: "cat-dessert", name: "Desserts" },
+    station: { id: "station-2", name: "Dessert" },
+    modifierGroups: [],
+  },
+  {
+    id: "item-5",
+    categoryId: "cat-rice",
+    stationId: "station-1",
+    name: "Veg Biryani",
+    description: "Aromatic basmati rice cooked on slow dum with royal spices and vegetables",
+    price: "267.00",
+    imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80",
+    isVeg: true,
+    isActive: true,
+    isCombo: false,
+    category: { id: "cat-rice", name: "Rice & Biryani" },
+    station: { id: "station-1", name: "Curry" },
     modifierGroups: [],
   },
   {
@@ -132,72 +288,41 @@ let demoMenuItems = [
     isVeg: false,
     isActive: true,
     isCombo: false,
-    category: { id: "cat-1", name: "Starters & Appetizers" },
+    category: { id: "cat-1", name: "Starters" },
     station: { id: "station-1", name: "Tandoor" },
     modifierGroups: [],
   },
   {
-    id: "item-4",
-    categoryId: "cat-2",
+    id: "item-2",
+    categoryId: "cat-1",
     stationId: "station-1",
-    name: "Dal Makhani (Slow Cooked 24h)",
-    description: "Classic yellow & black lentils simmered overnight with ghee and aromatic spices",
-    price: "280.00",
+    name: "Crispy Corn & Water Chestnut",
+    description: "Golden fried sweet corn tossed with scallions and crushed black pepper",
+    price: "290.00",
     imageUrl: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80",
     isVeg: true,
     isActive: true,
     isCombo: false,
-    category: { id: "cat-2", name: "Main Course" },
-    station: { id: "station-1", name: "Curry" },
-    modifierGroups: [],
-  },
-  {
-    id: "item-5",
-    categoryId: "cat-2",
-    stationId: "station-1",
-    name: "Veg Biryani (Clay Handi)",
-    description: "Aromatic basmati rice cooked on slow dum with royal spices and vegetables",
-    price: "267.00",
-    imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80",
-    isVeg: true,
-    isActive: true,
-    isCombo: false,
-    category: { id: "cat-2", name: "Main Course" },
-    station: { id: "station-1", name: "Curry" },
-    modifierGroups: [],
-  },
-  {
-    id: "item-6",
-    categoryId: "cat-3",
-    stationId: "station-1",
-    name: "Butter Roti / Garlic Naan",
-    description: "Soft tandoori flatbread brushed with fresh melted butter",
-    price: "35.00",
-    imageUrl: "https://images.unsplash.com/photo-1626074353765-517a681e40be?w=500&auto=format&fit=crop&q=80",
-    isVeg: true,
-    isActive: true,
-    isCombo: false,
-    category: { id: "cat-3", name: "Breads & Rice" },
-    station: { id: "station-1", name: "Tandoor" },
+    category: { id: "cat-1", name: "Starters" },
+    station: { id: "station-1", name: "Wok" },
     modifierGroups: [],
   },
   {
     id: "item-7",
     categoryId: "cat-4",
     stationId: "station-2",
-    name: "Masala Lemonade Cooler",
-    description: "Freshly squeezed lemon with roasted cumin, mint, and black salt",
-    price: "120.00",
+    name: "Masala Chaas Cooler",
+    description: "Freshly churned curd spiced with roasted cumin, mint, and rock salt",
+    price: "60.00",
     imageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&auto=format&fit=crop&q=80",
     isVeg: true,
     isActive: true,
     isCombo: false,
-    category: { id: "cat-4", name: "Beverages & Drinks" },
+    category: { id: "cat-4", name: "Beverages" },
     station: { id: "station-2", name: "Bar" },
     modifierGroups: [],
   },
 ];
-
 
 let demoDepartments = [
   { id: "dept-mgmt", name: "Management", description: "Store managers and owners", branchId: "branch-1", _count: { members: 1 } },
@@ -351,17 +476,22 @@ let demoOrders = [
     type: "DINE_IN",
     status: "OPEN",
     channel: "ONLINE",
-    acceptance: "PENDING",
+    acceptance: "ACCEPTED",
+    cookingStatus: "PREPARING",
+    placedAt: "5:04 PM",
+    acceptedAt: "5:05 PM",
+    preparedAt: "5:19 PM",
+    servedAt: null,
     tableId: "tbl-12",
     guestName: "Sid",
     guestCount: 1,
     notes: "Extra spicy, less oil",
     cancelReason: null,
-    subtotal: "620.00",
+    subtotal: "780.00",
     taxAmount: "0.00",
     discountAmount: "0.00",
     tipAmount: "0.00",
-    totalAmount: "620.00",
+    totalAmount: "780.00",
     createdAt: new Date(Date.now() - 1 * 60000).toISOString(),
     billedAt: null,
     table: { id: "tbl-12", name: "Table 12", number: "12" },
@@ -375,7 +505,7 @@ let demoOrders = [
         unitPriceSnapshot: "280.00",
         lineTotal: "280.00",
         isVeg: true,
-        status: "PENDING",
+        status: "PREPARING",
         kitchenNote: "Extra spicy, less oil",
         modifiers: [{ name: "Extra cheese", priceAdjustment: "40.00" }],
       },
@@ -387,7 +517,7 @@ let demoOrders = [
         unitPriceSnapshot: "120.00",
         lineTotal: "240.00",
         isVeg: true,
-        status: "PENDING",
+        status: "PREPARING",
         kitchenNote: null,
         modifiers: [],
       },
@@ -399,7 +529,19 @@ let demoOrders = [
         unitPriceSnapshot: "25.00",
         lineTotal: "100.00",
         isVeg: true,
-        status: "PENDING",
+        status: "PREPARING",
+        kitchenNote: null,
+        modifiers: [],
+      },
+      {
+        id: "item-24-4",
+        menuItemId: "item-gj",
+        nameSnapshot: "Gulab Jamun",
+        quantity: 2,
+        unitPriceSnapshot: "80.00",
+        lineTotal: "160.00",
+        isVeg: true,
+        status: "PREPARING",
         kitchenNote: null,
         modifiers: [],
       },
@@ -994,6 +1136,7 @@ const server = http.createServer((req, res) => {
             if (openOrder) {
               openOrder.status = "COMPLETED";
               openOrder.billedAt = new Date().toISOString();
+              upsertCustomerFromOrder(openOrder.guestName || openOrder.customer?.name, openOrder.customer?.phone, openOrder.totalAmount);
               // Clear KDS tickets for this order
               for (const ticket of demoTickets) {
                 if (ticket.orderId === openOrder.id || ticket.order?.orderNumber === openOrder.orderNumber) {
@@ -1420,14 +1563,23 @@ const server = http.createServer((req, res) => {
         const found = demoTickets.find((t) => t.id === ticketId);
         if (found) {
           found.status = b.status;
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           // Live sync to demoOrders
           const order = demoOrders.find((o) => o.orderNumber === found.order?.orderNumber || o.id === found.orderId);
           if (order) {
-            if (b.status === "SERVED") {
-              order.status = "COMPLETED";
-              order.billedAt = order.billedAt || new Date().toISOString();
-            } else if (b.status === "READY") {
-              order.status = "OPEN";
+            order.cookingStatus = b.status;
+            if (b.status === "PREPARING" || b.status === "COOKING") {
+              order.preparedAt = timeStr;
+            } else if (b.status === "SERVED") {
+              order.status = "SERVED";
+              order.servedAt = timeStr;
+              for (const fl of demoFloors) {
+                const tbl = fl.tables.find((t) => t.id === order.tableId || t.number === order.table?.number);
+                if (tbl) {
+                  tbl.status = "SERVED";
+                  break;
+                }
+              }
             }
             if (Array.isArray(order.items)) {
               for (const item of order.items) {
@@ -1590,9 +1742,14 @@ const server = http.createServer((req, res) => {
         order: tableActiveOrder
           ? {
               orderNumber: tableActiveOrder.orderNumber,
-              status: tableActiveOrder.status,
+              status: tableActiveOrder.cookingStatus || tableActiveOrder.status,
               acceptance: tableActiveOrder.acceptance,
+              placedAt: tableActiveOrder.placedAt || "5:04 PM",
+              acceptedAt: tableActiveOrder.acceptedAt || (tableActiveOrder.acceptance === "ACCEPTED" ? "5:05 PM" : null),
+              preparedAt: tableActiveOrder.preparedAt || (["PREPARING", "READY", "SERVED"].includes(tableActiveOrder.cookingStatus) ? "5:19 PM" : null),
+              servedAt: tableActiveOrder.servedAt || (tableActiveOrder.cookingStatus === "SERVED" || tableActiveOrder.status === "SERVED" ? "5:24 PM" : null),
               items: tableActiveOrder.items || [],
+              totalAmount: tableActiveOrder.totalAmount,
             }
           : null,
         openRequests: tState.openRequests,
@@ -2195,9 +2352,8 @@ const server = http.createServer((req, res) => {
     if (pathname.includes("/shifts")) {
       if (req.method === "POST") {
         return getBody().then((b) => {
-          const staffMember = b.userId === "u-admin"
-            ? { id: "u-admin", name: "Restaurant Owner" }
-            : { id: "u-cashier", name: "Lead Cashier" };
+          const staffMemberName = b.staffName || b.name || (b.userId === "u-admin" ? "Restaurant Owner" : b.userId === "u-cashier" ? "Lead Cashier" : b.userId || "Staff Member");
+          const staffMember = { id: b.userId || "u-" + Date.now(), name: staffMemberName };
           const newShift = {
             id: `shift-${Date.now()}`,
             userId: b.userId,
@@ -2296,28 +2452,81 @@ const server = http.createServer((req, res) => {
 
   // --- 5. Customers ---
   if (pathname.includes("/customers")) {
-    return send([
-      {
-        id: "cust-1",
-        name: "Rahul Sharma",
-        phone: "9876543210",
-        email: "rahul@example.com",
-        totalOrders: 5,
-        totalSpent: "3450.00",
-        loyaltyPoints: 345,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: "cust-2",
-        name: "Ananya Deshmukh",
-        phone: "9823456789",
-        email: "ananya@example.com",
-        totalOrders: 3,
-        totalSpent: "1890.00",
-        loyaltyPoints: 189,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    const urlObj = new URL(req.url, "http://localhost:4001");
+    const search = (urlObj.searchParams.get("search") || "").toLowerCase().trim();
+
+    if (req.method === "POST") {
+      return getBody().then((b) => {
+        const newCust = {
+          id: "cust-" + Date.now(),
+          name: b.name || "Guest Customer",
+          phone: b.phone || "+91 98000 00000",
+          email: b.email || null,
+          address: b.address || "Ahmednagar",
+          birthday: b.birthday || null,
+          anniversary: b.anniversary || null,
+          allergies: b.allergies || null,
+          notes: b.notes || null,
+          totalOrders: 0,
+          totalSpent: "0.00",
+          walletBalance: "0.00",
+          loyaltyPoints: 0,
+          createdAt: new Date().toISOString(),
+        };
+        demoCustomers.unshift(newCust);
+        return send(newCust, 201);
+      });
+    }
+
+    if (req.method === "DELETE") {
+      const parts = pathname.split("/");
+      const id = parts[parts.indexOf("customers") + 1]?.split("?")[0];
+      demoCustomers = demoCustomers.filter((c) => c.id !== id);
+      return send({ success: true, deleted: id });
+    }
+
+    const parts = pathname.split("/");
+    const cIndex = parts.indexOf("customers");
+    const specificId = parts[cIndex + 1]?.split("?")[0];
+    if (specificId && specificId !== "customers" && !specificId.includes("?")) {
+      const found = demoCustomers.find((c) => c.id === specificId);
+      if (found) {
+        return send({
+          ...found,
+          addresses: [
+            {
+              id: "addr-" + found.id,
+              label: "Home",
+              line1: found.address || "Ahmednagar",
+              city: "Ahmednagar",
+              state: "Maharashtra",
+              pincode: "414001",
+              isDefault: true,
+            },
+          ],
+          orders: demoOrders
+            .filter((o) => o.customer?.id === found.id || o.guestName === found.name)
+            .map((o) => ({
+              id: o.id,
+              orderNumber: o.orderNumber,
+              totalAmount: o.totalAmount,
+              billedAt: o.billedAt || o.createdAt,
+            })),
+          giftCards: [],
+        });
+      }
+    }
+
+    let list = demoCustomers;
+    if (search) {
+      list = list.filter(
+        (c) =>
+          (c.name && c.name.toLowerCase().includes(search)) ||
+          (c.phone && c.phone.includes(search)) ||
+          (c.email && c.email.toLowerCase().includes(search))
+      );
+    }
+    return send(list);
   }
 
   // --- 6. Delivery & Riders ---
@@ -2524,8 +2733,21 @@ const server = http.createServer((req, res) => {
     ]);
   }
 
+  if (pathname.includes("/users/roles") || pathname === "/api/v1/roles" || pathname === "/roles") {
+    return send([
+      { id: "role-admin", name: "ADMIN", label: "Owner / Administrator" },
+      { id: "role-cashier", name: "CASHIER", label: "Lead Cashier" },
+      { id: "role-chef", name: "CHEF", label: "Head Chef" },
+      { id: "role-waiter", name: "WAITER", label: "Floor Waitstaff" },
+    ]);
+  }
+
   if (pathname.includes("/departments")) {
-    return send(demoDepartments);
+    return send(demoDepartments.map((d) => ({
+      id: d.id,
+      name: d.name,
+      _count: { users: d._count?.members || d._count?.users || 1 },
+    })));
   }
 
   if (pathname.includes("/staff") || pathname.includes("/users")) {

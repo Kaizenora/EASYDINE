@@ -16,48 +16,72 @@ import { MobileBottomNav } from "./mobile-bottom-nav";
 import { SidebarNav } from "./sidebar-nav";
 import { UserMenu } from "./user-menu";
 
-// The restaurant's own logo + name lead the sidebar header — this is
-// white-label self-hosted software, so the operator's branding takes the
-// prime spot an operator actually looks at. The EasyDine product
-// mark moves to a small credit line at the bottom (BrandFooter) instead of
-// competing with it up here. Falls back to the product mark only until the
-// restaurant sets its own logo/name under Settings.
 function RestaurantBrand() {
   const { branchId } = useBranch();
   const { data } = useDisplaySettings(branchId);
   const restaurant = data?.restaurant;
 
-  // Support localStorage-persisted custom logo (uploaded from Settings)
+  // Support custom uploaded restaurant logo from Settings (only when user actively uploads one)
   const [localLogo, setLocalLogo] = useState<string | null>(null);
   useEffect(() => {
     try {
       const stored = localStorage.getItem("easydine_custom_logo");
-      if (stored) setLocalLogo(stored);
+      if (stored && stored !== "/designer-logo.png" && stored !== "/custom-logo.png") {
+        setLocalLogo(stored);
+      } else {
+        setLocalLogo(null);
+      }
     } catch {}
+
     const handler = () => {
       try {
         const stored = localStorage.getItem("easydine_custom_logo");
-        setLocalLogo(stored);
+        if (stored && stored !== "/designer-logo.png" && stored !== "/custom-logo.png") {
+          setLocalLogo(stored);
+        } else {
+          setLocalLogo(null);
+        }
       } catch {}
     };
     window.addEventListener("easydine_logo_updated", handler);
     return () => window.removeEventListener("easydine_logo_updated", handler);
   }, []);
 
-  const logoSrc = localLogo || restaurant?.logoUrl || "/custom-logo.png";
   const brandName = restaurant?.name ?? "Hotel Sanjog";
+  // Fallback initial badge matching reference UI: "HS"
+  const initials = brandName
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "HS";
+
+  const hasUploadedLogo = Boolean(
+    localLogo ||
+    (restaurant?.logoUrl &&
+      restaurant.logoUrl !== "/logo.png" &&
+      restaurant.logoUrl !== "/designer-logo.png" &&
+      restaurant.logoUrl !== "/custom-logo.png")
+  );
+  const logoSrc = localLogo || restaurant?.logoUrl;
 
   return (
     <>
-      {/* eslint-disable-next-line @next/next/no-img-element -- uploaded asset served from the backend */}
-      <img
-        src={logoSrc}
-        alt={brandName}
-        className="h-8 w-8 shrink-0 rounded-lg object-contain"
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = "none";
-        }}
-      />
+      {hasUploadedLogo && logoSrc ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={logoSrc}
+          alt={brandName}
+          className="h-8 w-8 shrink-0 rounded-lg object-contain"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      ) : (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 font-black text-black text-xs shadow-sm">
+          {initials}
+        </div>
+      )}
       <div className="flex flex-col truncate">
         <span className="truncate text-sm font-bold tracking-tight text-sidebar-foreground">
           {brandName}
