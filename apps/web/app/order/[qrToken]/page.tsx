@@ -118,6 +118,14 @@ export default function LuxuryCustomerMenu({
 }) {
   const { qrToken } = use(params);
   const isTakeaway = qrToken === "takeaway" || qrToken === "qr-takeaway";
+  const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
+  useEffect(() => {
+    const up = () => setIsOffline(false);
+    const down = () => setIsOffline(true);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
   const nameStorageKey = `qr-guest-name:${qrToken}`;
   const phoneStorageKey = `qr-guest-phone:${qrToken}`;
   const queryClient = useQueryClient();
@@ -178,9 +186,8 @@ export default function LuxuryCustomerMenu({
     enabled: !!data,
   });
 
-  const activeOrder = status?.order && status.order.status !== "CANCELLED" && status.order.status !== "COMPLETED"
-    ? status.order
-    : null;
+  const paidOrder = status?.order && status.order.status === "PAID" ? status.order : null;
+  const activeOrder = status?.order && status.order.status !== "CANCELLED" && status.order.status !== "COMPLETED" && status.order.status !== "PAID" ? status.order : null;
 
   // Auto-switch to tracking view when an active order exists and user hasn't explicitly navigated
   useEffect(() => {
@@ -216,12 +223,13 @@ export default function LuxuryCustomerMenu({
   const placeOrder = useMutation({
     mutationFn: () =>
       api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
-        guestName: guestName || "Sid",
+        guestName: guestName || "Guest",
         guestPhone: guestPhone || undefined,
+        notes: cart.map((c) => c.cookingNote).filter(Boolean).join("; ") || undefined,
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.quantity,
-          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
+          kitchenNote: c.modifierLabel || undefined,
         })),
       }),
     onSuccess: (res) => {
@@ -239,13 +247,13 @@ export default function LuxuryCustomerMenu({
 
   // Check-in action with Name & Contact
   const confirmCheckIn = () => {
-    const finalName = nameDraft.trim() || "Sid";
-    const finalPhone = phoneDraft.trim() || "+91 98765 43210";
+    const finalName = nameDraft.trim() || "Guest";
+    const finalPhone = phoneDraft.trim() || undefined;
     setGuestName(finalName);
-    setGuestPhone(finalPhone);
+    setGuestPhone(finalPhone || "");
     sessionStorage.setItem(nameStorageKey, finalName);
-    sessionStorage.setItem(phoneStorageKey, finalPhone);
-    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName, phone: finalPhone }).catch(() => {});
+    if (finalPhone) sessionStorage.setItem(phoneStorageKey, finalPhone);
+    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName, phone: finalPhone ?? null }).catch(() => {});
   };
 
   // Cart calculations
@@ -398,13 +406,45 @@ export default function LuxuryCustomerMenu({
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
         <UtensilsCrossed className="h-12 w-12 text-[#E5A93C]" />
         <h2 className="text-xl font-bold">Connecting to Session...</h2>
-        <p className="text-sm text-neutral-400">Loading Hotel Sanjog dining for {qrToken}...</p>
+        <p className="text-sm text-neutral-400">Loading dining menu for {qrToken}...</p>
         <button
           onClick={() => window.location.reload()}
           className="mt-4 rounded-xl bg-[#E5A93C] px-6 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
         >
           Retry
         </button>
+      </div>
+    );
+  }
+
+  // 1b. PAID / THANK YOU SCREEN
+  if (paidOrder && !cart.length) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0C0C0E] px-6 text-center text-white">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+          <CheckCircle2 className="h-10 w-10" />
+        </div>
+        <h2 className="text-2xl font-black text-white">Thank you, {guestName}!</h2>
+        <p className="text-sm text-neutral-400">
+          Order #{paidOrder.orderNumber} · Bill settled ✓
+        </p>
+        <p className="text-xs text-neutral-500 mt-1">
+          We hope you enjoyed your meal. See you again soon!
+        </p>
+        <div className="mt-4 rounded-2xl border border-neutral-800 bg-[#141416] p-4 text-left w-full max-w-xs">
+          <p className="text-xs font-bold text-neutral-400 mb-2">Your order</p>
+          {paidOrder.items?.slice(0, 5).map((it: any, i: number) => (
+            <div key={i} className="flex justify-between text-xs py-1 border-b border-neutral-900">
+              <span className="text-neutral-300">{it.nameSnapshot} × {it.quantity}</span>
+              <span className="text-white font-bold">₹{it.lineTotal || (parseFloat(it.unitPriceSnapshot || "0") * it.quantity).toFixed(0)}</span>
+            </div>
+          ))}
+          {(paidOrder.items?.length || 0) > 5 && <p className="text-xs text-neutral-500 mt-1">...and {(paidOrder.items?.length || 0) - 5} more items</p>}
+          <div className="flex justify-between font-bold text-sm mt-2 pt-2 border-t border-neutral-800">
+            <span>Total paid</span>
+            <span className="text-emerald-400">₹{paidOrder.totalAmount}</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -421,7 +461,7 @@ export default function LuxuryCustomerMenu({
               <span>{isTakeaway ? "TAKEAWAY · ONLINE MENU" : "QR SCANNED · DINE-IN"}</span>
             </div>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1E1B18]">
-              {data?.branchName || "Hotel Sanjog"}
+              {data?.branchName || "EasyDine"}
             </h1>
             <p className="mt-1 text-sm font-medium text-neutral-500">
               Ahmednagar · North Indian & Maharashtrian
@@ -831,12 +871,19 @@ export default function LuxuryCustomerMenu({
   // 3. MAIN MENU SCREEN (Image 3: Dark Luxury Theme with Gold Steppers & Mic)
   return (
     <div className="relative min-h-screen bg-[#0C0C0E] pb-32 font-sans text-white">
+      {/* C8: Offline banner */}
+      {isOffline && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-red-600 px-4 py-2 text-center text-xs font-bold text-white">
+          ⚠ You are offline — ordering is paused. Check your Wi-Fi.
+        </div>
+      )}
+
       {/* Top Header (Image 3 match) */}
       <header className="sticky top-0 z-30 border-b border-neutral-800 bg-[#0C0C0E]/95 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-black tracking-tight text-white">
-              {data?.branchName || "Hotel Sanjog"}
+              {data?.branchName || "EasyDine"}
             </h1>
             <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-semibold text-neutral-400 border border-neutral-800">
               <span className="text-amber-400 font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table 12")}</span>

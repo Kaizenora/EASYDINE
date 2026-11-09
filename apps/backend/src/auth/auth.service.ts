@@ -183,68 +183,76 @@ export class AuthService {
       );
     }
 
-    // Permissions are global, not per-tenant — upsert (idempotent) outside
-    // the transaction below rather than re-creating them per restaurant.
-    for (const permission of PERMISSIONS) {
-      await this.prisma.permission.upsert({
-        where: { key: permission.key },
-        update: {},
-        create: permission,
-      });
-    }
+    // Permissions are global, not per-tenant — upsert (idempotent) in parallel
+    // outside the transaction below rather than sequentially re-creating them.
+    await Promise.all(
+      PERMISSIONS.map((permission) =>
+        this.prisma.permission.upsert({
+          where: { key: permission.key },
+          update: {},
+          create: permission,
+        }),
+      ),
+    );
     const allPermissions = await this.prisma.permission.findMany();
     const permissionByKey = new Map(allPermissions.map((p) => [p.key, p]));
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
-    const owner = await this.prisma.$transaction(async (tx) => {
-      const restaurant = await tx.restaurant.create({
-        data: { name: dto.restaurantName },
-      });
-      const branch = await tx.branch.create({
-        data: { restaurantId: restaurant.id, name: dto.branchName },
-      });
+    const owner = await this.prisma.$transaction(
+      async (tx) => {
+        const restaurant = await tx.restaurant.create({
+          data: { name: dto.restaurantName },
+        });
+        const branch = await tx.branch.create({
+          data: { restaurantId: restaurant.id, name: dto.branchName },
+        });
 
-      let ownerRoleId = '';
-      for (const roleName of STAFF_ROLES) {
-        const role = await tx.role.create({
+        let ownerRoleId = '';
+        for (const roleName of STAFF_ROLES) {
+          const role = await tx.role.create({
+            data: {
+              restaurantId: restaurant.id,
+              name: roleName,
+              label: roleName.replace(/_/g, ' '),
+            },
+          });
+          if (roleName === 'OWNER') ownerRoleId = role.id;
+
+          const grantedKeys = DEFAULT_ROLE_PERMISSIONS[roleName];
+          await tx.rolePermission.createMany({
+            data: grantedKeys
+              .map((key) => permissionByKey.get(key))
+              .filter((p): p is NonNullable<typeof p> => Boolean(p))
+              .map((permission) => ({
+                roleId: role.id,
+                permissionId: permission.id,
+              })),
+          });
+        }
+
+        const user = await tx.user.create({
           data: {
             restaurantId: restaurant.id,
-            name: roleName,
-            label: roleName.replace(/_/g, ' '),
+            roleId: ownerRoleId,
+            name: dto.ownerName,
+            email: dto.email,
+            passwordHash,
           },
+          include: permissionInclude,
         });
-        if (roleName === 'OWNER') ownerRoleId = role.id;
 
-        const grantedKeys = DEFAULT_ROLE_PERMISSIONS[roleName];
-        await tx.rolePermission.createMany({
-          data: grantedKeys
-            .map((key) => permissionByKey.get(key))
-            .filter((p): p is NonNullable<typeof p> => Boolean(p))
-            .map((permission) => ({
-              roleId: role.id,
-              permissionId: permission.id,
-            })),
+        await tx.userBranch.create({
+          data: { userId: user.id, branchId: branch.id },
         });
-      }
 
-      const user = await tx.user.create({
-        data: {
-          restaurantId: restaurant.id,
-          roleId: ownerRoleId,
-          name: dto.ownerName,
-          email: dto.email,
-          passwordHash,
-        },
-        include: permissionInclude,
-      });
-
-      await tx.userBranch.create({
-        data: { userId: user.id, branchId: branch.id },
-      });
-
-      return user;
-    });
+        return user;
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
+      },
+    );
 
     return this.issueSession(owner);
   }

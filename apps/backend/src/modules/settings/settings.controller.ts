@@ -109,4 +109,21 @@ export class SettingsController {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
     return this.settingsService.setKioskToken(branchId, user.id, action);
   }
+
+  /** H3: Reachability probe — returns the configured qrBaseUrl (or origin hint) so owner can test from phone. */
+  @Auth()
+  @Get('reachability')
+  async reachability(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+  ) {
+    if (!branchId) return { ok: false, reason: 'branchId required' };
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const branch = await this.settingsService.getBranchForReachability(branchId);
+    return {
+      ok: true,
+      configuredUrl: branch.qrBaseUrl ?? null,
+      hint: 'Open this URL on a customer phone to test QR reachability. If blank, set it in Branch Settings > QR Base URL.',
+    };
+  }
 }

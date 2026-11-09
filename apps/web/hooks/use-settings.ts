@@ -53,6 +53,7 @@ export interface BranchSettings {
   printerConnection: "USB" | "NETWORK";
   printerHost: string | null;
   printerPort: number;
+  qrBaseUrl?: string | null;
 }
 
 export function useSettings(branchId: string | null) {

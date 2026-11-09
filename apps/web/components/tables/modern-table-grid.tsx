@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { TableQrDialog } from "./table-qr-dialog";
 import type { RestaurantTable } from "@/hooks/use-tables";
+import { tableLabel } from "@easydine/types";
 
 interface ModernTableGridProps {
   tables: RestaurantTable[];
@@ -88,6 +89,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   // Post-settle Bill Receipt Dialog (User demanded: after confirming, bill must be visible then print option)
   const [receiptData, setReceiptData] = useState<SettleReceipt | null>(null);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
+  const [dispatchedTables, setDispatchedTables] = useState<Record<string, boolean>>({});
 
   // Settle table mutation
   const settleMutation = useMutation({
@@ -104,7 +106,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
         tableNumber?: string;
         date?: string;
         paymentMethod?: "CASH" | "UPI" | "CARD";
-      }>(`/tables/${tableId}/settle`, { method }),
+      }>(`/tables/${tableId}/settle?branchId=${branchId || ""}`, { method }),
     onSuccess: (res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -112,19 +114,21 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
 
       if (selectedTable) {
-        const total = res?.totalAmount || (selectedTable as any).totalAmount || "0.00";
-        const sub = res?.subtotal || (parseFloat(total) * 0.95).toFixed(2);
-        const tax = res?.tax || (parseFloat(total) * 0.05).toFixed(2);
+        if (!res?.billNumber || !res?.totalAmount) {
+          toast.error("Settlement completed but server did not return valid receipt values.");
+          setSettleDialogOpen(false);
+          return;
+        }
         const receipt: SettleReceipt = {
-          billNumber: res?.billNumber || res?.orderNumber || `INV-${Date.now().toString().slice(-5)}`,
-          tableNumber: res?.tableNumber || String(selectedTable.number),
-          tableName: res?.tableName || selectedTable.name || `Table ${selectedTable.number}`,
-          customerName: res?.customerName || selectedTable.customerName || (selectedTable as any).guestName || "Guest",
-          paymentMethod: res?.paymentMethod || vars.method,
-          date: res?.date || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-          subtotal: sub,
-          tax,
-          totalAmount: total,
+          billNumber: res.billNumber,
+          tableNumber: res.tableNumber || String(selectedTable.number),
+          tableName: res.tableName || selectedTable.name || `Table ${selectedTable.number}`,
+          customerName: res.customerName || selectedTable.customerName || "Guest",
+          paymentMethod: res.paymentMethod || vars.method,
+          date: res.date || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          subtotal: res.subtotal ?? "0.00",
+          tax: res.tax ?? "0.00",
+          totalAmount: res.totalAmount,
         };
         setReceiptData(receipt);
         setReceiptDialogOpen(true);
@@ -677,8 +681,8 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             {/* Printable Receipt Card */}
             <div className="rounded-xl border border-neutral-800 bg-[#111113] p-4 text-xs space-y-3 font-mono">
               <div className="text-center border-b border-dashed border-neutral-800 pb-2">
-                <h4 className="font-sans font-black text-sm text-white">HOTEL SANJOG</h4>
-                <p className="text-neutral-500 text-[10px]">Ahmednagar · GSTIN: 27AABCU9603R1ZM</p>
+                <h4 className="font-sans font-black text-sm text-white">{receiptData.tableName} · Tax Invoice</h4>
+                <p className="text-neutral-500 text-[10px]">EasyDine POS</p>
               </div>
 
               <div className="flex justify-between text-neutral-400 text-[11px]">

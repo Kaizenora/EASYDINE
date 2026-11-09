@@ -22,48 +22,24 @@ function RestaurantBrand() {
   const restaurant = data?.restaurant;
 
   // Support custom uploaded restaurant logo from Settings (only when user actively uploads one)
-  const [localLogo, setLocalLogo] = useState<string | null>(null);
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("easydine_custom_logo");
-      if (stored && stored !== "/designer-logo.png" && stored !== "/custom-logo.png") {
-        setLocalLogo(stored);
-      } else {
-        setLocalLogo(null);
-      }
-    } catch {}
+  // Custom logo managed via restaurant settings
 
-    const handler = () => {
-      try {
-        const stored = localStorage.getItem("easydine_custom_logo");
-        if (stored && stored !== "/designer-logo.png" && stored !== "/custom-logo.png") {
-          setLocalLogo(stored);
-        } else {
-          setLocalLogo(null);
-        }
-      } catch {}
-    };
-    window.addEventListener("easydine_logo_updated", handler);
-    return () => window.removeEventListener("easydine_logo_updated", handler);
-  }, []);
-
-  const brandName = restaurant?.name ?? "Hotel Sanjog";
+  const brandName = restaurant?.name ?? "EasyDine";
   // Fallback initial badge matching reference UI: "HS"
   const initials = brandName
     .split(" ")
     .map((w) => w[0])
     .join("")
     .slice(0, 2)
-    .toUpperCase() || "HS";
+    .toUpperCase() || "ED";
 
   const hasUploadedLogo = Boolean(
-    localLogo ||
     (restaurant?.logoUrl &&
       restaurant.logoUrl !== "/logo.png" &&
       restaurant.logoUrl !== "/designer-logo.png" &&
       restaurant.logoUrl !== "/custom-logo.png")
   );
-  const logoSrc = localLogo || restaurant?.logoUrl;
+  const logoSrc = restaurant?.logoUrl;
 
   return (
     <>

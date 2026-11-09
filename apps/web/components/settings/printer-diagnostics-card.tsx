@@ -226,20 +226,26 @@ export function PrinterDiagnosticsCard() {
       )}
 
       <div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={testPrint.isPending}
-          onClick={() =>
-            testPrint.mutate(undefined, {
-              onSuccess: () => toast.success("Test slip sent"),
-              onError: (err) =>
-                toast.error(err instanceof ApiError ? err.message : "Could not print a test slip"),
-            })
-          }
-        >
-          {testPrint.isPending ? "Printing…" : "Send test print"}
-        </Button>
+        {/* Fallback routing status */}
+        <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-300">
+          ℹ️ <strong>Printer Routing:</strong> Bill role is temporarily using the kitchen printer. Kitchen KOT tickets carry a clear <strong>KITCHEN ORDER</strong> header.
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={testPrint.isPending}
+            onClick={() =>
+              testPrint.mutate(undefined, {
+                onSuccess: () => toast.success("Test slip sent to transport (SENT). Inspect paper output."),
+                onError: (err) =>
+                  toast.error(err instanceof ApiError ? err.message : "Could not print a test slip"),
+              })
+            }
+          >
+            {testPrint.isPending ? "Printing…" : "Send test print"}
+          </Button>
         <Button
           variant="outline"
           size="sm"
@@ -270,10 +276,66 @@ export function PrinterDiagnosticsCard() {
         >
           Open cash drawer
         </Button>
+        </div>
         <p className="mt-2 text-xs text-muted-foreground">
           The drawer must be plugged into the printer&rsquo;s drawer (RJ11) port. Receipts printed via USB for cash
           payments open it automatically.
         </p>
+        {/* B4 & B9: Staff physical confirmation */}
+        <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold text-foreground">
+                Physical Print Verification (B4):
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Software only ever reports <strong>SENT</strong>. Did paper actually come out of the printer?
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-emerald-600 text-emerald-500 hover:bg-emerald-950/20"
+                onClick={async () => {
+                  try {
+                    await fetch('/api/orders/print/confirm', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ branchId, role: 'KITCHEN', confirmed: true }),
+                    });
+                    toast.success("Confirmed: Paper came out correct (CONFIRMED BY STAFF)");
+                    refetch();
+                  } catch {
+                    toast.error("Could not record confirmation");
+                  }
+                }}
+              >
+                ✓ Yes, paper printed
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-destructive text-destructive hover:bg-destructive/10"
+                onClick={async () => {
+                  try {
+                    await fetch('/api/orders/print/confirm', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ branchId, role: 'KITCHEN', confirmed: false }),
+                    });
+                    toast.warning("Recorded: Print failed to output paper");
+                    refetch();
+                  } catch {
+                    toast.error("Could not record status");
+                  }
+                }}
+              >
+                ✕ No output
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </Card>
   );

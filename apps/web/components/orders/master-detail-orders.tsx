@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import type { ManagedOrder } from "@/hooks/use-orders";
 import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatOrderNumber } from "@/lib/format";
+import { tableLabel } from "@easydine/types";
 
 interface MasterDetailOrdersProps {
   branchId: string | null;
@@ -49,6 +50,38 @@ export function MasterDetailOrders({
   // Tab: Incoming Queue vs Active vs History
   const [activeTab, setActiveTab] = useState<"QUEUE" | "IN_PROGRESS" | "HISTORY">("QUEUE");
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString());
+  const [syncStatus, setSyncStatus] = useState<"CONNECTED" | "DISCONNECTED" | "CATCHING_UP" | "SYNC_FAILED">("CONNECTED");
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setSyncStatus("CATCHING_UP");
+      if (onRefresh) onRefresh();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSyncStatus("DISCONNECTED");
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [onRefresh]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLastSyncTime(new Date().toLocaleTimeString());
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setSyncStatus("DISCONNECTED");
+      } else {
+        setSyncStatus("CONNECTED");
+      }
+    }
+  }, [isLoading, orders]);
 
   // Filter list by tab
   const queueOrders = useMemo(() => {
@@ -213,8 +246,9 @@ export function MasterDetailOrders({
               currentList.map((order) => {
                 const isSelected = selectedOrder?.id === order.id;
                 const itemsCount = Array.isArray(order.items) ? order.items.length : 0;
-                const tableName = order.table?.name || (order.table?.number ? `Table ${order.table.number}` : "Dine-in");
+                const tableName = tableLabel(order.table?.number, order.table?.name);
                 const guestName = order.guestName || order.customer?.name || "Walk-in";
+                const guestPhone = order.deliveryPhone || order.customer?.phone;
                 const isPending = order.acceptance === "PENDING" || !order.acceptance || (order.acceptance as string) === "NEW";
                 const isKotPrinted = order.acceptance === "ACCEPTED";
                 const hasItemNotes = (order.items || []).some((it: any) => it.kitchenNote || it.instructions);
@@ -231,9 +265,14 @@ export function MasterDetailOrders({
                     )}
                   >
                     <div className="flex items-start justify-between">
-                      <span className="text-sm font-bold text-white">
-                        {tableName} · {guestName}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-white">
+                          {tableName} · {guestName}
+                        </span>
+                        {guestPhone && (
+                          <span className="text-[11px] text-amber-400/90 font-mono">📞 {guestPhone}</span>
+                        )}
+                      </div>
                       <span className="text-xs text-neutral-400">1 min</span>
                     </div>
 
@@ -281,14 +320,14 @@ export function MasterDetailOrders({
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-white">
-                      {selectedOrder.table?.name || `Table ${selectedOrder.table?.number || "12"}`} · Order {formatOrderNumber(selectedOrder.orderNumber)}
+                      {tableLabel(selectedOrder.table?.number, selectedOrder.table?.name)} · Order {formatOrderNumber(selectedOrder.orderNumber)}
                     </h2>
                     <span className="rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-bold text-amber-400 border border-amber-500/30">
                       {selectedOrder.acceptance === "ACCEPTED" ? "ACCEPTED · COOKING" : "WAITING APPROVAL"}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-neutral-400">
-                    {selectedOrder.guestName || selectedOrder.customer?.name || "Sid"} · QR check-in · placed just now
+                    {selectedOrder.guestName || selectedOrder.customer?.name || "Guest"}{(selectedOrder.deliveryPhone || selectedOrder.customer?.phone) ? ` · 📞 ${selectedOrder.deliveryPhone || selectedOrder.customer?.phone}` : ""} · QR check-in · placed just now
                   </p>
                 </div>
               </div>
@@ -297,7 +336,7 @@ export function MasterDetailOrders({
               <div className="flex flex-col gap-3 rounded-xl border border-neutral-800/80 bg-neutral-900/40 p-4">
                 {(selectedOrder.items || []).map((item: any, idx: number) => {
                   const isVeg = item.isVeg !== false;
-                  const unitPrice = parseFloat(item.unitPriceSnapshot || "250");
+                  const unitPrice = item.unitPriceSnapshot ? parseFloat(item.unitPriceSnapshot) : 0;
                   const total = parseFloat(item.lineTotal || String(unitPrice * (item.quantity || 1)));
 
                   return (
@@ -327,7 +366,7 @@ export function MasterDetailOrders({
                           {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
                             <div className="text-xs text-neutral-400">
                               {item.modifiers.map((m: any, mIdx: number) => (
-                                <span key={mIdx}>+ {m.name || m.nameSnapshot} (+₹{m.priceAdjustment || 40})</span>
+                                <span key={mIdx}>+ {m.name || m.nameSnapshot} {m.priceAdjustment ? `(+₹${m.priceAdjustment})` : ''}</span>
                               ))}
                             </div>
                           )}

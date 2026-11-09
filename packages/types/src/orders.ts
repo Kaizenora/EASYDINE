@@ -98,6 +98,7 @@ export const createOrderSchema = z.object({
   guestCount: z.number().int().positive().optional(),
   customerId: z.string().optional(),
   guestName: z.string().trim().min(1).max(60).optional(),
+  guestPhone: z.string().trim().max(25).optional(),
   notes: z.string().optional(),
   // Required when type is DELIVERY (validated against the branch's zones).
   delivery: deliveryInfoSchema.optional(),
@@ -117,6 +118,7 @@ export type AddOrderItemsDto = z.infer<typeof addOrderItemsSchema>;
 export const publicOrderSchema = z.object({
   guestName: z.string().trim().max(60).optional().default("Guest"),
   guestPhone: z.string().trim().max(25).optional(),
+  notes: z.string().trim().max(500).optional(),
   requestId: z.string().optional(),
   items: z.array(cartItemSchema).min(1),
 });

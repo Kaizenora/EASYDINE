@@ -134,6 +134,7 @@ export interface OrderDetail {
   acceptance: AcceptanceStatus;
   tableId: string | null;
   guestName: string | null;
+  deliveryPhone?: string | null;
   guestCount: number | null;
   deliveryAddress?: string | null;
   deliveryPincode?: string | null;
@@ -200,6 +201,7 @@ export interface ManagedOrder {
   channel: OrderChannel;
   acceptance: AcceptanceStatus;
   guestName: string | null;
+  deliveryPhone?: string | null;
   deliveryAddress?: string | null;
   deliveryPincode?: string | null;
   deliveryLat?: number | null;

@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -74,6 +74,7 @@ export class OrdersService {
     private readonly webhooks: WebhooksService,
     private readonly verifactu: VerifactuService,
     private readonly referrals: ReferralsService,
+    private readonly kotPrint: KotPrintService,
   ) {}
 
   async listOpen(branchId: string, tableId?: string) {
@@ -376,6 +377,7 @@ export class OrdersService {
           guestCount: dto.guestCount,
           customerId: dto.customerId,
           guestName: dto.guestName,
+          deliveryPhone: (dto as any).guestPhone ?? delivery?.deliveryPhone,
           notes: dto.notes,
           clientRequestId: options.clientRequestId,
           ...(options.historical ? { createdAt: options.historical.createdAt } : {}),
@@ -717,7 +719,37 @@ export class OrdersService {
         `Failed to notify kitchen of accepted order ${orderId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    return this.getOrder(branchId, orderId);
+
+    let printStatus: 'SENT' | 'FAILED' | 'UNKNOWN' | 'NO_PRINTER' = 'NO_PRINTER';
+    try {
+      const result = await this.kotPrint.printOrder(branchId, orderId, false);
+      printStatus = result?.ok ? 'SENT' : 'FAILED';
+    } catch (err: any) {
+      const msg = (err?.message || '').toLowerCase();
+      if (
+        err?.status === 409 ||
+        err?.response?.code === 'NO_TICKETS' ||
+        err?.response?.code === 'ALREADY_PRINTED' ||
+        msg.includes('no tickets') ||
+        msg.includes('no printer') ||
+        msg.includes('not found') ||
+        msg.includes('not configured')
+      ) {
+        printStatus = 'NO_PRINTER';
+      } else if (
+        msg.includes('timeout') ||
+        msg.includes('etimedout') ||
+        msg.includes('econnreset') ||
+        msg.includes('ehostunreach')
+      ) {
+        printStatus = 'UNKNOWN';
+      } else {
+        printStatus = 'FAILED';
+      }
+    }
+
+    const orderDetails = await this.getOrder(branchId, orderId);
+    return { ...orderDetails, printStatus };
   }
 
   // Declining an incoming order. The order is kept (acceptance REJECTED,
@@ -837,6 +869,9 @@ export class OrdersService {
         printerConnection: true,
         printerHost: true,
         printerPort: true,
+        printerName: true,
+        printerComPort: true,
+        printerBaudRate: true,
       },
     });
     return (
@@ -844,16 +879,50 @@ export class OrdersService {
         printerConnection: 'USB',
         printerHost: null,
         printerPort: 9100,
+        printerName: null,
+        printerComPort: null,
+        printerBaudRate: null,
       }
     );
   }
 
-  // Cancels an unpaid order. Rules (unchanged): only OPEN orders, and not
-  // once the kitchen has started cooking. An OPEN order has taken no payment
-  // and no stock (stock leaves at checkout), so there is nothing to reverse;
-  // paid orders go through refund() instead. The status flip is conditional on
-  // OPEN, so a checkout racing this call can never end up both PAID and
-  // CANCELLED.
+  async confirmPrintStatus(
+    branchId: string,
+    role: 'KITCHEN' | 'BILL' = 'KITCHEN',
+    confirmed: boolean,
+  ) {
+    const status = confirmed ? 'CONFIRMED_BY_STAFF' : 'FAILED';
+    const isBill = role === 'BILL';
+    return (this.prisma as any).branch.update({
+      where: { id: branchId },
+      data: isBill ? { billPrinterStatus: status } : { printerStatus: status },
+    });
+  }
+
+  async billPrinterTarget(branchId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: {
+        billPrinterConnection: true,
+        billPrinterHost: true,
+        billPrinterPort: true,
+        billPrinterName: true,
+        billPrinterComPort: true,
+        billPrinterBaudRate: true,
+      },
+    });
+    // B1: Strict separation - no fallback to kitchen printer. If unconfigured, returns null.
+    if (!branch || !branch.billPrinterConnection) return null;
+    return {
+      printerConnection: branch.billPrinterConnection,
+      printerHost: branch.billPrinterHost,
+      printerPort: branch.billPrinterPort ?? 9100,
+      printerName: branch.billPrinterName,
+      printerComPort: branch.billPrinterComPort,
+      printerBaudRate: branch.billPrinterBaudRate,
+    };
+  }
+
   async cancelOrder(
     branchId: string,
     orderId: string,

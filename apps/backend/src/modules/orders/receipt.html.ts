@@ -272,7 +272,7 @@ export function buildReceiptHtml({
     }
     ${settlementRows}
     ${
-      order.verifactu && !order.isProvisional
+      order.verifactu && !order.isProvisional && branch.taxRegime === 'ES_IVA'
         ? `<hr class="rule"><div class="vf"><strong>Factura simplificada ${esc(order.verifactu.invoiceNumber)}</strong><div>${esc(order.verifactu.heading)}</div>${qrSvg(order.verifactu.url, '35mm')}<div>${esc(order.verifactu.legend)}</div><strong>${esc(order.verifactu.short)}</strong></div>`
         : ''
     }

@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { tableLabel } from '@easydine/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { buildKotEscPosJob, resolveProfile } from './escpos-receipt';
@@ -135,7 +136,7 @@ export class KotPrintService {
           createdAt: kot.order.createdAt,
           table: kot.order.table
             ? {
-                label: kot.order.table.name ?? `#${kot.order.table.number}`,
+                label: tableLabel(kot.order.table.number, kot.order.table.name),
               }
             : null,
           customer: kot.order.customer
@@ -143,7 +144,7 @@ export class KotPrintService {
             : kot.order.guestName
               ? { name: kot.order.guestName }
               : null,
-          notes: kot.order.notes,
+          notes: null, // Customer voice/preference notes are cashier-only; never sent to kitchen tickets
           items: kot.items.map(({ orderItem }) => ({
             nameSnapshot: orderItem.nameSnapshot,
             quantity: orderItem.quantity,
@@ -162,9 +163,38 @@ export class KotPrintService {
           result.escpos?.push(job.buffer.toString('base64'));
         } else {
           await sendToBranchPrinter(branch, job.buffer);
+          if ((this.prisma as any).printJob) {
+            await (this.prisma as any).printJob.create({
+              data: {
+                branchId,
+                orderId: kot.order.id,
+                kotId: kot.id,
+                jobType: 'KOT',
+                target: `${branch.printerConnection}:${branch.printerName || branch.printerHost || branch.printerComPort || 'USB'}`,
+                status: 'SENT',
+                attempts: 1,
+                reprint,
+              },
+            }).catch(() => undefined);
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Printing failed';
+        if ((this.prisma as any).printJob) {
+          await (this.prisma as any).printJob.create({
+            data: {
+              branchId,
+              orderId: kot.order.id,
+              kotId: kot.id,
+              jobType: 'KOT',
+              target: `${branch.printerConnection}:${branch.printerName || branch.printerHost || branch.printerComPort || 'USB'}`,
+              status: 'FAILED',
+              attempts: 1,
+              error: message.slice(0, 300),
+              reprint,
+            },
+          }).catch(() => undefined);
+        }
         await this.prisma.kot.update({
           where: { id: kot.id },
           data: {

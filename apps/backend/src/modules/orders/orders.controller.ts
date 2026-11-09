@@ -1,4 +1,5 @@
-import {
+﻿import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -32,6 +33,7 @@ import {
   type UpdateOrderDto,
   type UpdateOrderItemDto,
   type SessionUser,
+  tableLabel,
 } from '@easydine/types';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -53,6 +55,8 @@ import {
   findPrinterDescriptor,
   probeCharDevices,
 } from './escpos-usb';
+import { listWindowsPrinters } from './escpos-windows-spooler';
+import { listComPorts } from './escpos-com-port';
 import { KotPrintService } from './kot-print.service';
 import { upiForBill } from './upi';
 import {
@@ -84,7 +88,7 @@ function toKotOrder(order: ReceiptData): EscposKotOrder {
     type: order.type,
     createdAt: order.createdAt,
     table: order.table
-      ? { label: order.table.name ?? `#${order.table.number}` }
+      ? { label: tableLabel(order.table.number, order.table.name) }
       : null,
     customer: order.customer ? { name: order.customer.name ?? 'Guest' } : null,
     items: order.items.map((item) => ({
@@ -121,7 +125,7 @@ function toEscposOrder(
     type: order.type,
     createdAt: order.createdAt,
     table: order.table
-      ? { label: order.table.name ?? `#${order.table.number}` }
+      ? { label: tableLabel(order.table.number, order.table.name) }
       : null,
     customer: order.customer
       ? { name: order.customer.name ?? 'Guest', phone: order.customer.phone }
@@ -685,7 +689,11 @@ export class OrdersController {
     // via=device: hand the print data to the phone/tablet instead of printing
     // on the server's own printer (Bluetooth printers, phones, tablets).
     if (via === 'device') return this.deviceJob(job);
-    return this.sendJob(job, order.branch);
+    const billTarget = await this.ordersService.billPrinterTarget(order.branch.id);
+    if (!billTarget) {
+      throw new BadRequestException('Bill printer not set');
+    }
+    return this.sendJob(job, billTarget);
   }
 
   // Kitchen tickets of an order on the thermal printer: one ticket per kitchen

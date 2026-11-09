@@ -322,4 +322,12 @@ export class TablesService {
     };
   }
 
+  async getTableBranch(tableId: string): Promise<string> {
+    const table = await this.prisma.table.findUnique({
+      where: { id: tableId },
+      include: { floor: { select: { branchId: true } } },
+    });
+    if (!table) throw new NotFoundException("Table not found");
+    return table.floor.branchId;
+  }
 }

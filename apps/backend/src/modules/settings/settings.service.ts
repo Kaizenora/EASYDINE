@@ -152,6 +152,16 @@ export class SettingsService {
    * 'rotate' replaces it (the old URL stops working immediately — use when a
    * kiosk is lost or the link leaked), 'disable' removes it entirely.
    */
+  /** H3: Return minimal branch data for the reachability probe. */
+  async getBranchForReachability(branchId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true, qrBaseUrl: true },
+    });
+    if (!branch) throw new Error('Branch not found');
+    return branch;
+  }
+
   async setKioskToken(
     branchId: string,
     userId: string,

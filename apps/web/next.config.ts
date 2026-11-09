@@ -6,7 +6,7 @@ import type { NextConfig } from "next";
 // cookie fragility that broke that app's very first version. NOTE: Next
 // bakes the rewrite destination at build time, so in Docker this must come
 // from a build ARG, not a runtime env var (see easydine-pos memory).
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:4001";
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:4000";
 
 // Baseline response headers for every page. A Content-Security-Policy is
 // intentionally NOT set here: a strict script-src without a per-request nonce
@@ -22,7 +22,7 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
   devIndicators: false,
   images: {
     // The backend's upload folder (proxied through /api) plus the app's own

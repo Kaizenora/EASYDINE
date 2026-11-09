@@ -237,7 +237,7 @@ export function buildReceiptEscPosJob({
     w.row('Balance due', money(order.balanceDue), { bold: true });
   }
 
-  if (order.verifactu && !order.isProvisional) {
+  if (order.verifactu && !order.isProvisional && branch.taxRegime === 'ES_IVA') {
     w.rule();
     w.text(`Factura simplificada ${order.verifactu.invoiceNumber}`, {
       align: 'center',

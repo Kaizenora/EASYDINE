@@ -32,7 +32,7 @@ export function Logo({
       {withText && (
         <div className="flex flex-col leading-none">
           <span className="text-lg font-black tracking-tight text-foreground">
-            Hotel <span className="text-primary">Sanjog</span>
+            Easy<span className="text-primary">Dine</span>
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             EasyDine POS

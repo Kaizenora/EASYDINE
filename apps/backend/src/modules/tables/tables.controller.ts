@@ -178,4 +178,21 @@ export class TablesController {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
     return this.tablesService.deleteTable(branchId, id);
   }
+  @Auth('tables.view', 'orders.edit')
+  @Post(':id/settle')
+  async settleTable(
+    @CurrentUser() user: SessionUser,
+    @Param('id') tableId: string,
+    @Query('branchId') branchId?: string,
+    @Body() body?: { method?: 'CASH' | 'UPI' | 'CARD'; branchId?: string },
+  ) {
+    const branch = branchId || body?.branchId || (await this.tablesService.getTableBranch(tableId));
+    await this.branchAccess.assertAccess(user.restaurantId, branch);
+    return this.tablesService.settleTable(
+      branch,
+      tableId,
+      user.id,
+      body?.method ?? 'CASH',
+    );
+  }
 }

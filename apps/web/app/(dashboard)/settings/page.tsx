@@ -178,7 +178,7 @@ function GeneralSettingsForm({
 }) {
   const [name, setName] = useState(restaurant.name);
   const [legalName, setLegalName] = useState(restaurant.legalName ?? "");
-  const [logoUrl, setLogoUrl] = useState<string | null>(() => restaurant.logoUrl || (typeof window !== "undefined" ? localStorage.getItem("easydine_custom_logo") : null));
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => restaurant.logoUrl || (typeof window !== "undefined" ? null /* E: stale localStorage logo key removed — logo comes from server only */ : null));
   const [currency, setCurrency] = useState(restaurant.currency);
   const [timezone, setTimezone] = useState(restaurant.timezone);
   const [upiVpa, setUpiVpa] = useState(restaurant.upiVpa ?? "");
@@ -210,6 +210,7 @@ function GeneralSettingsForm({
   const [taxMode, setTaxMode] = useState<TaxMode>(branch.taxMode);
   const [taxLabel, setTaxLabel] = useState(branch.taxLabel ?? "");
   const [taxId, setTaxId] = useState(branch.taxId ?? "");
+  const [qrBaseUrl, setQrBaseUrl] = useState(branch.qrBaseUrl ?? "");
 
   const preset = TAX_REGIME_PRESETS[taxRegime];
 
@@ -642,6 +643,19 @@ function GeneralSettingsForm({
             <div className="flex flex-col gap-2">
               <Label htmlFor="b-gst">GST number (legacy)</Label>
               <Input id="b-gst" value={gstNumber} onChange={(e) => setGstNumber(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="b-qr-url">QR Base URL (for customer phones)</Label>
+              <Input
+                id="b-qr-url"
+                type="url"
+                value={qrBaseUrl}
+                onChange={(e) => setQrBaseUrl(e.target.value)}
+                placeholder="http://192.168.1.100:1995"
+              />
+              {(!qrBaseUrl || qrBaseUrl.includes('localhost') || qrBaseUrl.includes('127.0.0.1')) && (
+                <p className="mt-1 text-xs text-amber-600">⚠ Set this to your LAN IP so customer phones can reach the QR page. Localhost URLs only work on this PC.</p>
+              )}
             </div>
           </div>
 

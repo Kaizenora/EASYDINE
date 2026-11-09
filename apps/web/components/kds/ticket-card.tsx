@@ -20,6 +20,7 @@ import {
 } from "@/hooks/use-kds";
 import type { KotStatusDto } from "@easydine/types";
 import { cn } from "@/lib/utils";
+import { tableLabel } from "@easydine/types";
 
 const STATUS_NAMES: Record<string, string> = {
   NEW: "Ordered (New)",
@@ -97,7 +98,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         title={`Reject ticket for order #${ticket.order.orderNumber}?`}
         description={
           ticket.order.table
-            ? `Table ${ticket.order.table.number} will be told the kitchen cannot make this. The ticket stays on record with your name and reason.`
+            ? `${tableLabel(ticket.order.table.number, (ticket.order.table as any).name)} will be told the kitchen cannot make this. The ticket stays on record with your name and reason.`
             : "The guest will be told the kitchen cannot make this. The ticket stays on record with your name and reason."
         }
         warning={started ? "This ticket is already being prepared. Rejecting it means the food in progress is wasted." : undefined}
@@ -113,7 +114,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         onOpenChange={setDetailsOpen}
         title={`Order #${ticket.order.orderNumber}`}
         name={customerDisplayName(ticket.order)}
-        subtitle={ticket.order.table ? `Table ${ticket.order.table.number}` : ticket.order.type}
+        subtitle={ticket.order.table ? `${tableLabel(ticket.order.table.number, (ticket.order.table as any).name)}` : ticket.order.type}
         phone={customerPhone(ticket.order)}
         waMessage={`Hi ${customerDisplayName(ticket.order) ?? ""}, this is regarding your order #${ticket.order.orderNumber}.`}
       />
@@ -132,7 +133,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             )}
           </p>
           <p className="text-xs text-muted-foreground">
-            {ticket.order.table ? `Table ${ticket.order.table.number}` : ticket.order.type}
+            {ticket.order.table ? `${tableLabel(ticket.order.table.number, (ticket.order.table as any).name)}` : ticket.order.type}
             {ticket.station && ` · ${ticket.station.name}`}
             {customerDisplayName(ticket.order) && ` · ${customerDisplayName(ticket.order)}`}
           </p>
@@ -154,11 +155,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         </p>
       )}
 
-      {ticket.order.notes && (
-        <p className="flex items-start gap-1 rounded-lg bg-warning/10 px-2 py-1.5 text-xs text-warning">
-          <Flame className="mt-0.5 h-3 w-3 shrink-0" /> {ticket.order.notes}
-        </p>
-      )}
+      {/* Customer preference note is cashier-only, hidden from KDS */}
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         {ticket.items.map((item) => (
