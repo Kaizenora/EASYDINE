@@ -1,4 +1,5 @@
 ﻿import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -688,7 +689,11 @@ export class OrdersController {
     // via=device: hand the print data to the phone/tablet instead of printing
     // on the server's own printer (Bluetooth printers, phones, tablets).
     if (via === 'device') return this.deviceJob(job);
-    return this.sendJob(job, order.branch);
+    const billTarget = await this.ordersService.billPrinterTarget(order.branch.id);
+    if (!billTarget) {
+      throw new BadRequestException('Bill printer not set');
+    }
+    return this.sendJob(job, billTarget);
   }
 
   // Kitchen tickets of an order on the thermal printer: one ticket per kitchen

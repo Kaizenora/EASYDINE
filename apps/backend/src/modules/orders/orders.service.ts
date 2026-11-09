@@ -909,25 +909,10 @@ export class OrdersService {
         billPrinterName: true,
         billPrinterComPort: true,
         billPrinterBaudRate: true,
-        printerConnection: true,
-        printerHost: true,
-        printerPort: true,
-        printerName: true,
-        printerComPort: true,
-        printerBaudRate: true,
       },
     });
-    if (!branch) return null;
-    if (!branch.billPrinterConnection) {
-      return {
-        printerConnection: branch.printerConnection,
-        printerHost: branch.printerHost,
-        printerPort: branch.printerPort,
-        printerName: branch.printerName,
-        printerComPort: branch.printerComPort,
-        printerBaudRate: branch.printerBaudRate,
-      };
-    }
+    // B1: Strict separation - no fallback to kitchen printer. If unconfigured, returns null.
+    if (!branch || !branch.billPrinterConnection) return null;
     return {
       printerConnection: branch.billPrinterConnection,
       printerHost: branch.billPrinterHost,
@@ -938,12 +923,6 @@ export class OrdersService {
     };
   }
 
-  // Cancels an unpaid order. Rules (unchanged): only OPEN orders, and not
-  // once the kitchen has started cooking. An OPEN order has taken no payment
-  // and no stock (stock leaves at checkout), so there is nothing to reverse;
-  // paid orders go through refund() instead. The status flip is conditional on
-  // OPEN, so a checkout racing this call can never end up both PAID and
-  // CANCELLED.
   async cancelOrder(
     branchId: string,
     orderId: string,

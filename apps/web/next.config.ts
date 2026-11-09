@@ -22,7 +22,7 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
   devIndicators: false,
   images: {
     // The backend's upload folder (proxied through /api) plus the app's own

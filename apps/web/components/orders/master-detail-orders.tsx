@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,38 @@ export function MasterDetailOrders({
   // Tab: Incoming Queue vs Active vs History
   const [activeTab, setActiveTab] = useState<"QUEUE" | "IN_PROGRESS" | "HISTORY">("QUEUE");
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString());
+  const [syncStatus, setSyncStatus] = useState<"CONNECTED" | "DISCONNECTED" | "CATCHING_UP" | "SYNC_FAILED">("CONNECTED");
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setSyncStatus("CATCHING_UP");
+      if (onRefresh) onRefresh();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSyncStatus("DISCONNECTED");
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [onRefresh]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLastSyncTime(new Date().toLocaleTimeString());
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setSyncStatus("DISCONNECTED");
+      } else {
+        setSyncStatus("CONNECTED");
+      }
+    }
+  }, [isLoading, orders]);
 
   // Filter list by tab
   const queueOrders = useMemo(() => {
