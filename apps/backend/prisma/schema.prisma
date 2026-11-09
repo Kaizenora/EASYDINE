@@ -1,4 +1,4 @@
-// Easy Dine — Phase 0/1 core schema.
+﻿// Easy Dine — Phase 0/1 core schema.
 // See ARCHITECTURE.md for why PostgreSQL is the primary target and how
 // multi-branch/single-location both map onto the same schema (a branch is
 // just a Branch row, not a different deployment mode).
@@ -160,16 +160,32 @@ model Branch {
   kioskDineInEnabled   Boolean @default(true)
   kioskTakeawayEnabled Boolean @default(true)
 
+  // -- KOT / Kitchen printer -----------------------------------------------
   // Direct ESC/POS thermal printing. Columns null = derived from paper width
   // (58 mm -> 32, 80 mm -> 48); set it for printers with a narrower head.
   printerPaperWidthMm Int     @default(80)
   printerCodepage     String  @default("CP858")
   printerColumns      Int?
-  // "USB" = printer attached to the machine running the backend; "NETWORK" =
-  // raw ESC/POS over TCP to printerHost:printerPort (usually 9100).
+  // Connection: "USB"=kernel usblp/libusb (Linux/Docker), "NETWORK"=raw TCP,
+  // "WINDOWS_SPOOLER"=Windows print queue, "COM_PORT"=serial/Bluetooth SPP.
   printerConnection   String  @default("USB")
   printerHost         String?
   printerPort         Int     @default(9100)
+  printerName         String? // Windows Spooler: exact name in Devices & Printers
+  printerComPort      String? // COM port: "COM3" or "/dev/ttyS0"
+  printerBaudRate     Int?    // COM port baud rate (default 9600)
+
+  // -- Bill / Receipt printer -----------------------------------------------
+  // Separate cashier receipt printer. NULL = fall back to KOT printer for bills.
+  billPrinterConnection   String?
+  billPrinterHost         String?
+  billPrinterPort         Int     @default(9100)
+  billPrinterName         String?
+  billPrinterComPort      String?
+  billPrinterBaudRate     Int?
+  billPrinterPaperWidthMm Int     @default(80)
+  billPrinterCodepage     String  @default("CP858")
+  billPrinterColumns      Int?
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

@@ -122,6 +122,7 @@ export class PublicMenuService {
     guestName?: string,
     guestPhone?: string,
     requestId?: string,
+    notes?: string,
   ) {
     const table = await this.resolveTable(qrToken);
     const branchId = table.floor.branchId;
@@ -183,6 +184,7 @@ export class PublicMenuService {
         tableId: table.id,
         guestName: cleanGuestName,
         guestPhone,
+        notes,
         clientRequestId: requestId,
         items,
       } as any,
@@ -194,7 +196,7 @@ export class PublicMenuService {
   async getStatus(qrToken: string) {
     const table = await this.resolveTable(qrToken);
     const order = await this.prisma.order.findFirst({
-      where: { tableId: table.id, status: { in: ['OPEN', 'BILLED'] } },
+      where: { tableId: table.id, status: { in: ['OPEN', 'BILLED', 'PAID'] } },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,

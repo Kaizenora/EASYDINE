@@ -216,12 +216,13 @@ export default function LuxuryCustomerMenu({
   const placeOrder = useMutation({
     mutationFn: () =>
       api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
-        guestName: guestName || "Sid",
+        guestName: guestName || "Guest",
         guestPhone: guestPhone || undefined,
+        notes: cart.map((c) => c.cookingNote).filter(Boolean).join("; ") || undefined,
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.quantity,
-          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
+          kitchenNote: c.modifierLabel || undefined,
         })),
       }),
     onSuccess: (res) => {
@@ -398,7 +399,7 @@ export default function LuxuryCustomerMenu({
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
         <UtensilsCrossed className="h-12 w-12 text-[#E5A93C]" />
         <h2 className="text-xl font-bold">Connecting to Session...</h2>
-        <p className="text-sm text-neutral-400">Loading Hotel Sanjog dining for {qrToken}...</p>
+        <p className="text-sm text-neutral-400">Loading dining menu for {qrToken}...</p>
         <button
           onClick={() => window.location.reload()}
           className="mt-4 rounded-xl bg-[#E5A93C] px-6 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
@@ -421,7 +422,7 @@ export default function LuxuryCustomerMenu({
               <span>{isTakeaway ? "TAKEAWAY · ONLINE MENU" : "QR SCANNED · DINE-IN"}</span>
             </div>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1E1B18]">
-              {data?.branchName || "Hotel Sanjog"}
+              {data?.branchName || "EasyDine"}
             </h1>
             <p className="mt-1 text-sm font-medium text-neutral-500">
               Ahmednagar · North Indian & Maharashtrian
@@ -836,7 +837,7 @@ export default function LuxuryCustomerMenu({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-black tracking-tight text-white">
-              {data?.branchName || "Hotel Sanjog"}
+              {data?.branchName || "EasyDine"}
             </h1>
             <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-semibold text-neutral-400 border border-neutral-800">
               <span className="text-amber-400 font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table 12")}</span>

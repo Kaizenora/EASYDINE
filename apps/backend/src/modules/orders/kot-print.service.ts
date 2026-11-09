@@ -143,7 +143,7 @@ export class KotPrintService {
             : kot.order.guestName
               ? { name: kot.order.guestName }
               : null,
-          notes: kot.order.notes,
+          notes: null, // Customer voice/preference notes are cashier-only; never sent to kitchen tickets
           items: kot.items.map(({ orderItem }) => ({
             nameSnapshot: orderItem.nameSnapshot,
             quantity: orderItem.quantity,

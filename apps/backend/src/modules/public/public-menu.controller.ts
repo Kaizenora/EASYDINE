@@ -45,6 +45,7 @@ export class PublicMenuController {
       body.guestName,
       body.guestPhone,
       body.requestId,
+      body.notes,
     );
   }
 

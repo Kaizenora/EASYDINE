@@ -54,7 +54,7 @@ export function IncomingOrderCard({ order, branchId }: { order: IncomingOrder; b
           {minutesSince(order.createdAt)}m
         </span>
       </div>
-      {order.notes && <p className="rounded-lg bg-warning/10 px-2 py-1.5 text-xs text-warning">{order.notes}</p>}
+      {/* Customer preference note is cashier-only, hidden from KDS */}
       <ul className="flex flex-col gap-1.5 border-t border-border pt-3 text-sm">
         {order.items.map((item) => (
           <li key={item.id}>

@@ -20,9 +20,11 @@ export function TableQrDialog({
 }) {
   const rotate = useRotateQrToken(branchId);
 
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
   const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ||
+    configuredBaseUrl ||
     (typeof window !== "undefined" ? window.location.origin : "");
+  const baseUrlIsConfigured = !!configuredBaseUrl;
 
   const orderUrl =
     table.qrToken && baseUrl
@@ -36,6 +38,14 @@ export function TableQrDialog({
           <DialogTitle>{table.name ?? `Table ${table.number}`} · QR code</DialogTitle>
         </DialogHeader>
 
+        {!baseUrlIsConfigured && (
+          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <strong>Setup tip:</strong> Public base URL is not configured.
+            QR codes are using <code className="font-mono">{baseUrl}</code> (your browser&apos;s address).
+            Customers on a different network may not be able to scan this QR.
+            Set <code className="font-mono">PUBLIC_BASE_URL</code> in your <code>.env</code> to fix this.
+          </div>
+        )}
         <div className="flex flex-col items-center gap-4 py-2">
           {orderUrl ? (
             <>

@@ -90,6 +90,19 @@ export class HrController {
   }
 
   @Auth('staff.manage')
+  @Patch('shifts/:id')
+  @UsePipes(new ZodValidationPipe(shiftUpdateSchema))
+  async updateShift(
+    @CurrentUser() u: SessionUser,
+    @Query('branchId') branchId: string,
+    @Param('id') id: string,
+    @Body() body: ShiftUpdateDto,
+  ) {
+    await this.access(u, branchId);
+    return this.hr.updateShift(branchId, id, body);
+  }
+
+  @Auth('staff.manage')
   @Delete('shifts/:id')
   async deleteShift(
     @CurrentUser() u: SessionUser,

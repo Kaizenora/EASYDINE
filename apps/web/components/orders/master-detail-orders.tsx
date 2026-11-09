@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import type { ManagedOrder } from "@/hooks/use-orders";
 import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatOrderNumber } from "@/lib/format";
+import { tableLabel } from "@easydine/types";
 
 interface MasterDetailOrdersProps {
   branchId: string | null;
@@ -281,7 +282,7 @@ export function MasterDetailOrders({
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-white">
-                      {selectedOrder.table?.name || `Table ${selectedOrder.table?.number || "12"}`} · Order {formatOrderNumber(selectedOrder.orderNumber)}
+                      {tableLabel(selectedOrder.table?.number, selectedOrder.table?.name)} · Order {formatOrderNumber(selectedOrder.orderNumber)}
                     </h2>
                     <span className="rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-bold text-amber-400 border border-amber-500/30">
                       {selectedOrder.acceptance === "ACCEPTED" ? "ACCEPTED · COOKING" : "WAITING APPROVAL"}
@@ -297,7 +298,7 @@ export function MasterDetailOrders({
               <div className="flex flex-col gap-3 rounded-xl border border-neutral-800/80 bg-neutral-900/40 p-4">
                 {(selectedOrder.items || []).map((item: any, idx: number) => {
                   const isVeg = item.isVeg !== false;
-                  const unitPrice = parseFloat(item.unitPriceSnapshot || "250");
+                  const unitPrice = item.unitPriceSnapshot ? parseFloat(item.unitPriceSnapshot) : 0;
                   const total = parseFloat(item.lineTotal || String(unitPrice * (item.quantity || 1)));
 
                   return (
@@ -327,7 +328,7 @@ export function MasterDetailOrders({
                           {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
                             <div className="text-xs text-neutral-400">
                               {item.modifiers.map((m: any, mIdx: number) => (
-                                <span key={mIdx}>+ {m.name || m.nameSnapshot} (+₹{m.priceAdjustment || 40})</span>
+                                <span key={mIdx}>+ {m.name || m.nameSnapshot} {m.priceAdjustment ? `(+₹${m.priceAdjustment})` : ''}</span>
                               ))}
                             </div>
                           )}

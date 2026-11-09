@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   ForbiddenException,
@@ -53,6 +53,8 @@ import {
   findPrinterDescriptor,
   probeCharDevices,
 } from './escpos-usb';
+import { listWindowsPrinters } from './escpos-windows-spooler';
+import { listComPorts } from './escpos-com-port';
 import { KotPrintService } from './kot-print.service';
 import { upiForBill } from './upi';
 import {

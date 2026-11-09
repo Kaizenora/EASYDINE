@@ -154,11 +154,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         </p>
       )}
 
-      {ticket.order.notes && (
-        <p className="flex items-start gap-1 rounded-lg bg-warning/10 px-2 py-1.5 text-xs text-warning">
-          <Flame className="mt-0.5 h-3 w-3 shrink-0" /> {ticket.order.notes}
-        </p>
-      )}
+      {/* Customer preference note is cashier-only, hidden from KDS */}
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         {ticket.items.map((item) => (
