@@ -160,7 +160,7 @@ async function bootstrap() {
   }
 
   const port = process.env.PORT ?? 4000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(
     `Easy Dine API listening on :${port} (docs at /api/docs)`,
   );

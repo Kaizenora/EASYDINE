@@ -25,7 +25,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
       <I18nProvider>
         <QueryClientProvider client={queryClient}>
           {children}

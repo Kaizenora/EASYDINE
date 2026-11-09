@@ -27,6 +27,20 @@ export interface RestaurantTable {
   qrToken: string | null;
   assignedWaiter: { id: string; name: string } | null;
   customerName?: string | null;
+  guestCount?: number | null;
+  orderNumber?: string | null;
+  orderId?: string | null;
+  totalAmount?: string | null;
+  dishesCount?: number;
+  serviceRequest?: "WAITER" | "BILL" | null;
+  hasPreparing?: boolean;
+  allServed?: boolean;
+  activeReservation?: {
+    id: string;
+    customerName: string;
+    guestCount: number;
+    reservedAt: string;
+  } | null;
 }
 
 export interface Floor {
@@ -92,7 +106,28 @@ export function useUpdateTableLayout(branchId: string | null) {
   return useMutation({
     mutationFn: (updates: TableLayoutUpdateDto[]) =>
       api.patch(`/tables/layout?branchId=${branchId}`, updates),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["floors", branchId] }),
+    onMutate: async (updates) => {
+      await queryClient.cancelQueries({ queryKey: ["floors", branchId] });
+      const previousFloors = queryClient.getQueryData<Floor[]>(["floors", branchId]);
+      if (previousFloors) {
+        const updateMap = new Map(updates.map((u) => [u.id, u]));
+        const nextFloors = previousFloors.map((floor) => ({
+          ...floor,
+          tables: floor.tables.map((table) => {
+            const upd = updateMap.get(table.id);
+            return upd ? { ...table, ...upd } : table;
+          }),
+        }));
+        queryClient.setQueryData(["floors", branchId], nextFloors);
+      }
+      return { previousFloors };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousFloors) {
+        queryClient.setQueryData(["floors", branchId], context.previousFloors);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["floors", branchId] }),
   });
 }
 
@@ -109,7 +144,26 @@ export function useUpdateTableStatus(branchId: string | null) {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: TableStatusDto }) =>
       api.patch(`/tables/${id}/status?branchId=${branchId}`, { status }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["floors", branchId] }),
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["floors", branchId] });
+      const previousFloors = queryClient.getQueryData<Floor[]>(["floors", branchId]);
+      if (previousFloors) {
+        const nextFloors = previousFloors.map((floor) => ({
+          ...floor,
+          tables: floor.tables.map((table) =>
+            table.id === id ? { ...table, status, statusSince: new Date().toISOString() } : table,
+          ),
+        }));
+        queryClient.setQueryData(["floors", branchId], nextFloors);
+      }
+      return { previousFloors };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousFloors) {
+        queryClient.setQueryData(["floors", branchId], context.previousFloors);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["floors", branchId] }),
   });
 }
 

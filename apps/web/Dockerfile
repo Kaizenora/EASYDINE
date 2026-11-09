@@ -27,6 +27,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS builder
 ARG BACKEND_URL=http://backend:4000
 ENV BACKEND_URL=${BACKEND_URL}
+ENV BUILD_STANDALONE=true
 COPY packages/types packages/types
 COPY apps/web apps/web
 RUN pnpm --filter @easydine/types build

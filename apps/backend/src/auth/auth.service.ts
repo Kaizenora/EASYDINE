@@ -183,21 +183,23 @@ export class AuthService {
       );
     }
 
-    // Permissions are global, not per-tenant — upsert (idempotent) in parallel
-    // outside the transaction below rather than sequentially re-creating them.
-    await Promise.all(
-      PERMISSIONS.map((permission) =>
-        this.prisma.permission.upsert({
-          where: { key: permission.key },
-          update: {},
-          create: permission,
-        }),
-      ),
-    );
-    const allPermissions = await this.prisma.permission.findMany();
+    // Permissions are global, not per-tenant — fetch them, or upsert if empty
+    let allPermissions = await this.prisma.permission.findMany();
+    if (allPermissions.length === 0) {
+      await Promise.all(
+        PERMISSIONS.map((permission) =>
+          this.prisma.permission.upsert({
+            where: { key: permission.key },
+            update: {},
+            create: permission,
+          }),
+        ),
+      );
+      allPermissions = await this.prisma.permission.findMany();
+    }
     const permissionByKey = new Map(allPermissions.map((p) => [p.key, p]));
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const owner = await this.prisma.$transaction(
       async (tx) => {
@@ -208,26 +210,37 @@ export class AuthService {
           data: { restaurantId: restaurant.id, name: dto.branchName },
         });
 
-        let ownerRoleId = '';
-        for (const roleName of STAFF_ROLES) {
-          const role = await tx.role.create({
-            data: {
-              restaurantId: restaurant.id,
-              name: roleName,
-              label: roleName.replace(/_/g, ' '),
-            },
-          });
-          if (roleName === 'OWNER') ownerRoleId = role.id;
+        // Parallelize creating the 8 staff roles
+        const createdRoles = await Promise.all(
+          STAFF_ROLES.map((roleName) =>
+            tx.role.create({
+              data: {
+                restaurantId: restaurant.id,
+                name: roleName,
+                label: roleName.replace(/_/g, ' '),
+              },
+            }),
+          ),
+        );
 
-          const grantedKeys = DEFAULT_ROLE_PERMISSIONS[roleName];
+        const ownerRole = createdRoles.find((r) => r.name === 'OWNER') || createdRoles[0];
+        const ownerRoleId = ownerRole.id;
+
+        // Batch all role-permission mappings into a single createMany
+        const rolePermData: { roleId: string; permissionId: string; }[] = [];
+        for (const role of createdRoles) {
+          const grantedKeys = DEFAULT_ROLE_PERMISSIONS[role.name] || [];
+          for (const key of grantedKeys) {
+            const p = permissionByKey.get(key);
+            if (p) {
+              rolePermData.push({ roleId: role.id, permissionId: p.id });
+            }
+          }
+        }
+        if (rolePermData.length > 0) {
           await tx.rolePermission.createMany({
-            data: grantedKeys
-              .map((key) => permissionByKey.get(key))
-              .filter((p): p is NonNullable<typeof p> => Boolean(p))
-              .map((permission) => ({
-                roleId: role.id,
-                permissionId: permission.id,
-              })),
+            data: rolePermData,
+            skipDuplicates: true,
           });
         }
 
@@ -249,8 +262,8 @@ export class AuthService {
         return user;
       },
       {
-        maxWait: 15000,
-        timeout: 30000,
+        maxWait: 30000,
+        timeout: 60000,
       },
     );
 
