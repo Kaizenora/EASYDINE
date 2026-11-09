@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 10
   backend:
-    image: ghcr.io/raktim94/easy-dine-pos-backend:@VERSION@
+    image: ghcr.io/kaizenora/easydine-backend:@VERSION@
     container_name: easy-dine-backend
     restart: unless-stopped
     environment:
@@ -44,7 +44,7 @@ services:
       - 'c 189:* rmw'
       - 'c 180:* rmw'
   web:
-    image: ghcr.io/raktim94/easy-dine-pos-web:@VERSION@
+    image: ghcr.io/kaizenora/easydine-web:@VERSION@
     container_name: easy-dine-web
     restart: unless-stopped
     ports:

@@ -159,7 +159,7 @@ export class UpdateService {
   // than a clear 404 means "can't tell", and the tag is trusted.
   private async imageTagExists(tag: string): Promise<boolean | null> {
     try {
-      const repo = 'kaizenora/easydine';
+      const repo = 'kaizenora/easydine-backend';
       const version = tag.replace(/^v/i, '');
       const tokRes = await fetch(
         `https://ghcr.io/token?scope=repository:${repo}:pull`,

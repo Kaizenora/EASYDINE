@@ -11,7 +11,7 @@
 # Use a file you already downloaded (it must sit next to its .sha256):  sudo DEB_FILE=./easy-dine_X.Y.Z_amd64.deb bash install-linux.sh
 set -euo pipefail
 
-REPO="Raktim94/easy-dine-pos"
+REPO="Kaizenora/EASYDINE"
 PKG="easy-dine"
 say() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 die() { printf '\033[1;31mERROR:\033[0m %s\n' "$1" >&2; exit 1; }

@@ -35,7 +35,7 @@ WORKS THE WAY A RESTAURANT WORKS
 The app can run its own local server and database on this PC (first start sets it up and takes a few minutes), or connect to your restaurant's EasyDine server on the local network so every till, tablet and kitchen screen shows the same orders. Your data stays on your own machine or server.
 
 GOOD TO KNOW
-- Free and open source (AGPL-3.0). Source code: github.com/Raktim94/easy-dine-pos
+- Free and open source (AGPL-3.0). Source code: github.com/Kaizenora/EASYDINE
 - Android app for waiters, managers and delivery riders is available on Google Play.
 - Needs Windows 10 (version 1809) or newer and the Microsoft Edge WebView2 Runtime (included with Windows 11).
 

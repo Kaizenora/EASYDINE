@@ -6,7 +6,7 @@ name: Publish Docker images
 # file with no build step and no access to this repo's source, so `build:`
 # (used in the repo-root docker-compose.yml for a `git clone` + build flow)
 # is not an option there — the CasaOS manifest instead references
-# `ghcr.io/raktim94/easy-dine-pos-{backend,web}:<version>`, and
+# `ghcr.io/kaizenora/easydine-{backend,web}:<version>`, and
 # those tags only exist because this workflow pushed them.
 #
 # Each architecture is built on a NATIVE runner (ubuntu-24.04-arm for arm64)
@@ -90,12 +90,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [easy-dine-pos-backend, easy-dine-pos-web]
+        image: [easydine-backend, easydine-web]
         platform: [linux/amd64, linux/arm64]
         include:
-          - image: easy-dine-pos-backend
+          - image: easydine-backend
             dockerfile: apps/backend/Dockerfile
-          - image: easy-dine-pos-web
+          - image: easydine-web
             dockerfile: apps/web/Dockerfile
           - platform: linux/amd64
             runner: ubuntu-latest
@@ -145,7 +145,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        image: [easy-dine-pos-backend, easy-dine-pos-web]
+        image: [easydine-backend, easydine-web]
     steps:
       - uses: actions/download-artifact@v4
         with:

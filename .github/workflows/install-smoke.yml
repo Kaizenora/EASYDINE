@@ -26,7 +26,7 @@ jobs:
     steps:
       - name: One-line install (as published)
         working-directory: ${{ runner.temp }}
-        run: curl -fsSL https://raw.githubusercontent.com/Raktim94/easy-dine-pos/master/scripts/quickstart.sh | bash
+        run: curl -fsSL https://raw.githubusercontent.com/Kaizenora/EASYDINE/master/scripts/quickstart.sh | bash
 
       - name: App answers on port 1995
         run: |
