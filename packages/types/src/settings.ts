@@ -73,5 +73,6 @@ export const branchSettingsSchema = z.object({
     .nullable()
     .optional(),
   printerPort: z.number().int().min(1).max(65535).optional(),
+  qrBaseUrl: z.string().url().optional().nullable(),
 });
 export type BranchSettingsDto = z.infer<typeof branchSettingsSchema>;

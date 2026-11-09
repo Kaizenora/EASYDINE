@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { tableLabel } from '@easydine/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { buildKotEscPosJob, resolveProfile } from './escpos-receipt';
@@ -135,7 +136,7 @@ export class KotPrintService {
           createdAt: kot.order.createdAt,
           table: kot.order.table
             ? {
-                label: kot.order.table.name ?? `#${kot.order.table.number}`,
+                label: tableLabel(kot.order.table.number, kot.order.table.name),
               }
             : null,
           customer: kot.order.customer

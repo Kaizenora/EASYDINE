@@ -5,6 +5,7 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useRotateQrToken, type RestaurantTable } from "@/hooks/use-tables";
+import { useSettings } from "@/hooks/use-settings";
 import { ApiError } from "@/lib/api";
 
 export function TableQrDialog({
@@ -20,11 +21,16 @@ export function TableQrDialog({
 }) {
   const rotate = useRotateQrToken(branchId);
 
-  const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+    const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+  // H2: Prefer per-branch saved QR base URL (from Branch Settings) over env var
+  // This allows different branches to use different LAN IPs without env changes
+  const { data: settingsData } = useSettings(branchId);
+  const branchQrBaseUrl = settingsData?.branch?.qrBaseUrl ?? null;
   const baseUrl =
+    branchQrBaseUrl ||
     configuredBaseUrl ||
     (typeof window !== "undefined" ? window.location.origin : "");
-  const baseUrlIsConfigured = !!configuredBaseUrl;
+  const baseUrlIsConfigured = !!(branchQrBaseUrl || configuredBaseUrl);
 
   const orderUrl =
     table.qrToken && baseUrl

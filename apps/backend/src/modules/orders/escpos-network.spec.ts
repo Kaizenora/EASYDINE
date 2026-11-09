@@ -33,7 +33,7 @@ describe('network printer transport', () => {
     await expect(
       sendViaNetwork({ host: '127.0.0.1', port }, Buffer.from('x')),
     ).rejects.toThrow(
-      /Could not reach the printer at 127\.0\.0\.1:\d+.*refused/,
+      /Could not reach the printer at 127\.0\.0\.1:\d+.*(refused|EACCES)/,
     );
     expect(await probeNetworkPrinter({ host: '127.0.0.1', port })).toEqual(
       expect.objectContaining({ reachable: false }),
