@@ -1,4 +1,4 @@
-﻿// Easy Dine — Phase 0/1 core schema.
+// Easy Dine — Phase 0/1 core schema.
 // See ARCHITECTURE.md for why PostgreSQL is the primary target and how
 // multi-branch/single-location both map onto the same schema (a branch is
 // just a Branch row, not a different deployment mode).
@@ -174,6 +174,7 @@ model Branch {
   printerName         String? // Windows Spooler: exact name in Devices & Printers
   printerComPort      String? // COM port: "COM3" or "/dev/ttyS0"
   printerBaudRate     Int?    // COM port baud rate (default 9600)
+  printerStatus       String  @default("NOT_TESTED") // NOT_TESTED, TEST_SENT, CONFIRMED_BY_STAFF, FAILED
 
   // -- Bill / Receipt printer -----------------------------------------------
   // Separate cashier receipt printer. NULL = fall back to KOT printer for bills.
@@ -186,6 +187,8 @@ model Branch {
   billPrinterPaperWidthMm Int     @default(80)
   billPrinterCodepage     String  @default("CP858")
   billPrinterColumns      Int?
+  billPrinterStatus       String  @default("NOT_TESTED") // NOT_TESTED, TEST_SENT, CONFIRMED_BY_STAFF, FAILED
+  qrBaseUrl               String? // Local Wi-Fi base URL for customer QR codes
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -2732,4 +2735,26 @@ model GatewayRefund {
   @@index([gatewayPaymentId])
   @@index([orderId])
   @@map("gateway_refunds")
+}
+
+
+// Persistent print jobs table: survives server restart, dedupes double accepts
+model PrintJob {
+  id        String   @id @default(cuid())
+  branchId  String
+  orderId   String?
+  kotId     String?
+  jobType   String   // KOT, BILL, TEST, DRAWER
+  target    String   // Target descriptor
+  status    String   // SENT, FAILED, UNKNOWN
+  attempts  Int      @default(1)
+  error     String?
+  reprint   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, createdAt])
+  @@index([orderId])
+  @@index([kotId])
+  @@map("print_jobs")
 }

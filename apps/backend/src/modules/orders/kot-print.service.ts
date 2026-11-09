@@ -162,9 +162,38 @@ export class KotPrintService {
           result.escpos?.push(job.buffer.toString('base64'));
         } else {
           await sendToBranchPrinter(branch, job.buffer);
+          if ((this.prisma as any).printJob) {
+            await (this.prisma as any).printJob.create({
+              data: {
+                branchId,
+                orderId: kot.order.id,
+                kotId: kot.id,
+                jobType: 'KOT',
+                target: `${branch.printerConnection}:${branch.printerName || branch.printerHost || branch.printerComPort || 'USB'}`,
+                status: 'SENT',
+                attempts: 1,
+                reprint,
+              },
+            }).catch(() => undefined);
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Printing failed';
+        if ((this.prisma as any).printJob) {
+          await (this.prisma as any).printJob.create({
+            data: {
+              branchId,
+              orderId: kot.order.id,
+              kotId: kot.id,
+              jobType: 'KOT',
+              target: `${branch.printerConnection}:${branch.printerName || branch.printerHost || branch.printerComPort || 'USB'}`,
+              status: 'FAILED',
+              attempts: 1,
+              error: message.slice(0, 300),
+              reprint,
+            },
+          }).catch(() => undefined);
+        }
         await this.prisma.kot.update({
           where: { id: kot.id },
           data: {

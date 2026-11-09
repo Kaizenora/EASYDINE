@@ -32,6 +32,7 @@ import {
   type UpdateOrderDto,
   type UpdateOrderItemDto,
   type SessionUser,
+  tableLabel,
 } from '@easydine/types';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -86,7 +87,7 @@ function toKotOrder(order: ReceiptData): EscposKotOrder {
     type: order.type,
     createdAt: order.createdAt,
     table: order.table
-      ? { label: order.table.name ?? `#${order.table.number}` }
+      ? { label: tableLabel(order.table.number, order.table.name) }
       : null,
     customer: order.customer ? { name: order.customer.name ?? 'Guest' } : null,
     items: order.items.map((item) => ({
@@ -123,7 +124,7 @@ function toEscposOrder(
     type: order.type,
     createdAt: order.createdAt,
     table: order.table
-      ? { label: order.table.name ?? `#${order.table.number}` }
+      ? { label: tableLabel(order.table.number, order.table.name) }
       : null,
     customer: order.customer
       ? { name: order.customer.name ?? 'Guest', phone: order.customer.phone }

@@ -214,8 +214,9 @@ export function MasterDetailOrders({
               currentList.map((order) => {
                 const isSelected = selectedOrder?.id === order.id;
                 const itemsCount = Array.isArray(order.items) ? order.items.length : 0;
-                const tableName = order.table?.name || (order.table?.number ? `Table ${order.table.number}` : "Dine-in");
+                const tableName = tableLabel(order.table?.number, order.table?.name);
                 const guestName = order.guestName || order.customer?.name || "Walk-in";
+                const guestPhone = order.deliveryPhone || order.customer?.phone;
                 const isPending = order.acceptance === "PENDING" || !order.acceptance || (order.acceptance as string) === "NEW";
                 const isKotPrinted = order.acceptance === "ACCEPTED";
                 const hasItemNotes = (order.items || []).some((it: any) => it.kitchenNote || it.instructions);
@@ -232,9 +233,14 @@ export function MasterDetailOrders({
                     )}
                   >
                     <div className="flex items-start justify-between">
-                      <span className="text-sm font-bold text-white">
-                        {tableName} · {guestName}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-white">
+                          {tableName} · {guestName}
+                        </span>
+                        {guestPhone && (
+                          <span className="text-[11px] text-amber-400/90 font-mono">📞 {guestPhone}</span>
+                        )}
+                      </div>
                       <span className="text-xs text-neutral-400">1 min</span>
                     </div>
 
@@ -289,7 +295,7 @@ export function MasterDetailOrders({
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-neutral-400">
-                    {selectedOrder.guestName || selectedOrder.customer?.name || "Sid"} · QR check-in · placed just now
+                    {selectedOrder.guestName || selectedOrder.customer?.name || "Guest"}{(selectedOrder.deliveryPhone || selectedOrder.customer?.phone) ? ` · 📞 ${selectedOrder.deliveryPhone || selectedOrder.customer?.phone}` : ""} · QR check-in · placed just now
                   </p>
                 </div>
               </div>

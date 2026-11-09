@@ -869,6 +869,9 @@ export class OrdersService {
         printerConnection: true,
         printerHost: true,
         printerPort: true,
+        printerName: true,
+        printerComPort: true,
+        printerBaudRate: true,
       },
     });
     return (
@@ -876,8 +879,63 @@ export class OrdersService {
         printerConnection: 'USB',
         printerHost: null,
         printerPort: 9100,
+        printerName: null,
+        printerComPort: null,
+        printerBaudRate: null,
       }
     );
+  }
+
+  async confirmPrintStatus(
+    branchId: string,
+    role: 'KITCHEN' | 'BILL' = 'KITCHEN',
+    confirmed: boolean,
+  ) {
+    const status = confirmed ? 'CONFIRMED_BY_STAFF' : 'FAILED';
+    const isBill = role === 'BILL';
+    return (this.prisma as any).branch.update({
+      where: { id: branchId },
+      data: isBill ? { billPrinterStatus: status } : { printerStatus: status },
+    });
+  }
+
+  async billPrinterTarget(branchId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: {
+        billPrinterConnection: true,
+        billPrinterHost: true,
+        billPrinterPort: true,
+        billPrinterName: true,
+        billPrinterComPort: true,
+        billPrinterBaudRate: true,
+        printerConnection: true,
+        printerHost: true,
+        printerPort: true,
+        printerName: true,
+        printerComPort: true,
+        printerBaudRate: true,
+      },
+    });
+    if (!branch) return null;
+    if (!branch.billPrinterConnection) {
+      return {
+        printerConnection: branch.printerConnection,
+        printerHost: branch.printerHost,
+        printerPort: branch.printerPort,
+        printerName: branch.printerName,
+        printerComPort: branch.printerComPort,
+        printerBaudRate: branch.printerBaudRate,
+      };
+    }
+    return {
+      printerConnection: branch.billPrinterConnection,
+      printerHost: branch.billPrinterHost,
+      printerPort: branch.billPrinterPort ?? 9100,
+      printerName: branch.billPrinterName,
+      printerComPort: branch.billPrinterComPort,
+      printerBaudRate: branch.billPrinterBaudRate,
+    };
   }
 
   // Cancels an unpaid order. Rules (unchanged): only OPEN orders, and not
