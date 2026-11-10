@@ -15,8 +15,8 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isFormData = options.body instanceof FormData;
   const controller = new AbortController();
-  // 15-second bounded timeout on every API call to prevent infinite loading/spinners
-  const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 15s")), 15_000);
+  // 30-second bounded timeout on every API call to prevent infinite loading/spinners
+  const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 45s")), 45_000);
 
   if (options.signal) {
     options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason));

@@ -29,45 +29,82 @@ export class TablesService {
   ) {}
 
   async listFloors(branchId: string) {
-    const floors = await this.prisma.floor.findMany({
-      where: { branchId },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        tables: {
+    const [floors, openOrders, activeRequests, activeReservations] =
+      await Promise.all([
+        this.prisma.floor.findMany({
+          where: { branchId },
+          orderBy: { sortOrder: 'asc' },
           include: {
-            assignedWaiter: { select: { id: true, name: true } },
-            orders: {
-              where: { status: { notIn: ['PAID', 'CANCELLED'] } },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
+            tables: {
+              orderBy: { number: 'asc' },
               include: {
-                customer: { select: { name: true, phone: true } },
-                items: { select: { id: true, status: true, quantity: true } },
+                assignedWaiter: { select: { id: true, name: true } },
               },
-            },
-            requests: {
-              where: { resolvedAt: null },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-            },
-            reservations: {
-              where: {
-                status: { in: ['RESERVED', 'CONFIRMED'] },
-              },
-              orderBy: { reservedAt: 'asc' },
-              take: 1,
             },
           },
-        },
-      },
-    });
+        }),
+        this.prisma.order.findMany({
+          where: {
+            branchId,
+            status: { notIn: ['PAID', 'CANCELLED'] },
+            tableId: { not: null },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            tableId: true,
+            orderNumber: true,
+            totalAmount: true,
+            guestName: true,
+            guestCount: true,
+            customer: { select: { name: true, phone: true } },
+            items: { select: { id: true, status: true, quantity: true } },
+          },
+        }),
+        this.prisma.tableRequest.findMany({
+          where: {
+            branchId,
+            resolvedAt: null,
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.reservation.findMany({
+          where: {
+            branchId,
+            status: { in: ['RESERVED', 'CONFIRMED'] },
+            tableId: { not: null },
+          },
+          orderBy: { reservedAt: 'asc' },
+        }),
+      ]);
+
+    const ordersByTable = new Map<string, (typeof openOrders)[0]>();
+    for (const o of openOrders) {
+      if (o.tableId && !ordersByTable.has(o.tableId)) {
+        ordersByTable.set(o.tableId, o);
+      }
+    }
+
+    const requestsByTable = new Map<string, (typeof activeRequests)[0]>();
+    for (const r of activeRequests) {
+      if (r.tableId && !requestsByTable.has(r.tableId)) {
+        requestsByTable.set(r.tableId, r);
+      }
+    }
+
+    const reservationsByTable = new Map<string, (typeof activeReservations)[0]>();
+    for (const res of activeReservations) {
+      if (res.tableId && !reservationsByTable.has(res.tableId)) {
+        reservationsByTable.set(res.tableId, res);
+      }
+    }
 
     return floors.map((floor) => ({
       ...floor,
       tables: floor.tables.map((table) => {
-        const activeOrder = table.orders[0];
-        const activeRequest = table.requests[0];
-        const activeReservation = table.reservations[0];
+        const activeOrder = ordersByTable.get(table.id);
+        const activeRequest = requestsByTable.get(table.id);
+        const activeReservation = reservationsByTable.get(table.id);
 
         const customerName =
           activeOrder?.guestName ||
@@ -94,10 +131,8 @@ export class TablesService {
         const allServed =
           Boolean(activeOrder && activeOrder.items.length > 0 && activeOrder.items.every((i) => i.status === 'SERVED'));
 
-        const { orders, requests, reservations, ...rest } = table;
-
         return {
-          ...rest,
+          ...table,
           customerName,
           guestCount,
           orderNumber: activeOrder?.orderNumber || null,

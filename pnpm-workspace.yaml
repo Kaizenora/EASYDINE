@@ -30,6 +30,7 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   '@scarf/scarf': true
+  '@serialport/bindings-cpp': true
   bcrypt: true
   prisma: true
   sharp: true
