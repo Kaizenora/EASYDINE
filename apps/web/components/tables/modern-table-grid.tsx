@@ -48,6 +48,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TableQrDialog } from "./table-qr-dialog";
 import { useUpdateTableStatus, type RestaurantTable } from "@/hooks/use-tables";
+import { useSettings } from "@/hooks/use-settings";
+import { QRCodeSVG } from "qrcode.react";
 import { tableLabel, type TableStatusDto } from "@easydine/types";
 
 interface ModernTableGridProps {
@@ -81,6 +83,14 @@ function timeAgo(iso?: string): string {
 export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGridProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+  const { data: settingsData } = useSettings(branchId);
+  const branchQrBaseUrl = settingsData?.branch?.qrBaseUrl ?? null;
+  const baseUrl =
+    branchQrBaseUrl ||
+    configuredBaseUrl ||
+    (typeof window !== "undefined" ? window.location.origin : "");
 
   // Search & Filter
   const [search, setSearch] = useState("");
@@ -794,7 +804,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                   <span>₹{receiptData.subtotal}</span>
                 </div>
                 <div className="flex justify-between text-neutral-400 text-[11px]">
-                  <span>GST (5%):</span>
+                  <span>{settingsData?.branch?.taxLabel || "Tax"}:</span>
                   <span>₹{receiptData.tax}</span>
                 </div>
               </div>
@@ -847,19 +857,16 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
 
           <div className="flex flex-col items-center justify-center py-4">
             <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                  typeof window !== "undefined"
-                    ? `${window.location.origin}/order/takeaway`
-                    : "http://localhost:1995/order/takeaway"
-                )}`}
-                alt="Takeaway QR Code"
-                className="h-44 w-44"
+              <QRCodeSVG
+                value={`${typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_BASE_URL || window.location.origin) : ""}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`}
+                size={180}
+                level="M"
               />
             </div>
             <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
-            <p className="text-[11px] text-neutral-500">http://localhost:1995/order/takeaway</p>
+            <p className="text-[11px] text-neutral-500">
+              {typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}` : "/order/takeaway"}
+            </p>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -868,7 +875,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               size="sm"
               className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
               onClick={() => {
-                const url = `${window.location.origin}/order/takeaway`;
+                const url = `${window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`;
                 navigator.clipboard.writeText(url);
                 toast.success("Takeaway link copied to clipboard!");
               }}
@@ -878,7 +885,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             <Button
               size="sm"
               className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
-              onClick={() => window.open("/order/takeaway", "_blank")}
+              onClick={() => window.open(branchId ? `/order/takeaway-${branchId}` : "/order/takeaway", "_blank")}
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Open Takeaway Menu

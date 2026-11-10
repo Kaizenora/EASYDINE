@@ -8,30 +8,47 @@ export class ApiError extends Error {
     public code?: string,
   ) {
     super(message);
+    this.name = "ApiError";
   }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  // A FormData body (file upload) must NOT get a manual Content-Type — the
-  // browser sets one with the multipart boundary itself; forcing
-  // application/json here makes the upload arrive unparseable server-side.
   const isFormData = options.body instanceof FormData;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...options.headers,
-    },
-  });
+  const controller = new AbortController();
+  // 15-second bounded timeout on every API call to prevent infinite loading/spinners
+  const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 15s")), 15_000);
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new ApiError(body.message ?? "Request failed", res.status, body.issues, body.code);
+  if (options.signal) {
+    options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason));
   }
 
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      signal: controller.signal,
+      credentials: "include",
+      headers: {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...options.headers,
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ message: res.statusText }));
+      throw new ApiError(body.message ?? "Request failed", res.status, body.issues, body.code);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } catch (err: any) {
+    if (err?.name === "AbortError" || err?.message?.includes("timed out")) {
+      throw new ApiError("Request timed out. Please try again.", 408);
+    }
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(err?.message ?? "Network error", 0);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export const api = {

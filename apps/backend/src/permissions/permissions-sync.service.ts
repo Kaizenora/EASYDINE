@@ -36,6 +36,7 @@ export class PermissionsSyncService implements OnModuleInit {
       ),
     );
     for (const permission of PERMISSIONS) {
+      if (known.has(permission.key)) continue;
       const row = await this.prisma.permission.upsert({
         where: { key: permission.key },
         update: { label: permission.label, category: permission.category },

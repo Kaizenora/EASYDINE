@@ -8,7 +8,7 @@
 import type { KotStatusDto } from "./orders";
 
 export const KOT_TRANSITIONS: Record<KotStatusDto, readonly KotStatusDto[]> = {
-  NEW: ["ACCEPTED", "REJECTED", "CANCELLED"],
+  NEW: ["ACCEPTED", "PREPARING", "REJECTED", "CANCELLED"],
   ACCEPTED: ["PREPARING", "REJECTED", "CANCELLED"],
   // Declining food that is already on the stove is allowed but gated: see
   // KOT_STARTED_STATUSES and the confirmStarted flag.

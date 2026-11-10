@@ -84,7 +84,10 @@ export class TablesService {
           ? activeOrder.items.reduce((sum, item) => sum + item.quantity, 0)
           : 0;
 
-        const totalAmount = activeOrder ? activeOrder.totalAmount.toString() : null;
+        const totalAmount =
+          activeOrder && activeOrder.totalAmount != null
+            ? String(activeOrder.totalAmount)
+            : null;
         const serviceRequest = activeRequest ? activeRequest.type : null;
 
         const hasPreparing = activeOrder?.items.some((i) => i.status === 'PREPARING') ?? false;
