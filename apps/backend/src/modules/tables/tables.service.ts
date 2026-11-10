@@ -28,16 +28,96 @@ export class TablesService {
     private readonly ordersService: OrdersService,
   ) {}
 
-  listFloors(branchId: string) {
-    return this.prisma.floor.findMany({
+  async listFloors(branchId: string) {
+    const floors = await this.prisma.floor.findMany({
       where: { branchId },
       orderBy: { sortOrder: 'asc' },
       include: {
         tables: {
-          include: { assignedWaiter: { select: { id: true, name: true } } },
+          include: {
+            assignedWaiter: { select: { id: true, name: true } },
+            orders: {
+              where: { status: { notIn: ['PAID', 'CANCELLED'] } },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: {
+                customer: { select: { name: true, phone: true } },
+                items: { select: { id: true, status: true, quantity: true } },
+              },
+            },
+            requests: {
+              where: { resolvedAt: null },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+            reservations: {
+              where: {
+                status: { in: ['RESERVED', 'CONFIRMED'] },
+              },
+              orderBy: { reservedAt: 'asc' },
+              take: 1,
+            },
+          },
         },
       },
     });
+
+    return floors.map((floor) => ({
+      ...floor,
+      tables: floor.tables.map((table) => {
+        const activeOrder = table.orders[0];
+        const activeRequest = table.requests[0];
+        const activeReservation = table.reservations[0];
+
+        const customerName =
+          activeOrder?.guestName ||
+          activeOrder?.customer?.name ||
+          activeReservation?.customerName ||
+          null;
+
+        const guestCount =
+          activeOrder?.guestCount ||
+          activeReservation?.guestCount ||
+          null;
+
+        const dishesCount = activeOrder
+          ? activeOrder.items.reduce((sum, item) => sum + item.quantity, 0)
+          : 0;
+
+        const totalAmount =
+          activeOrder && activeOrder.totalAmount != null
+            ? String(activeOrder.totalAmount)
+            : null;
+        const serviceRequest = activeRequest ? activeRequest.type : null;
+
+        const hasPreparing = activeOrder?.items.some((i) => i.status === 'PREPARING') ?? false;
+        const allServed =
+          Boolean(activeOrder && activeOrder.items.length > 0 && activeOrder.items.every((i) => i.status === 'SERVED'));
+
+        const { orders, requests, reservations, ...rest } = table;
+
+        return {
+          ...rest,
+          customerName,
+          guestCount,
+          orderNumber: activeOrder?.orderNumber || null,
+          orderId: activeOrder?.id || null,
+          totalAmount,
+          dishesCount,
+          serviceRequest,
+          hasPreparing,
+          allServed,
+          activeReservation: activeReservation
+            ? {
+                id: activeReservation.id,
+                customerName: activeReservation.customerName,
+                guestCount: activeReservation.guestCount,
+                reservedAt: activeReservation.reservedAt,
+              }
+            : null,
+        };
+      }),
+    }));
   }
 
   createFloor(branchId: string, dto: FloorDto) {
@@ -51,7 +131,8 @@ export class TablesService {
 
   async createTable(branchId: string, dto: TableDto) {
     await this.assertFloorInBranch(branchId, dto.floorId);
-    const table = await this.prisma.table.create({ data: dto });
+    const qrToken = randomBytes(16).toString('hex');
+    const table = await this.prisma.table.create({ data: { ...dto, qrToken } });
     this.realtime.emitToBranch(branchId, 'table.updated', table);
     return table;
   }
@@ -91,6 +172,7 @@ export class TablesService {
             color: dto.color,
             posX: 20 + (index % 5) * 100,
             posY: 20 + Math.floor(index / 5) * 100,
+            qrToken: randomBytes(16).toString('hex'),
           },
         }),
       ),

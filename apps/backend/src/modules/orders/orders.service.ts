@@ -1,4 +1,4 @@
-﻿import {
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -235,7 +235,9 @@ export class OrdersService {
     );
     const taxMode = await this.getBranchTaxMode(branchId);
 
-    const modifierIds = [...new Set(dto.items.flatMap((i) => i.modifierIds))];
+    const modifierIds = [
+      ...new Set(dto.items.flatMap((i) => i.modifierIds ?? [])),
+    ];
     const modifiers = await this.prisma.modifier.findMany({
       where: { id: { in: modifierIds } },
     });
@@ -448,7 +450,7 @@ export class OrdersService {
       }
 
       return created;
-    });
+    }, { timeout: 30000, maxWait: 15000 });
 
     if (options.historical) return this.getOrder(branchId, order.id);
 
@@ -544,7 +546,7 @@ export class OrdersService {
     const menuItemById = new Map(menuItems.map((m) => [m.id, m]));
     const taxMode = await this.getBranchTaxMode(branchId);
 
-    const modifierIds = [...new Set(items.flatMap((i) => i.modifierIds))];
+    const modifierIds = [...new Set(items.flatMap((i) => i.modifierIds ?? []))];
     const modifiers = await this.prisma.modifier.findMany({
       where: { id: { in: modifierIds } },
     });
@@ -609,7 +611,7 @@ export class OrdersService {
       await this.generateKots(tx, orderId, branchId, newItems);
 
       return result;
-    });
+    }, { timeout: 30000, maxWait: 15000 });
 
     this.realtime.emitToBranch(branchId, 'order.updated', { id: orderId });
     return this.getOrder(branchId, updated.id);
@@ -693,7 +695,7 @@ export class OrdersService {
       if (!this.isDeferred(order.scheduledFor ?? undefined)) {
         await this.generateKots(tx, orderId, branchId, order.items);
       }
-    });
+    }, { timeout: 30000, maxWait: 15000 });
     this.realtime.emitToBranch(branchId, 'order.updated', {
       id: orderId,
       acceptance: 'ACCEPTED',
@@ -1804,7 +1806,7 @@ export class OrdersService {
           const netSpend = round2(
             bill.subtotal - bill.discountAmount - loyaltyDiscountAmount,
           );
-          const pointsEarned = Math.floor(netSpend / loyaltyEarnPerCurrency);
+          const pointsEarned = 0; // Stopped awarding points per master brief
           if (pointsEarned > 0) {
             await tx.customer.update({
               where: { id: effectiveCustomerId },
@@ -1849,7 +1851,7 @@ export class OrdersService {
         // Spain VERI*FACTU: the sale's fiscal record is written in this same transaction, so a sale
         // is never paid without it (and a failure to produce it rolls the payment back).
         await this.verifactu.recordPaidOrder(tx, orderId);
-      });
+      }, { timeout: 30000, maxWait: 15000 });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === 'P2025') {
@@ -2217,7 +2219,7 @@ export class OrdersService {
       portionSuffix = ` (${cartItem.customLabel || 'Custom'})`;
     }
 
-    const selectedModifiers = cartItem.modifierIds.map((id) => {
+    const selectedModifiers = (cartItem.modifierIds ?? []).map((id) => {
       const modifier = modifierById.get(id);
       if (!modifier) throw new BadRequestException('Modifier not found');
       return modifier;
@@ -2287,7 +2289,7 @@ export class OrdersService {
     items: CartItemDto[],
     enforceLimits: boolean,
   ) {
-    if (!enforceLimits && items.every((i) => i.modifierIds.length === 0))
+    if (!enforceLimits && items.every((i) => (i.modifierIds?.length ?? 0) === 0))
       return;
     const links = await this.prisma.menuItemModifierGroup.findMany({
       where: {
@@ -2305,14 +2307,14 @@ export class OrdersService {
       const allowed = new Set(
         groups.flatMap((g) => g.modifiers.map((m) => m.id)),
       );
-      if (item.modifierIds.some((id) => !allowed.has(id))) {
+      if ((item.modifierIds ?? []).some((id) => !allowed.has(id))) {
         throw new BadRequestException(
           'A selected option is not available for this item',
         );
       }
       if (!enforceLimits) continue;
       for (const g of groups) {
-        const picked = item.modifierIds.filter((id) =>
+        const picked = (item.modifierIds ?? []).filter((id) =>
           g.modifiers.some((m) => m.id === id),
         ).length;
         const min = g.isRequired ? Math.max(1, g.minSelect) : g.minSelect;
@@ -2463,6 +2465,7 @@ export class OrdersService {
     const now = new Date();
     const stamps: Prisma.KotUpdateManyMutationInput = {};
     if (target === 'ACCEPTED') stamps.acceptedAt = now;
+    if (target === 'PREPARING' && !kot.acceptedAt) stamps.acceptedAt = now;
     if (target === 'READY') stamps.readyAt = now;
     if (target === 'SERVED') stamps.servedAt = now;
 
@@ -2485,7 +2488,7 @@ export class OrdersService {
         data: { status: target },
       });
       return tx.kot.findUniqueOrThrow({ where: { id: kotId } });
-    });
+    }, { timeout: 30000, maxWait: 15000 });
 
     this.realtime.emitToBranch(branchId, 'kot.updated', updated);
     this.realtime.emitToBranch(branchId, 'order.updated', {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Trash2, Users } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,49 +24,70 @@ export function EditableTableTile({
 }) {
   const updateLayout = useUpdateTableLayout(branchId);
   const deleteTable = useDeleteTable(branchId);
-  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Local position persists during and after drag without jumping back
+  const [localPos, setLocalPos] = useState({ x: table.posX, y: table.posY });
+  const isDragging = useRef(false);
   const dragStart = useRef<{ pointerX: number; pointerY: number; posX: number; posY: number } | null>(
     null,
   );
 
-  const posX = dragPos?.x ?? table.posX;
-  const posY = dragPos?.y ?? table.posY;
+  // Sync with table updates when not dragging
+  useEffect(() => {
+    if (!isDragging.current) {
+      setLocalPos({ x: table.posX, y: table.posY });
+    }
+  }, [table.posX, table.posY]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
+    isDragging.current = true;
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragStart.current = { pointerX: e.clientX, pointerY: e.clientY, posX: table.posX, posY: table.posY };
+    dragStart.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      posX: localPos.x,
+      posY: localPos.y,
+    };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragStart.current) return;
+    if (!isDragging.current || !dragStart.current) return;
     const { pointerX, pointerY, posX: startX, posY: startY } = dragStart.current;
-    setDragPos({
-      x: Math.max(0, startX + (e.clientX - pointerX)),
-      y: Math.max(0, startY + (e.clientY - pointerY)),
-    });
+    const nextX = Math.max(0, Math.round(startX + (e.clientX - pointerX)));
+    const nextY = Math.max(0, Math.round(startY + (e.clientY - pointerY)));
+    setLocalPos({ x: nextX, y: nextY });
   };
 
-  const onPointerUp = () => {
-    if (!dragStart.current || !dragPos) {
-      dragStart.current = null;
-      return;
-    }
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
     dragStart.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+
+    const finalX = Math.max(0, Math.round(localPos.x));
+    const finalY = Math.max(0, Math.round(localPos.y));
+
     updateLayout.mutate(
       [
         {
           id: table.id,
-          posX: dragPos.x,
-          posY: dragPos.y,
+          posX: finalX,
+          posY: finalY,
           width: table.width,
           height: table.height,
           rotation: table.rotation,
         },
       ],
-      { onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not save position") },
+      {
+        onError: (err) => {
+          toast.error(err instanceof ApiError ? err.message : "Could not save position");
+          setLocalPos({ x: table.posX, y: table.posY });
+        },
+      },
     );
-    setDragPos(null);
   };
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -82,19 +103,28 @@ export function EditableTableTile({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       className={cn(
-        "absolute flex cursor-grab touch-none flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 text-xs font-medium text-foreground shadow-sm active:cursor-grabbing",
+        "absolute flex cursor-grab touch-none select-none flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-amber-500/50 bg-[#18181c] text-xs font-medium text-white shadow-md transition-shadow active:cursor-grabbing hover:border-amber-400 hover:shadow-lg",
       )}
-      style={{ left: posX, top: posY, width: table.width, height: table.height }}
+      style={{
+        left: `${localPos.x}px`,
+        top: `${localPos.y}px`,
+        width: `${table.width}px`,
+        height: `${table.height}px`,
+      }}
     >
-      <TableShapeIcon shape={table.shape} capacity={table.capacity} className="h-6 w-6" />
-      <span className="text-sm font-semibold">{table.name ?? `T${table.number}`}</span>
+      <TableShapeIcon shape={table.shape} capacity={table.capacity} className="h-6 w-6 text-amber-400" />
+      <span className="text-sm font-bold text-white">{table.name ?? `T${table.number}`}</span>
       {table.customerName && (
-        <span className="truncate max-w-[85%] text-[10.5px] font-semibold text-foreground/90 bg-background/60 px-1.5 py-0.5 rounded shadow-xs" title={`Guest: ${table.customerName}`}>
+        <span
+          className="truncate max-w-[85%] text-[10px] font-semibold text-amber-200 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40"
+          title={`Guest: ${table.customerName}`}
+        >
           👤 {table.customerName}
         </span>
       )}
-      <span className="flex items-center gap-1 text-[11px] opacity-80">
+      <span className="flex items-center gap-1 text-[11px] text-neutral-400">
         <Users className="h-3 w-3" />
         {table.capacity}
       </span>
@@ -102,7 +132,7 @@ export function EditableTableTile({
         <Button
           variant="secondary"
           size="icon"
-          className="h-6 w-6 shadow"
+          className="h-6 w-6 rounded-md bg-neutral-800 text-neutral-200 hover:bg-neutral-700 hover:text-white shadow"
           onClick={(e: any) => {
             e.stopPropagation();
             onEdit();
@@ -113,7 +143,7 @@ export function EditableTableTile({
         <Button
           variant="secondary"
           size="icon"
-          className="h-6 w-6 text-destructive shadow"
+          className="h-6 w-6 rounded-md bg-red-950/80 text-red-400 hover:bg-red-900 hover:text-red-200 shadow"
           onClick={handleDelete}
         >
           <Trash2 className="h-3 w-3" />

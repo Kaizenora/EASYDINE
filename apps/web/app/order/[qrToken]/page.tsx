@@ -445,13 +445,28 @@ export default function LuxuryCustomerMenu({
             <span className="text-emerald-400">₹{paidOrder.totalAmount}</span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            sessionStorage.removeItem(nameStorageKey);
+            sessionStorage.removeItem(phoneStorageKey);
+            setGuestName("");
+            setGuestPhone("");
+            setCart([]);
+            setViewMode("MENU");
+            queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
+          }}
+          className="mt-2 w-full max-w-xs rounded-xl bg-amber-500 py-3 text-xs font-bold text-black transition-all hover:bg-amber-400 shadow-lg"
+        >
+          End Session (Next Guest)
+        </button>
       </div>
     );
   }
 
   // 1. WELCOME SCREEN (Image 4 from earlier: Name + Contact Number Input)
   if (!guestName) {
-    const tableBadge = isTakeaway ? "🥡 Takeaway & Pickup" : (data?.tableName || "Table 12");
+    const tableBadge = isTakeaway ? "🥡 Takeaway & Pickup" : (data?.tableName || "Table");
     return (
       <div className="relative flex min-h-screen flex-col justify-between bg-[#F7F5F0] px-6 py-10 font-sans text-neutral-900">
         <div className="flex flex-col gap-6">
@@ -461,7 +476,7 @@ export default function LuxuryCustomerMenu({
               <span>{isTakeaway ? "TAKEAWAY · ONLINE MENU" : "QR SCANNED · DINE-IN"}</span>
             </div>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1E1B18]">
-              {data?.branchName || "EasyDine"}
+              {data?.restaurantName || data?.branchName || "EasyDine"}
             </h1>
             <p className="mt-1 text-sm font-medium text-neutral-500">
               Ahmednagar · North Indian & Maharashtrian
@@ -573,7 +588,7 @@ export default function LuxuryCustomerMenu({
             </button>
           </div>
           <p className="mt-1 text-xs text-neutral-400">
-            {data?.tableName || "Table 12"} · {guestName} · placed {activeOrder.placedAt || "5:04 PM"}
+            {data?.tableName || "Table"} · {guestName} · placed {activeOrder.placedAt || "5:04 PM"}
           </p>
         </div>
 
@@ -819,7 +834,7 @@ export default function LuxuryCustomerMenu({
               <Phone className="mx-auto h-10 w-10 text-amber-400 mb-2" />
               <h3 className="text-base font-bold text-white">Call Waiter?</h3>
               <p className="mt-1 text-xs text-neutral-400">
-                Notify floor staff to attend {data?.tableName || "Table 12"}
+                Notify floor staff to attend {data?.tableName || "Table"}
               </p>
               <div className="mt-4 flex gap-2">
                 <button
@@ -845,7 +860,7 @@ export default function LuxuryCustomerMenu({
               <Receipt className="mx-auto h-10 w-10 text-amber-400 mb-2" />
               <h3 className="text-base font-bold text-white">Request Bill?</h3>
               <p className="mt-1 text-xs text-neutral-400">
-                Notify the cashier to prepare and bring your final bill to {data?.tableName || "Table 12"}.
+                Notify the cashier to prepare and bring your final bill to {data?.tableName || "Table"}.
               </p>
               <div className="mt-4 flex gap-2">
                 <button
@@ -883,10 +898,10 @@ export default function LuxuryCustomerMenu({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-black tracking-tight text-white">
-              {data?.branchName || "EasyDine"}
+              {data?.restaurantName || data?.branchName || "EasyDine"}
             </h1>
             <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-semibold text-neutral-400 border border-neutral-800">
-              <span className="text-amber-400 font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table 12")}</span>
+              <span className="text-amber-400 font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table")}</span>
               <span>·</span>
               <span>{guestName}</span>
             </div>
@@ -1299,7 +1314,7 @@ export default function LuxuryCustomerMenu({
           <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-neutral-800 bg-[#141416] p-5 text-white max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <h3 className="text-base font-bold text-white">
-                Your order ({isTakeaway ? "Takeaway" : (data?.tableName || "Table 12")})
+                Your order ({isTakeaway ? "Takeaway" : (data?.tableName || "Table")})
               </h3>
               <button
                 onClick={() => setShowCartDrawer(false)}
@@ -1376,7 +1391,7 @@ export default function LuxuryCustomerMenu({
             <Phone className="mx-auto h-10 w-10 text-amber-400 mb-2" />
             <h3 className="text-base font-bold text-white">Call Waiter?</h3>
             <p className="mt-1 text-xs text-neutral-400">
-              Notify floor staff to attend {isTakeaway ? "Takeaway counter" : (data?.tableName || "Table 12")}
+              Notify floor staff to attend {isTakeaway ? "Takeaway counter" : (data?.tableName || "Table")}
             </p>
             <div className="mt-4 flex gap-2">
               <button

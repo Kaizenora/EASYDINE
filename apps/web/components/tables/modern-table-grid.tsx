@@ -4,6 +4,7 @@ import {
   BellRing,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clock,
   ExternalLink,
   Layers,
@@ -39,9 +40,17 @@ import { api, ApiError } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TableQrDialog } from "./table-qr-dialog";
-import type { RestaurantTable } from "@/hooks/use-tables";
-import { tableLabel } from "@easydine/types";
+import { useUpdateTableStatus, type RestaurantTable } from "@/hooks/use-tables";
+import { useSettings } from "@/hooks/use-settings";
+import { QRCodeSVG } from "qrcode.react";
+import { tableLabel, type TableStatusDto } from "@easydine/types";
 
 interface ModernTableGridProps {
   tables: RestaurantTable[];
@@ -74,6 +83,14 @@ function timeAgo(iso?: string): string {
 export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGridProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+  const { data: settingsData } = useSettings(branchId);
+  const branchQrBaseUrl = settingsData?.branch?.qrBaseUrl ?? null;
+  const baseUrl =
+    branchQrBaseUrl ||
+    configuredBaseUrl ||
+    (typeof window !== "undefined" ? window.location.origin : "");
 
   // Search & Filter
   const [search, setSearch] = useState("");
@@ -155,6 +172,23 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     },
   });
 
+  // Cashier table status update (Available, Occupied, Reserved, Cleaning, Out of service)
+  const updateTableStatus = useUpdateTableStatus(branchId);
+  const handleStatusChange = (tableId: string, newStatus: TableStatusDto) => {
+    updateTableStatus.mutate(
+      { id: tableId, status: newStatus },
+      {
+        onSuccess: () => {
+          toast.success(`Table updated to ${newStatus.replace(/_/g, " ").toLowerCase()}`);
+          if (onRefresh) onRefresh();
+        },
+        onError: (err) => {
+          toast.error(err instanceof ApiError ? err.message : "Could not update table status");
+        },
+      }
+    );
+  };
+
   // Dynamic banners from table data
   const waiterCallTables = useMemo(() =>
     tables.filter((t) => (t.status as string) === "WAITER_CALL" || (t as any).serviceRequest === "WAITER"),
@@ -219,16 +253,25 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     if (status === "OCCUPIED" && tAny.orderNumber && (tAny.acceptance === "PENDING" || !tAny.acceptance)) {
       return { text: "NEW ORDER", class: "bg-amber-500/20 text-amber-300 border-amber-500/40", pulse: true };
     }
-    if (status === "SERVED") {
+    if (status === "SERVED" || tAny.allServed) {
       return { text: "SERVED", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", pulse: false };
     }
-    if (status === "PREPARING") {
+    if (status === "PREPARING" || tAny.hasPreparing) {
       return { text: "PREPARING", class: "bg-blue-500/20 text-blue-300 border-blue-500/40", pulse: false };
     }
-    if (status === "BROWSING" || (table.customerName && (status as string) !== "FREE" && (status as string) !== "AVAILABLE")) {
+    if (status === "RESERVED" || tAny.activeReservation) {
+      return { text: "RESERVED", class: "bg-amber-500/20 text-amber-300 border-amber-500/40", pulse: false };
+    }
+    if (status === "CLEANING") {
+      return { text: "CLEANING", class: "bg-purple-500/20 text-purple-300 border-purple-500/40", pulse: false };
+    }
+    if (status === "OUT_OF_SERVICE") {
+      return { text: "OUT OF SERVICE", class: "bg-neutral-800 text-neutral-400 border-neutral-700", pulse: false };
+    }
+    if (status === "BROWSING" || (table.customerName && status !== "AVAILABLE")) {
       return { text: "SEATED · BROWSING", class: "bg-amber-900/30 text-amber-200 border-amber-800/40", pulse: false };
     }
-    if ((status as string) === "OCCUPIED") {
+    if (status === "OCCUPIED") {
       return { text: "OCCUPIED", class: "bg-amber-500/20 text-amber-300 border-amber-500/40", pulse: false };
     }
     return { text: "FREE", class: "bg-neutral-800 text-neutral-400 border-neutral-700", pulse: false };
@@ -236,9 +279,9 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
 
   const isFree = (table: RestaurantTable) => {
     return (
-      (table.status as string) === "AVAILABLE" ||
-      (table.status as string) === "FREE" ||
-      (!table.customerName && !(table.status as string)?.includes("_"))
+      ((table.status as string) === "AVAILABLE" || (table.status as string) === "FREE") &&
+      !table.customerName &&
+      !(table as any).serviceRequest
     );
   };
 
@@ -400,9 +443,12 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           const free = isFree(table);
           const isNewOrder = badge.text === "NEW ORDER";
 
-          // Customer info
-          const customerLine = table.customerName
-            ? `${table.customerName}${tAny.checkInType ? ` · ${tAny.checkInType}` : ""}${tAny.guestCount ? ` · ${tAny.guestCount} guests` : ""}`
+          // Customer info (Name who booked / seated)
+          const bookingName = table.customerName || tAny.activeReservation?.customerName;
+          const guests = table.guestCount || tAny.activeReservation?.guestCount;
+          const checkIn = tAny.checkInType || (tAny.orderNumber ? "QR check-in" : null);
+          const customerLine = bookingName
+            ? `${bookingName}${guests ? ` · ${guests} guests` : checkIn ? ` · ${checkIn}` : ""}`
             : null;
 
           // Detail line
@@ -466,23 +512,85 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 <span className="text-base font-bold text-white tracking-tight">
                   {table.name || `Table ${table.number}`}
                 </span>
-                <span
-                  className={cn(
-                    "rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                    badge.class
-                  )}
-                >
-                  {badge.text}
-                </span>
+
+                {/* Cashier Table Status Selector Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-opacity hover:opacity-80 focus:outline-none",
+                      badge.class
+                    )}
+                  >
+                    <span>{badge.text}</span>
+                    <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44 border-neutral-800 bg-[#16161a] p-1 text-xs text-neutral-200 shadow-xl">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(table.id, "AVAILABLE");
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 hover:bg-neutral-800 hover:text-white"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-neutral-400" />
+                      <span>Available</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(table.id, "OCCUPIED");
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 hover:bg-neutral-800 hover:text-white"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      <span>Occupied</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(table.id, "RESERVED");
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 hover:bg-neutral-800 hover:text-white"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-blue-400" />
+                      <span>Reserved</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(table.id, "CLEANING");
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 hover:bg-neutral-800 hover:text-white"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-purple-400" />
+                      <span>Cleaning</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(table.id, "OUT_OF_SERVICE");
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 hover:bg-neutral-800 hover:text-white"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-red-400" />
+                      <span>Out of service</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* Card Body */}
               <div className="my-2 flex flex-col gap-1.5">
                 {customerLine ? (
-                  <p className="text-sm font-semibold text-neutral-200 truncate">
+                  <p className="text-sm font-semibold text-neutral-200 truncate" title={customerLine}>
                     {customerLine}
                   </p>
-                ) : null}
+                ) : (
+                  <p className="text-xs text-neutral-500 italic">
+                    {free ? "Available" : "No booking info"}
+                  </p>
+                )}
                 <p className={cn("text-xs font-medium", free ? "text-neutral-500" : "text-amber-300/90")}>
                   {detailLine}
                 </p>
@@ -696,7 +804,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                   <span>₹{receiptData.subtotal}</span>
                 </div>
                 <div className="flex justify-between text-neutral-400 text-[11px]">
-                  <span>GST (5%):</span>
+                  <span>{settingsData?.branch?.taxLabel || "Tax"}:</span>
                   <span>₹{receiptData.tax}</span>
                 </div>
               </div>
@@ -749,19 +857,16 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
 
           <div className="flex flex-col items-center justify-center py-4">
             <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                  typeof window !== "undefined"
-                    ? `${window.location.origin}/order/takeaway`
-                    : "http://localhost:1995/order/takeaway"
-                )}`}
-                alt="Takeaway QR Code"
-                className="h-44 w-44"
+              <QRCodeSVG
+                value={`${typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_BASE_URL || window.location.origin) : ""}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`}
+                size={180}
+                level="M"
               />
             </div>
             <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
-            <p className="text-[11px] text-neutral-500">http://localhost:1995/order/takeaway</p>
+            <p className="text-[11px] text-neutral-500">
+              {typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}` : "/order/takeaway"}
+            </p>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -770,7 +875,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               size="sm"
               className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
               onClick={() => {
-                const url = `${window.location.origin}/order/takeaway`;
+                const url = `${window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`;
                 navigator.clipboard.writeText(url);
                 toast.success("Takeaway link copied to clipboard!");
               }}
@@ -780,7 +885,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             <Button
               size="sm"
               className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
-              onClick={() => window.open("/order/takeaway", "_blank")}
+              onClick={() => window.open(branchId ? `/order/takeaway-${branchId}` : "/order/takeaway", "_blank")}
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Open Takeaway Menu

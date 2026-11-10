@@ -61,11 +61,11 @@ export default function TablesPage() {
   const availableTables = allTables.filter((t) => t.status === "AVAILABLE");
 
   const canvasWidth = activeFloor
-    ? Math.max(600, ...activeFloor.tables.map((t) => t.posX + t.width + 40))
-    : 600;
+    ? Math.max(1000, ...activeFloor.tables.map((t) => t.posX + t.width + 120))
+    : 1000;
   const canvasHeight = activeFloor
-    ? Math.max(320, ...activeFloor.tables.map((t) => t.posY + t.height + 40))
-    : 320;
+    ? Math.max(600, ...activeFloor.tables.map((t) => t.posY + t.height + 120))
+    : 600;
 
   const contentWidth = activeFloor
     ? Math.max(1, ...activeFloor.tables.map((t) => t.posX + t.width + 16))
@@ -152,7 +152,7 @@ export default function TablesPage() {
               />
             ) : (
               <>
-                <Card ref={cardRef} className="overflow-auto p-3 sm:p-6">
+                <Card ref={cardRef} className="overflow-auto border-neutral-800 bg-[#121214] p-3 sm:p-6 shadow-inner">
               <div
                 className="relative"
                 style={

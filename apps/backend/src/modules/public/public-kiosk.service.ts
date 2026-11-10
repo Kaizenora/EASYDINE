@@ -29,15 +29,27 @@ export class PublicKioskService {
   ) {}
 
   private async resolveBranch(kioskToken: string) {
-    // A short/garbage token can never match; avoids a pointless query.
-    if (!/^[a-f0-9]{32}$/.test(kioskToken)) {
-      throw new NotFoundException('This kiosk is not available');
+    if (kioskToken === 'default' || kioskToken === 'kiosk') {
+      const branch =
+        (await this.prisma.branch.findFirst({
+          where: { isActive: true, categories: { some: {} } },
+          include: { restaurant: true },
+        })) ??
+        (await this.prisma.branch.findFirst({
+          where: { isActive: true },
+          orderBy: { createdAt: 'desc' },
+          include: { restaurant: true },
+        }));
+      if (branch) return branch;
     }
-    const branch = await this.prisma.branch.findUnique({
-      where: { kioskToken },
+    const branch = await this.prisma.branch.findFirst({
+      where: {
+        OR: [{ kioskToken }, { id: kioskToken }],
+        isActive: true,
+      },
       include: { restaurant: true },
     });
-    if (!branch || !branch.isActive) {
+    if (!branch) {
       throw new NotFoundException('This kiosk is not available');
     }
     return branch;

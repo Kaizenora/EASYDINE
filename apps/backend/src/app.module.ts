@@ -10,12 +10,10 @@ import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { MenuModule } from './modules/menu/menu.module';
-import { AttendanceModule } from './modules/attendance/attendance.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { RiderModule } from './modules/rider/rider.module';
 import { HrModule } from './modules/hr/hr.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
-import { MarketingModule } from './modules/marketing/marketing.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { OperationsModule } from './modules/operations/operations.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
@@ -48,7 +46,6 @@ import { BackupModule } from './backup/backup.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { McpModule } from './mcp/mcp.module';
 import { SystemModule } from './system/system.module';
-import { VerifactuModule } from './modules/verifactu/verifactu.module';
 
 @Module({
   imports: [
@@ -60,12 +57,10 @@ import { VerifactuModule } from './modules/verifactu/verifactu.module';
     AuthModule,
     MenuModule,
     TablesModule,
-    AttendanceModule,
     DeliveryModule,
     RiderModule,
     HrModule,
     AccountingModule,
-    MarketingModule,
     ReportsModule,
     OperationsModule,
     WebhooksModule,
@@ -86,7 +81,6 @@ import { VerifactuModule } from './modules/verifactu/verifactu.module';
     InventoryModule,
     SettingsModule,
     SyncModule,
-    VerifactuModule,
     UsersModule,
     PermissionsModule,
     AuditModule,

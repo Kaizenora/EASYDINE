@@ -9,7 +9,7 @@ export class ScheduledOrdersService {
 
   constructor(private readonly orders: OrdersService) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async tick() {
     try {
       const released = await this.orders.releaseDueScheduledOrders();

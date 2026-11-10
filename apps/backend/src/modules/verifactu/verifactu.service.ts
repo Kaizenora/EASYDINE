@@ -679,7 +679,7 @@ export class VerifactuService {
   }
 
   // ---- submission to AEAT ----
-  @Cron(CronExpression.EVERY_MINUTE)
+  // @Cron removed from active product
   async tick() {
     try {
       await this.submitAll();

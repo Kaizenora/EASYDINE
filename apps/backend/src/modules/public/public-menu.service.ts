@@ -14,30 +14,53 @@ export class PublicMenuService {
     private readonly realtime: RealtimeGateway,
   ) {}
 
-  private async resolveTable(qrToken: string) {
+  private async resolveTarget(qrToken: string) {
+    if (qrToken === 'takeaway' || qrToken.startsWith('takeaway-') || qrToken === 'qr-takeaway') {
+      const branchId = qrToken.startsWith('takeaway-') ? qrToken.replace('takeaway-', '') : null;
+      let branch = branchId
+        ? await this.prisma.branch.findUnique({ where: { id: branchId }, include: { restaurant: true } })
+        : null;
+      if (!branch) {
+        branch =
+          (await this.prisma.branch.findFirst({
+            where: { isActive: true, categories: { some: {} } },
+            include: { restaurant: true },
+          })) ??
+          (await this.prisma.branch.findFirst({
+            where: { isActive: true },
+            orderBy: { createdAt: 'desc' },
+            include: { restaurant: true },
+          }));
+      }
+      if (!branch) throw new NotFoundException('Restaurant branch not found');
+      return { isTakeaway: true, branch, table: null };
+    }
+
     const table = await this.prisma.table.findUnique({
       where: { qrToken },
-      include: { floor: { include: { branch: true } } },
+      include: { floor: { include: { branch: { include: { restaurant: true } } } } },
     });
     if (!table) throw new NotFoundException('This QR code is not recognized');
-    return table;
+    return { isTakeaway: false, branch: table.floor.branch, table };
   }
 
   async getMenuByQrToken(qrToken: string) {
-    const table = await this.resolveTable(qrToken);
-    const branch = table.floor.branch;
+    const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
     const categories = await this.menuCategoriesForBranch(branch.id);
     return {
+      restaurantName: (branch as any).restaurant?.name ?? branch.name,
       branchName: branch.name,
-      tableName: table.name ?? `Table ${table.number}`,
-      tableNumber: table.number,
+      tableName: isTakeaway ? 'Takeaway & Pickup' : (table?.name ?? `Table ${table?.number}`),
+      tableNumber: isTakeaway ? 'Takeaway' : table?.number,
+      isTakeaway,
       categories,
     };
   }
 
   /** Customer check-in from QR scan. Marks table OCCUPIED for the cashier grid. */
   async checkIn(qrToken: string, guestName?: string, phone?: string) {
-    const table = await this.resolveTable(qrToken);
+    const { isTakeaway, table } = await this.resolveTarget(qrToken);
+    if (isTakeaway || !table) return { ok: true };
     const branchId = table.floor.branchId;
 
     if (table.status === 'AVAILABLE') {
@@ -124,9 +147,52 @@ export class PublicMenuService {
     requestId?: string,
     notes?: string,
   ) {
-    const table = await this.resolveTable(qrToken);
-    const branchId = table.floor.branchId;
+    const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
+    const branchId = branch.id;
+    const normalizedItems = (items || []).map((it) => ({
+      ...it,
+      modifierIds: it.modifierIds ?? [],
+    }));
 
+    if (isTakeaway) {
+      if (requestId) {
+        const existing = await this.prisma.order.findFirst({
+          where: { branchId, clientRequestId: requestId },
+          include: { items: true },
+        });
+        if (existing) return existing;
+      }
+
+      const createdById = (
+        await this.prisma.userBranch.findFirst({
+          where: { branchId },
+          orderBy: { userId: 'asc' },
+        })
+      )?.userId;
+      if (!createdById) throw new NotFoundException('This branch has no staff to receive the order');
+
+      const cleanGuestName = guestName?.trim() || 'Takeaway Guest';
+
+      return this.ordersService.createOrder(
+        branchId,
+        createdById,
+        {
+          type: 'TAKEAWAY',
+          guestName: cleanGuestName,
+          guestPhone,
+          notes: notes ? `Takeaway · ${notes}` : 'Takeaway Order',
+          clientRequestId: requestId,
+          items: normalizedItems,
+        } as any,
+        { channel: 'ONLINE', requireAcceptance: true },
+      );
+    }
+
+    if (!table) {
+      throw new NotFoundException('Table not found');
+    }
+
+    // Dine-in Table Order
     // Idempotency: retry of the exact same request key returns the existing order
     if (requestId) {
       const existing = await this.prisma.order.findFirst({
@@ -154,7 +220,7 @@ export class PublicMenuService {
           data: { deliveryPhone: guestPhone },
         });
       }
-      return this.ordersService.addItems(branchId, openOrder.id, items, {
+      return this.ordersService.addItems(branchId, openOrder.id, normalizedItems, {
         enforceModifierLimits: true,
         websiteOnly: true,
       });
@@ -186,17 +252,28 @@ export class PublicMenuService {
         guestPhone,
         notes,
         clientRequestId: requestId,
-        items,
+        items: normalizedItems,
       } as any,
-      { channel: 'ONLINE' },
+      { channel: 'ONLINE', requireAcceptance: true },
     );
   }
 
-  /** Live status of the table's current tab, for the guest's QR page. */
+  /** Live status of the table or takeaway tab, for the guest's QR page. */
   async getStatus(qrToken: string) {
-    const table = await this.resolveTable(qrToken);
+    const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
+    
     const order = await this.prisma.order.findFirst({
-      where: { tableId: table.id, status: { in: ['OPEN', 'BILLED', 'PAID'] } },
+      where:
+        isTakeaway || !table
+          ? {
+              branchId: branch.id,
+              type: 'TAKEAWAY',
+              status: { in: ['OPEN', 'BILLED', 'PAID'] },
+            }
+          : {
+              tableId: table.id,
+              status: { in: ['OPEN', 'BILLED', 'PAID'] },
+            },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -221,10 +298,12 @@ export class PublicMenuService {
       },
     });
 
-    const requests = await this.prisma.tableRequest.findMany({
-      where: { tableId: table.id, resolvedAt: null },
-      select: { type: true },
-    });
+    const requests = (!isTakeaway && table)
+      ? await this.prisma.tableRequest.findMany({
+          where: { tableId: table.id, resolvedAt: null },
+          select: { type: true },
+        })
+      : [];
 
     if (!order) {
       return { order: null, openRequests: requests.map((r) => r.type) };
@@ -287,7 +366,8 @@ export class PublicMenuService {
 
   /** "Call waiter" / "Bring the bill". One open request per type per table. */
   async createRequest(qrToken: string, type: 'WAITER' | 'BILL') {
-    const table = await this.resolveTable(qrToken);
+    const { isTakeaway, table } = await this.resolveTarget(qrToken);
+    if (isTakeaway || !table) return { ok: true, alreadyRequested: false };
     const branchId = table.floor.branchId;
     const existing = await this.prisma.tableRequest.findFirst({
       where: { tableId: table.id, type, resolvedAt: null },

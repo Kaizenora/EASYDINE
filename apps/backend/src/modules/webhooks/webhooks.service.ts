@@ -242,7 +242,7 @@ export class WebhooksService {
 
   // --- Delivery worker -----------------------------------------------------
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  // @Cron(CronExpression.EVERY_MINUTE)
   async tick() {
     try {
       const due = await this.prisma.webhookDelivery.findMany({
