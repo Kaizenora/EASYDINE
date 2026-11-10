@@ -551,9 +551,22 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
 
               {/* Card Header */}
               <div className="flex items-start justify-between gap-2">
-                <span className="text-base font-bold text-white tracking-tight">
-                  {table.name || `Table ${table.number}`}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base font-bold text-white tracking-tight">
+                    {table.name || `Table ${table.number}`}
+                  </span>
+                  <button
+                    type="button"
+                    title="View Table QR code"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setQrTable(table);
+                    }}
+                    className="rounded p-1 text-neutral-400 hover:bg-neutral-800 hover:text-amber-400 transition-colors"
+                  >
+                    <QrCode className="h-3.5 w-3.5" />
+                  </button>
+                </div>
 
                 {/* Cashier Table Status Selector Dropdown */}
                 <DropdownMenu>

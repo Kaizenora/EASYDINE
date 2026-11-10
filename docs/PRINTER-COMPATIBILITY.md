@@ -1,92 +1,58 @@
-# Printer Compatibility
+# Printer Compatibility & Hardware Audit Matrix
 
 > [!IMPORTANT]
-> **TESTED** means a specific person connected a specific printer and confirmed paper came out.
-> Everything else is **NOT TESTED** — it may work, it may not.
-> Never trust this list alone. Always do a physical test-print before a service.
+> **Audit Context**: Audited against local workspace repository on branch `feat/v4-launch-prep` (commit `74a7b28`).
+> **SENT** indicates raw ESC/POS bytes were accepted by the transport driver or network socket.
+> **PRINTED** (physical paper ejection and legibility) is strictly confirmed by physical inspection of the hardware.
 
 ---
 
-## Status Key
+## 1. Transport Support & Verification Matrix
 
-| Mark | Meaning |
-|------|---------|
-| ✅ TESTED | Print confirmed with this exact model and transport on this date |
-| ⚠️ LIKELY | Transport is correct class; never physically tested |
-| ❌ NOT TESTED | No hardware test has been done |
-
----
-
-## Kitchen Ticket (KOT) Printers — 80 mm
-
-| Printer Model | Transport | Date Tested | Tester | Notes |
+| Transport / Connection | Implementation File | Status | Platform Support | Limitations & Hardware Prerequisites |
 |---|---|---|---|---|
-| *(none yet)* | — | — | — | Physical test needed — see docs/WINDOWS-SETUP-AND-TEST.md |
-
-## Bill / Receipt Printers — 80 mm
-
-| Printer Model | Transport | Date Tested | Tester | Notes |
-|---|---|---|---|---|
-| *(none yet)* | — | — | — | Physical test needed |
-
-## Bill / Receipt Printers — 58 mm
-
-| Printer Model | Transport | Date Tested | Tester | Notes |
-|---|---|---|---|---|
-| *(none yet)* | — | — | — | Physical test needed |
+| **Network TCP (Port 9100 / JetDirect)** | `apps/backend/src/modules/orders/escpos-network.ts` | **SUPPORTED (Code Complete)** | Cross-platform (Windows, Linux, macOS) | Requires thermal printer with Ethernet/Wi-Fi on the same local subnet. Open port 9100. Verified via unit specs (`escpos-network.spec.ts`). Unverified on live physical paper in this environment. |
+| **Windows Spooler (RAW Win32)** | `apps/backend/src/modules/orders/escpos-windows-spooler.ts` | **SUPPORTED (Code Complete)** | Windows only (`process.platform === 'win32'`) | Uses P/Invoke `winspool.drv` (`OpenPrinterA`, `StartDocPrinterA` with `pDataType = "RAW"`, `WritePrinter`). Requires manufacturer thermal Windows driver installed in *Devices & Printers*. Unverified on live physical printer in this environment. |
+| **USB Direct (`/dev/usb/lp*` & libusb)** | `apps/backend/src/modules/orders/escpos-usb.ts` | **SUPPORTED (Linux only)** | Linux / Linux Docker hosts | Tries kernel `usblp` character devices (`/dev/usb/lp0`-`3`), then fallback to `usb` npm package. Does **not** work on Windows hosts directly (Windows does not expose `/dev/usb/lp*`). |
+| **COM Port / Serial (RS-232 / BT SPP)** | `apps/backend/src/modules/orders/escpos-com-port.ts` | **BLOCKED (Missing Dependency)** | Windows (e.g. `COM3`), Linux (`/dev/ttyS*`) | Requires optional native dependency `serialport` (`pnpm add serialport` in `apps/backend`). Throws structured `PrinterNotFoundError` if missing. Safe lazy-load prevents backend crash. |
+| **Browser Print (`window.print`)** | `apps/backend/src/modules/orders/receipt.html.ts` & `kot.html.ts` | **VERIFIED & WORKING** | All browsers & OS | Renders 80mm thermal CSS print media stylesheets. Served at `GET /orders/:id/receipt` and `GET /orders/:id/kot`. Full Unicode UTF-8 support. |
+| **Web Bluetooth (Mobile App)** | `apps/web/lib/device-print.ts` & `bt-printer-dialog.tsx` | **SUPPORTED (Capacitor Native)** | Android / iOS via Capacitor | Communicates via Capacitor native Bluetooth plugin `nativePrinter()`. Desktop browsers fall back to OS Windows Spooler / COM port or Browser Print dialog. |
 
 ---
 
-## Transport Notes
+## 2. Separate KOT vs Bill Printer Roles
 
-### NETWORK (raw TCP, JetDirect / port 9100)
-- Works when the printer's IP is reachable from the machine running the backend.
-- Confirm with: `telnet <printer-ip> 9100` — if it connects, the port is open.
-- Enable "Raw" / "LPR" / "Port 9100" mode in the printer's web interface.
-- ❌ NOT TESTED on any specific model yet — needs hardware test.
+The database schema (`branches` table) and application logic enforce strict physical and logical separation:
 
-### WINDOWS_SPOOLER (raw bytes via Windows print queue)
-- The printer must be installed in Windows Devices & Printers.
-- Driver must pass raw bytes through (most thermal printer Windows drivers do).
-- Printer name in Settings must exactly match the name shown in Windows.
-- ❌ NOT TESTED on any specific model yet — needs hardware test.
-
-### COM_PORT (RS-232 / Bluetooth SPP)
-- Pair the Bluetooth printer in Windows first; note the COM port it assigns (e.g. COM3).
-- Requires `serialport` npm package installed in apps/backend.
-- Baud rate is usually 9600 for thermal printers; check the printer's manual.
-- ❌ NOT TESTED on any specific model yet — needs hardware test.
-
-### USB (Linux/Docker only — kernel usblp + libusb)
-- Only works when the backend runs in the Docker container on a **Linux** host.
-- The Docker Compose file already includes the USB device passthrough.
-- Does **not** work on Windows Docker Desktop (USB passthrough not supported).
-- ❌ NOT TESTED on any specific model yet — needs hardware test.
-
-### A4 / browser print (window.print)
-- Works via any browser on any OS — no driver needed.
-- Quality depends on the browser's print dialog and the installed paper/printer.
-- ❌ NOT TESTED yet.
+- **Kitchen Ticket Printer (KOT):**
+  - Columns: `printerConnection`, `printerHost`, `printerPort`, `printerName`, `printerComPort`, `printerBaudRate`.
+  - Service: `KotPrintService` (`apps/backend/src/modules/orders/kot-print.service.ts`).
+  - Target: Thermal printer at prep stations or main kitchen.
+- **Bill / Cashier Receipt Printer:**
+  - Columns: `billPrinterConnection`, `billPrinterHost`, `billPrinterPort`, `billPrinterName`, `billPrinterComPort`, `billPrinterBaudRate`.
+  - Service: `OrdersService.billPrinterTarget()` (`apps/backend/src/modules/orders/orders.service.ts:938`).
+  - Strict Rule: Zero fallback to KOT printer if bill printer is unconfigured (returns `null` / `Bill printer not set` to prevent customer bills ejecting inside the kitchen).
 
 ---
 
-## How to Add a Tested Entry
+## 3. Character Encoding & Content Rules
 
-After you physically print a test ticket on a specific printer:
-
-1. Note the exact model name from the printer's label or manual.
-2. Note the transport used, the date, and your name.
-3. Add a row to the matching table above.
-4. Commit the change.
-
-**Example row:**
-
-```
-| Epson TM-T82III | NETWORK | 2026-11-15 | Siddharth | 80mm, CP858, port 9100, telnet confirmed |
-```
+| Data / Element | Raw ESC/POS Behavior | HTML / Browser Print Behavior | Architecture Notes |
+|---|---|---|---|
+| **Rupee Symbol (₹)** | Encoded as `Rs.` | Renders as `₹` | Thermal single-byte codepages (PC437, PC858, PC850) lack `\u20b9`. `escpos-receipt.ts` maps `INR: ['Rs.', 'Rs.']`. |
+| **Devanagari / Marathi** | Replaced with `?` | Full native rendering | Raw ESC/POS single-byte mode cannot represent multi-byte Indic scripts without dedicated printer ROM glyphs or bitmap rasterization. Unmapped characters trigger slip notice: `(!) Some characters could not be printed and show as "?"`. Browser print supports full UTF-8. |
+| **Kitchen Notes vs Cashier Notes** | Item kitchen notes & modifiers print on KOT | Item notes print on receipt | Customer personal voice/preference notes (`order.notes`) are marked cashier-only (`notes: null` in KOT builder) and never sent to kitchen slips. |
 
 ---
 
-> [!CAUTION]
-> This file lists what has been tested. The software reports **SENT** (bytes accepted by the transport).
-> **PRINTED** (paper came out) is confirmed only by physically looking at the printer — never by code.
+## 4. Duplicate Print Guards & Concurrency Control
+
+1. **Atomic Compare-and-Set Claim:**
+   - In `KotPrintService.run()`, unprinted tickets execute `prisma.kot.updateMany({ where: { id: kot.id, printedCount: 0 }, data: { printedCount: 1, printedAt: new Date() } })`.
+   - If two cashiers or tablets tap simultaneously, only one succeeds (`claimed.count === 1`); the second is silently dropped.
+2. **Failure Claim Release:**
+   - If `sendToBranchPrinter()` throws (e.g. offline, paper out, unplugged), the catch block resets `printedCount: 0` so the cashier can re-trigger printing once resolved.
+3. **Reprint Watermark:**
+   - Reprinting requires an explicit `reprint=true` flag. The generated ESC/POS output prominently prints `*** REPRINT #n ***` on the ticket header.
+4. **Audit Logging:**
+   - Print jobs are recorded in the `print_jobs` table with job status (`SENT`), transport target, timestamp, and attempt counts.

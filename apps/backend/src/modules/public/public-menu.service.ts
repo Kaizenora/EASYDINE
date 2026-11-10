@@ -331,7 +331,7 @@ export class PublicMenuService {
       cookingStatus = 'ACCEPTED';
     }
 
-    const isServed = cookingStatus === 'SERVED';
+    const isServed = cookingStatus === 'SERVED' || order.status === 'PAID';
 
     const placedAt = order.createdAt
       ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -343,7 +343,8 @@ export class PublicMenuService {
     return {
       order: {
         orderNumber: order.orderNumber,
-        status: cookingStatus,
+        status: order.status === 'PAID' ? 'PAID' : cookingStatus,
+        orderStatus: order.status,
         cookingStatus,
         acceptance: order.acceptance,
         totalAmount: order.totalAmount ? String(order.totalAmount) : '0.00',
@@ -361,6 +362,7 @@ export class PublicMenuService {
         })),
       },
       openRequests: requests.map((r) => r.type),
+      tableStatus: table?.status ?? null,
     };
   }
 

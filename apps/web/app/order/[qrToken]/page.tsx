@@ -117,7 +117,7 @@ export default function LuxuryCustomerMenu({
   params: Promise<{ qrToken: string }>;
 }) {
   const { qrToken } = use(params);
-  const isTakeaway = qrToken === "takeaway" || qrToken === "qr-takeaway";
+  const isTakeaway = qrToken === "takeaway" || qrToken === "qr-takeaway" || qrToken.startsWith("takeaway-");
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
   useEffect(() => {
     const up = () => setIsOffline(false);
@@ -157,6 +157,7 @@ export default function LuxuryCustomerMenu({
   const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [showWaiterModal, setShowWaiterModal] = useState(false);
   const [showBillModal, setShowBillModal] = useState(false);
+  const [showConfirmOrderModal, setShowConfirmOrderModal] = useState(false);
 
   // Load customer credentials from session
   useEffect(() => {
@@ -187,8 +188,8 @@ export default function LuxuryCustomerMenu({
     enabled: !!data,
   });
 
-  const paidOrder = status?.order && status.order.status === "PAID" ? status.order : null;
-  const activeOrder = status?.order && status.order.status !== "CANCELLED" && status.order.status !== "COMPLETED" && status.order.status !== "PAID" ? status.order : null;
+  const paidOrder = status?.order && (status.order.status === "PAID" || (status.order as any).orderStatus === "PAID") ? status.order : null;
+  const activeOrder = status?.order && status.order.status !== "CANCELLED" && status.order.status !== "COMPLETED" && status.order.status !== "PAID" && (status.order as any).orderStatus !== "PAID" ? status.order : null;
 
   // Auto-switch to tracking view when an active order exists and user hasn't explicitly navigated
   useEffect(() => {
@@ -239,6 +240,7 @@ export default function LuxuryCustomerMenu({
       vibrateSuccess();
       playSuccessChime();
       setCart([]);
+      setShowConfirmOrderModal(false);
       setShowCartDrawer(false);
       setViewMode("TRACKING");
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
@@ -1291,7 +1293,7 @@ export default function LuxuryCustomerMenu({
                       name: customizingItem.item.name,
                       imageUrl: getDishImage(customizingItem.item, customizingItem.categoryName),
                       isVeg: customizingItem.item.isVeg,
-                      modifierIds: [extraCheese && "cheese", extraButter && "butter"].filter(Boolean) as string[],
+                      modifierIds: [],
                       modifierLabel: extrasList.join(", "),
                       unitPrice,
                       quantity: customizingQty,
@@ -1378,11 +1380,73 @@ export default function LuxuryCustomerMenu({
             <button
               type="button"
               disabled={placeOrder.isPending}
-              onClick={() => placeOrder.mutate()}
+              onClick={() => setShowConfirmOrderModal(true)}
               className="mt-5 flex h-13 w-full items-center justify-center rounded-2xl bg-[#E5A93C] text-sm font-black text-black hover:bg-amber-400 disabled:opacity-50"
             >
               {placeOrder.isPending ? "Sending order..." : "Place order"}
             </button>
+          </div>
+        </div>
+      )}
+
+            {/* PLACE ORDER CONFIRMATION MODAL */}
+      {showConfirmOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-neutral-800 bg-[#161619] p-5 text-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="h-5 w-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Confirm Your Order</h3>
+              </div>
+              <button
+                onClick={() => setShowConfirmOrderModal(false)}
+                className="rounded-full bg-neutral-800 p-1 text-neutral-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-3 text-xs text-neutral-400">
+              Sending to <span className="font-bold text-white">{isTakeaway ? "Takeaway" : (data?.tableName || "Table")}</span>
+            </div>
+
+            {/* Compact items review */}
+            <div className="mt-3 max-h-48 overflow-y-auto space-y-2 rounded-xl border border-neutral-800/80 bg-neutral-900/50 p-3">
+              {cart.map((item) => (
+                <div key={item.id} className="flex justify-between items-start text-xs">
+                  <div>
+                    <span className="font-bold text-white">{item.quantity}× {item.name}</span>
+                    {item.modifierLabel && <p className="text-[10px] text-amber-300">{item.modifierLabel}</p>}
+                    {item.cookingNote && <p className="text-[10px] text-neutral-400 italic">“{item.cookingNote}”</p>}
+                  </div>
+                  <span className="font-semibold text-neutral-200">₹{item.unitPrice * item.quantity}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-neutral-800 pt-3">
+              <span className="text-xs text-neutral-400">Total payable</span>
+              <span className="text-lg font-black text-amber-400">₹{cartTotalPrice.toFixed(0)}</span>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                disabled={placeOrder.isPending}
+                onClick={() => setShowConfirmOrderModal(false)}
+                className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 py-3 text-xs font-bold text-neutral-300 hover:bg-neutral-800"
+              >
+                Back to Cart
+              </button>
+              <button
+                type="button"
+                disabled={placeOrder.isPending}
+                onClick={() => placeOrder.mutate()}
+                className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 py-3 text-xs font-black text-black hover:brightness-105 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {placeOrder.isPending ? "Sending..." : "Confirm and Send"}
+              </button>
+            </div>
           </div>
         </div>
       )}

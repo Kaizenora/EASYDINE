@@ -483,33 +483,35 @@ export class OrdersService {
     // so a renamed/custom kitchen role never silently stops receiving
     // orders. Best-effort: a notification failure must never fail order
     // creation, which has already committed by this point — log and move on.
-    try {
-      const who = full.guestName ?? full.customer?.name ?? undefined;
-      if (acceptance === 'PENDING') {
-        // Needs a decision: goes to anyone who can accept/cancel orders.
-        await this.notifications.notifyByPermission(branchId, 'orders.accept', {
-          type: 'order.pending',
-          title: 'New online order — accept?',
-          body: `Order ${full.orderNumber} (${full.type.replace('_', ' ')})${who ? ` — ${who}` : ''} · ₹${Number(full.totalAmount)}`,
-          entity: 'Order',
-          entityId: full.id,
-        });
-      } else {
-        await this.notifications.notifyByPermission(branchId, 'kds.manage', {
-          type: 'order.new',
-          title: channel === 'ONLINE' ? 'New online order' : 'New order',
-          body: full.table
-            ? `Order ${full.orderNumber} — Table ${full.table.number}`
-            : `Order ${full.orderNumber} (${full.type})`,
-          entity: 'Order',
-          entityId: full.id,
-        });
+    void (async () => {
+      try {
+        const who = full.guestName ?? full.customer?.name ?? undefined;
+        if (acceptance === 'PENDING') {
+          // Needs a decision: goes to anyone who can accept/cancel orders.
+          await this.notifications.notifyByPermission(branchId, 'orders.accept', {
+            type: 'order.pending',
+            title: 'New online order — accept?',
+            body: `Order ${full.orderNumber} (${full.type.replace('_', ' ')})${who ? ` — ${who}` : ''} · ₹${Number(full.totalAmount)}`,
+            entity: 'Order',
+            entityId: full.id,
+          });
+        } else {
+          await this.notifications.notifyByPermission(branchId, 'kds.manage', {
+            type: 'order.new',
+            title: channel === 'ONLINE' ? 'New online order' : 'New order',
+            body: full.table
+              ? `Order ${full.orderNumber} — Table ${full.table.number}`
+              : `Order ${full.orderNumber} (${full.type})`,
+            entity: 'Order',
+            entityId: full.id,
+          });
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed to send new-order notification for order ${full.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-    } catch (err) {
-      this.logger.warn(
-        `Failed to send new-order notification for order ${full.id}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    })();
 
     void this.webhooks.emitForBranch(branchId, 'order.created', {
       orderId: full.id,
@@ -694,10 +696,11 @@ export class OrdersService {
 
   async acceptOrder(branchId: string, orderId: string, userId: string) {
     const order = await this.prisma.order.findFirst({
-      where: { id: orderId, branchId },
+      where: branchId ? { id: orderId, branchId } : { id: orderId },
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Order not found');
+    const effectiveBranchId = branchId || order.branchId;
     if (order.status !== 'OPEN' || order.acceptance !== 'PENDING') {
       throw new ConflictException(
         order.acceptance === 'ACCEPTED'
@@ -724,14 +727,14 @@ export class OrdersService {
         );
       }
       if (!this.isDeferred(order.scheduledFor ?? undefined)) {
-        await this.generateKots(tx, orderId, branchId, order.items);
+        await this.generateKots(tx, orderId, effectiveBranchId, order.items);
       }
     }, { timeout: 30000, maxWait: 15000 });
     this.realtime.emitToBranch(branchId, 'order.updated', {
       id: orderId,
       acceptance: 'ACCEPTED',
     });
-    this.realtime.emitToBranch(branchId, 'kot.updated', { orderId });
+    this.realtime.emitToBranch(effectiveBranchId, 'kot.updated', { orderId });
     await this.audit.record({
       userId,
       action: 'order.accepted',
@@ -755,7 +758,7 @@ export class OrdersService {
 
     let printStatus: 'SENT' | 'FAILED' | 'UNKNOWN' | 'NO_PRINTER' = 'NO_PRINTER';
     try {
-      const result = await this.kotPrint.printOrder(branchId, orderId, false);
+      const result = await this.kotPrint.printOrder(effectiveBranchId, orderId, false);
       printStatus = result?.ok ? 'SENT' : 'FAILED';
     } catch (err: any) {
       const msg = (err?.message || '').toLowerCase();

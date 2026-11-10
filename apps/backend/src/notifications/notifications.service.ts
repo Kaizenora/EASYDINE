@@ -65,6 +65,7 @@ export class NotificationsService {
     permissionKey: string,
     payload: NotifyPayload,
   ) {
+    if (!branchId) return;
     const recipients = await this.prisma.user.findMany({
       where: {
         isActive: true,

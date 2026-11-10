@@ -16,7 +16,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isFormData = options.body instanceof FormData;
   const controller = new AbortController();
   // 30-second bounded timeout on every API call to prevent infinite loading/spinners
-  const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 30s")), 30_000);
+  const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 45s")), 45_000);
 
   if (options.signal) {
     options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason));
