@@ -481,7 +481,7 @@ export default function LuxuryCustomerMenu({
               <span>{isTakeaway ? "TAKEAWAY · ONLINE MENU" : "QR SCANNED · DINE-IN"}</span>
             </div>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1E1B18]">
-              {data?.restaurantName || data?.branchName || "EasyDine"}
+              {(data as any)?.restaurantName || data?.branchName || "EasyDine"}
             </h1>
             <p className="mt-1 text-sm font-medium text-neutral-500">
               Ahmednagar · North Indian & Maharashtrian
@@ -903,7 +903,7 @@ export default function LuxuryCustomerMenu({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-black tracking-tight text-white">
-              {data?.restaurantName || data?.branchName || "EasyDine"}
+              {(data as any)?.restaurantName || data?.branchName || "EasyDine"}
             </h1>
             <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-semibold text-neutral-400 border border-neutral-800">
               <span className="text-amber-400 font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table")}</span>

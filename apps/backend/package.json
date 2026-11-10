@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1110.0",
+    "@easydine/types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@nestjs/common": "^11.2.6",
     "@nestjs/config": "^4.0.4",
@@ -39,7 +40,6 @@
     "@nestjs/swagger": "^8.1.1",
     "@nestjs/throttler": "^6.7.0",
     "@nestjs/websockets": "^11.2.6",
-    "@easydine/types": "workspace:*",
     "@prisma/client": "^6.19.3",
     "archiver": "^7.0.1",
     "bcrypt": "^6.0.0",
@@ -58,6 +58,7 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "serialport": "^13.0.0",
     "socket.io": "^4.8.3",
     "usb": "2.18.0",
     "zod": "^4.6.6"
