@@ -32,7 +32,7 @@ export function useStatusNote(autoDismissMs = 10_000) {
 
 const STYLE: Record<NoteKind, { box: string; Icon: typeof Info }> = {
   success: { box: "bg-success/10 text-success", Icon: CheckCircle2 },
-  error: { box: "bg-destructive/10 text-destructive", Icon: XCircle },
+  error: { box: "bg-red-500/15 text-red-400 border border-red-500/30 font-medium", Icon: XCircle },
   warning: { box: "bg-warning/10 text-warning", Icon: AlertTriangle },
   info: { box: "bg-secondary text-foreground", Icon: Info },
 };

@@ -184,7 +184,7 @@ export default function LuxuryCustomerMenu({
   const { data: status } = useQuery({
     queryKey: ["public-status", qrToken],
     queryFn: () => api.get<PublicStatus>(`/public/menu/${qrToken}/status`),
-    refetchInterval: 3000,
+    refetchInterval: 1500,
     enabled: !!data,
   });
 
@@ -429,7 +429,7 @@ export default function LuxuryCustomerMenu({
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
           <CheckCircle2 className="h-10 w-10" />
         </div>
-        <h2 className="text-2xl font-black text-white">Thank you, {guestName}!</h2>
+        <h2 className="text-2xl font-black text-white">{guestName ? `Thank you, ${guestName}!` : "Thank you!"}</h2>
         <p className="text-sm text-neutral-400">
           Order #{paidOrder.orderNumber} · Bill settled ✓
         </p>
@@ -450,21 +450,7 @@ export default function LuxuryCustomerMenu({
             <span className="text-emerald-400">₹{paidOrder.totalAmount}</span>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            sessionStorage.removeItem(nameStorageKey);
-            sessionStorage.removeItem(phoneStorageKey);
-            setGuestName("");
-            setGuestPhone("");
-            setCart([]);
-            setViewMode("MENU");
-            queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
-          }}
-          className="mt-2 w-full max-w-xs rounded-xl bg-amber-500 py-3 text-xs font-bold text-black transition-all hover:bg-amber-400 shadow-lg"
-        >
-          End Session (Next Guest)
-        </button>
+        
       </div>
     );
   }
@@ -569,9 +555,9 @@ export default function LuxuryCustomerMenu({
 
   // 2. LIVE ORDER TRACKING SCREEN (Images 1 & 2: Order #24 with Stepper, Bill so far, and Action buttons)
   if (viewMode === "TRACKING" && activeOrder) {
-    const isAccepted = activeOrder.acceptance === "ACCEPTED";
-    const isPreparing = activeOrder.status === "PREPARING" || (activeOrder as any).cookingStatus === "PREPARING";
-    const isServed = activeOrder.status === "SERVED" || activeOrder.status === "READY" || (activeOrder as any).cookingStatus === "SERVED";
+    const isServed = activeOrder.status === "SERVED" || activeOrder.status === "READY" || (activeOrder as any).cookingStatus === "SERVED" || (activeOrder as any).cookingStatus === "READY";
+    const isPreparing = activeOrder.status === "PREPARING" || (activeOrder as any).cookingStatus === "PREPARING" || isServed;
+    const isAccepted = activeOrder.acceptance === "ACCEPTED" || isPreparing || isServed;
 
     // Itemized list for "Bill so far"
     const orderItems = activeOrder.items || [];
@@ -648,8 +634,10 @@ export default function LuxuryCustomerMenu({
               >
                 {isServed ? (
                   <Check className="h-4 w-4 stroke-[3]" />
-                ) : (
+                ) : isPreparing ? (
                   <Clock className="h-4 w-4 text-amber-400 animate-spin" />
+                ) : (
+                  "2"
                 )}
               </div>
 

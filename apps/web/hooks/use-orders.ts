@@ -219,9 +219,9 @@ export type OrderTab = "pending" | "active" | "history";
 export function useAllOrders(branchId: string | null) {
   return useQuery({
     queryKey: ["orders", "manage", branchId, "all"],
-    queryFn: () => api.get<ManagedOrder[]>(`/orders/manage?tab=all`),
+    queryFn: () => api.get<ManagedOrder[]>('/orders/manage?tab=all'),
     enabled: !!branchId,
-    refetchInterval: 5000,
+    refetchInterval: 2000,
   });
 }
 

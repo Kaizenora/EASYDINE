@@ -108,6 +108,8 @@ export function MasterDetailOrders({
         o.status === "COMPLETED" ||
         o.status === "BILLED" ||
         o.status === "CANCELLED" ||
+        o.status === "PAID" ||
+        (o as any).orderStatus === "PAID" ||
         o.acceptance === "REJECTED"
     );
   }, [orders]);
@@ -122,13 +124,21 @@ export function MasterDetailOrders({
   // Selected order in the master-detail
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSelectedOrderId(null);
+  }, [activeTab]);
+
+  useEffect(() => {
+    setSelectedOrderId(null);
+  }, [activeTab]);
+
   const selectedOrder = useMemo(() => {
     if (selectedOrderId) {
-      const found = orders.find((o) => o.id === selectedOrderId || o.orderNumber === selectedOrderId);
+      const found = currentList.find((o) => o.id === selectedOrderId || o.orderNumber === selectedOrderId);
       if (found) return found;
     }
-    return currentList[0] || orders[0] || null;
-  }, [selectedOrderId, orders, currentList]);
+    return currentList[0] || null;
+  }, [selectedOrderId, currentList]);
 
   // Mutations for Accept & Reject
   const acceptOrder = useMutation({
@@ -137,7 +147,7 @@ export function MasterDetailOrders({
     onSuccess: (data) => {
       vibrateSuccess();
       playSuccessChime();
-      queryClient.invalidateQueries({ queryKey: ["managed-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       if (data?.printStatus === "PRINTED") {
@@ -158,7 +168,7 @@ export function MasterDetailOrders({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       api.post(`/orders/${id}/reject`, { reason }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["managed-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors"] });
       toast.info("Order rejected");
       if (onRefresh) onRefresh();

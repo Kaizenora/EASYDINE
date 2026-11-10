@@ -222,7 +222,7 @@ export class OrdersController {
   async listForManagement(
     @CurrentUser() user: SessionUser,
     @Query('branchId') branchId: string,
-    @Query('tab') tab?: 'pending' | 'active' | 'history',
+    @Query('tab') tab?: 'pending' | 'active' | 'history' | 'all',
     @Query('channel') channel?: 'STAFF' | 'ONLINE',
     @Query('type') type?: string,
   ) {

@@ -283,6 +283,17 @@ export class PublicMenuService {
         totalAmount: true,
         createdAt: true,
         acceptedAt: true,
+        kots: {
+          select: {
+            id: true,
+            status: true,
+            acceptedAt: true,
+            readyAt: true,
+            servedAt: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         items: {
           where: { status: { not: 'CANCELLED' } },
           select: {
@@ -309,22 +320,27 @@ export class PublicMenuService {
       return { order: null, openRequests: requests.map((r) => r.type) };
     }
 
-    // Derive aggregated cooking status from active items
+    // Derive aggregated cooking status from active items and kots
     const activeItems = order.items;
+    const kots = (order as any).kots || [];
     let cookingStatus = 'PENDING';
-    if (activeItems.length > 0) {
-      const allServed = activeItems.every((it) => it.status === 'SERVED');
-      const allReadyOrServed = activeItems.every((it) => it.status === 'READY' || it.status === 'SERVED');
-      const anyPreparing = activeItems.some((it) => it.status === 'PREPARING');
-      const anyAccepted = activeItems.some((it) => it.status === 'ACCEPTED') || order.acceptance === 'ACCEPTED';
 
-      if (allServed) {
+    const allKotStatuses = kots.map((k: any) => k.status);
+    const allItemStatuses = activeItems.map((i: any) => i.status);
+    const combinedStatuses = [...allKotStatuses, ...allItemStatuses];
+
+    if (combinedStatuses.length > 0) {
+      if (combinedStatuses.every((s: string) => s === 'SERVED')) {
         cookingStatus = 'SERVED';
-      } else if (allReadyOrServed) {
+      } else if (combinedStatuses.every((s: string) => s === 'READY' || s === 'SERVED')) {
         cookingStatus = 'READY';
-      } else if (anyPreparing) {
+      } else if (combinedStatuses.some((s: string) => s === 'SERVED')) {
+        cookingStatus = 'SERVED';
+      } else if (combinedStatuses.some((s: string) => s === 'READY')) {
+        cookingStatus = 'READY';
+      } else if (combinedStatuses.some((s: string) => s === 'PREPARING')) {
         cookingStatus = 'PREPARING';
-      } else if (anyAccepted) {
+      } else if (combinedStatuses.some((s: string) => s === 'ACCEPTED') || order.acceptance === 'ACCEPTED') {
         cookingStatus = 'ACCEPTED';
       }
     } else if (order.acceptance === 'ACCEPTED') {
@@ -339,6 +355,13 @@ export class PublicMenuService {
     const acceptedAt = order.acceptedAt
       ? new Date(order.acceptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : undefined;
+    const latestKot = kots[0];
+    const preparedAt = latestKot?.readyAt
+      ? new Date(latestKot.readyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : undefined;
+    const servedAt = latestKot?.servedAt
+      ? new Date(latestKot.servedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : undefined;
 
     return {
       order: {
@@ -350,6 +373,8 @@ export class PublicMenuService {
         totalAmount: order.totalAmount ? String(order.totalAmount) : '0.00',
         placedAt,
         acceptedAt,
+        preparedAt,
+        servedAt,
         isServed,
         items: order.items.map((it) => ({
           id: it.id,

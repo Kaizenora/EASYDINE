@@ -660,14 +660,16 @@ export class OrdersService {
   async listForManagement(
     branchId: string,
     filters: {
-      tab?: 'pending' | 'active' | 'history';
+      tab?: 'pending' | 'active' | 'history' | 'all';
       channel?: 'STAFF' | 'ONLINE';
       type?: string;
     },
   ) {
     const tab = filters.tab ?? 'active';
     const statusWhere: Prisma.OrderWhereInput =
-      tab === 'pending'
+      tab === 'all'
+        ? { createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) } }
+        : tab === 'pending'
         ? { status: 'OPEN', acceptance: 'PENDING' }
         : tab === 'active'
           ? {
@@ -2521,6 +2523,17 @@ export class OrdersService {
         where: { kotId },
         data: { status: target },
       });
+      const kotItems = await tx.kotItem.findMany({
+        where: { kotId },
+        select: { orderItemId: true },
+      });
+      const orderItemIds = kotItems.map((ki) => ki.orderItemId);
+      if (orderItemIds.length > 0) {
+        await tx.orderItem.updateMany({
+          where: { id: { in: orderItemIds } },
+          data: { status: target },
+        });
+      }
       return tx.kot.findUniqueOrThrow({ where: { id: kotId } });
     }, { timeout: 30000, maxWait: 15000 });
 
