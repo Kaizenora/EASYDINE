@@ -166,6 +166,89 @@ export class OrdersService {
     return branch?.taxMode ?? 'INCLUSIVE';
   }
 
+  async resolveOrCreateCustomer(
+    branchId: string,
+    params: {
+      customerId?: string | null;
+      name?: string | null;
+      phone?: string | null;
+    },
+    tx?: any,
+  ): Promise<string | null> {
+    const prismaClient = tx ?? this.prisma;
+    if (params.customerId) {
+      const existing = await prismaClient.customer.findFirst({
+        where: { id: params.customerId, branchId },
+        select: { id: true },
+      });
+      if (existing) return existing.id;
+    }
+
+    const rawPhone = params.phone?.trim();
+    const rawName = params.name?.trim();
+    const isGeneric =
+      !rawName ||
+      ['guest', 'walk-in', 'walk-in guest', 'takeaway guest'].includes(
+        rawName.toLowerCase(),
+      );
+    const meaningfulName = isGeneric ? null : rawName;
+    const meaningfulPhone =
+      rawPhone && rawPhone.length >= 3 ? rawPhone : null;
+
+    if (!meaningfulPhone && !meaningfulName) return null;
+
+    let customer: any = null;
+    if (meaningfulPhone) {
+      customer = await prismaClient.customer.findFirst({
+        where: { branchId, phone: meaningfulPhone },
+      });
+    }
+    if (!customer && meaningfulName) {
+      customer = await prismaClient.customer.findFirst({
+        where: {
+          branchId,
+          name: { equals: meaningfulName, mode: 'insensitive' },
+        },
+      });
+    }
+
+    if (customer) {
+      if (
+        meaningfulName &&
+        (!customer.name ||
+          ['guest', 'walk-in'].includes(customer.name.toLowerCase()))
+      ) {
+        await prismaClient.customer.update({
+          where: { id: customer.id },
+          data: { name: meaningfulName },
+        });
+      }
+      if (meaningfulPhone && !customer.phone) {
+        await prismaClient.customer.update({
+          where: { id: customer.id },
+          data: { phone: meaningfulPhone },
+        });
+      }
+      return customer.id;
+    }
+
+    const newCustomer = await prismaClient.customer.create({
+      data: {
+        branchId,
+        name:
+          meaningfulName ||
+          (meaningfulPhone ? `Customer ${meaningfulPhone}` : 'Guest'),
+        phone: meaningfulPhone || null,
+      },
+    });
+
+    this.realtime.emitToBranch(branchId, 'customer.updated', {
+      id: newCustomer.id,
+    });
+
+    return newCustomer.id;
+  }
+
   async createOrder(
     branchId: string,
     userId: string,
@@ -206,6 +289,18 @@ export class OrdersService {
     const modifierIds = [
       ...new Set(dto.items.flatMap((i) => i.modifierIds ?? [])),
     ];
+
+    if (!dto.customerId) {
+      const phone =
+        (dto as any).guestPhone ?? (dto as any).delivery?.deliveryPhone;
+      const resolvedId = await this.resolveOrCreateCustomer(branchId, {
+        name: dto.guestName,
+        phone,
+      });
+      if (resolvedId) {
+        dto.customerId = resolvedId;
+      }
+    }
 
     const [branch, menuItems, modifiers, table, customer] = await Promise.all([
       this.prisma.branch.findUnique({
@@ -1676,6 +1771,20 @@ export class OrdersService {
       if (!customer) throw new BadRequestException('Customer not found');
       effectiveCustomerId = customer.id;
     }
+    if (!effectiveCustomerId) {
+      const phone =
+        order.deliveryPhone ??
+        (dto as any).customerPhone ??
+        (dto as any).guestPhone;
+      const name =
+        order.guestName ??
+        (dto as any).customerName ??
+        (dto as any).guestName;
+      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
+        name,
+        phone,
+      });
+    }
 
     const { bill, locked, paid, auto, pointsToRedeem } = await this.resolveBill(
       branchId,
@@ -1810,7 +1919,9 @@ export class OrdersService {
         // The bill's figures are fixed by the first payment, whether or not
         // it settles the bill.
         const lockedFigures = locked
-          ? {}
+          ? (effectiveCustomerId && !order.customerId
+              ? { customerId: effectiveCustomerId }
+              : {})
           : {
               ...(effectiveCustomerId && !order.customerId
                 ? { customerId: effectiveCustomerId }

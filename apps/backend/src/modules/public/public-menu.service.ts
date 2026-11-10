@@ -63,6 +63,13 @@ export class PublicMenuService {
     if (isTakeaway || !table) return { ok: true };
     const branchId = table.floor.branchId;
 
+    if (guestName || phone) {
+      await this.ordersService.resolveOrCreateCustomer(branchId, {
+        name: guestName,
+        phone,
+      });
+    }
+
     if (table.status === 'AVAILABLE') {
       const noteParts = [guestName?.trim(), phone?.trim()].filter(Boolean);
       await this.prisma.table.update({

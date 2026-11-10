@@ -44,6 +44,8 @@ export function useCustomers(branchId: string | null, search?: string) {
     queryKey: ["customers", branchId, search],
     queryFn: ({ signal }) => api.get<Customer[]>(`/customers?branchId=${branchId}${search ? `&search=${search}` : ""}`, { signal }),
     enabled: !!branchId,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
 }
 

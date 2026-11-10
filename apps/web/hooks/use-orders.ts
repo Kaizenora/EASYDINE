@@ -48,6 +48,7 @@ export function useCreateOrder(branchId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "summary", branchId] });
+      queryClient.invalidateQueries({ queryKey: ["customers", branchId] });
     },
   });
 }
@@ -101,6 +102,7 @@ export function useCheckoutOrder(branchId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "summary", branchId] });
+      queryClient.invalidateQueries({ queryKey: ["customers", branchId] });
     },
   });
 }

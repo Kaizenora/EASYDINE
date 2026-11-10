@@ -159,6 +159,7 @@ function build(opts: { zones?: boolean } = {}) {
     { emitForBranch: jest.fn() } as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const service = new IntegrationsService(
     prisma,

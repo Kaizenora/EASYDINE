@@ -38,9 +38,9 @@ describe('HrController', () => {
   describe('updateShift', () => {
     it('updates shift after asserting branch access', async () => {
       const dto: ShiftUpdateDto = {
-        name: 'Morning Shift',
-        startTime: '08:00',
-        endTime: '16:00',
+        note: 'Morning Shift',
+        startsAt: '2026-11-10T08:00:00Z',
+        endsAt: '2026-11-10T16:00:00Z',
       };
 
       const result = await controller.updateShift(

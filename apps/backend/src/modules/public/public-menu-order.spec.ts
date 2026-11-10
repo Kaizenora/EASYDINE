@@ -51,7 +51,7 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
   });
 
   it('persists guestPhone on first QR order when provided', async () => {
-    const items = [{ menuItemId: 'item-1', quantity: 2 }];
+    const items = [{ menuItemId: 'item-1', quantity: 2, modifierIds: [] }];
     const order = await service.createOrder(
       'test-qr-token',
       items,
@@ -79,7 +79,7 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
   });
 
   it('ordering works seamlessly without guestPhone (optional, never blocks)', async () => {
-    const items = [{ menuItemId: 'item-1', quantity: 1 }];
+    const items = [{ menuItemId: 'item-1', quantity: 1, modifierIds: [] }];
     const order = await service.createOrder(
       'test-qr-token',
       items,
