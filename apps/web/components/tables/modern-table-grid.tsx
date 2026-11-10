@@ -203,9 +203,42 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     [tables]
   );
 
-  // Filtered tables
+  // Priority rank for ongoing tables:
+  // Active/ongoing tables (Service requests, Occupied, Open Orders) come first.
+  // Finished / Free / Available / Out-of-service tables go to the end.
+  const getOngoingTableRank = (t: RestaurantTable): number => {
+    const sReq = (t as any).serviceRequest;
+    const status = t.status as string;
+    const hasOrder = Boolean((t as any).orderNumber || (t as any).totalAmount);
+    const hasGuest = Boolean(t.customerName);
+
+    // 1. Critical service alert: Bill request or Waiter call
+    if (sReq === "BILL" || status === "BILL_REQUESTED") return 1;
+    if (sReq === "WAITER" || status === "WAITER_CALL") return 2;
+
+    // 2. Active ongoing occupied tables with guests or active orders
+    if (status === "OCCUPIED" && (hasOrder || hasGuest)) return 3;
+    if (status === "PREPARING") return 4;
+    if (status === "OCCUPIED") return 5;
+
+    // 3. Reserved
+    if (status === "RESERVED") return 6;
+
+    // 4. Cleaning
+    if (status === "CLEANING") return 7;
+
+    // 5. Finished / Available (FREE) tables placed at the end
+    if (status === "AVAILABLE" || status === "FREE") return 8;
+
+    // 6. Out of service placed last
+    if (status === "OUT_OF_SERVICE") return 9;
+
+    return 10;
+  };
+
+  // Filtered and sorted tables (ongoing first, finished at last)
   const filteredTables = useMemo(() => {
-    return tables.filter((t) => {
+    const list = tables.filter((t) => {
       if (search.trim()) {
         const q = search.toLowerCase();
         const matchesName = (t.name || "").toLowerCase().includes(q);
@@ -223,6 +256,15 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
         return (t.status as string) === "BILL_REQUESTED" || (t as any).serviceRequest === "BILL";
       }
       return true;
+    });
+
+    return [...list].sort((a, b) => {
+      const rankA = getOngoingTableRank(a);
+      const rankB = getOngoingTableRank(b);
+      if (rankA !== rankB) return rankA - rankB;
+      const numA = parseInt(String(a.number).replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt(String(b.number).replace(/\D/g, ""), 10) || 0;
+      return numA - numB;
     });
   }, [tables, search, filter]);
 
