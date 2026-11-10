@@ -128,7 +128,10 @@ export default function LuxuryCustomerMenu({
   }, []);
   const nameStorageKey = `qr-guest-name:${qrToken}`;
   const phoneStorageKey = `qr-guest-phone:${qrToken}`;
+  const orderIdStorageKey = `qr-active-order:${qrToken}`;
   const queryClient = useQueryClient();
+
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 
   // Customer identity: Name + Contact (per user demand)
   const [guestName, setGuestName] = useState("");
@@ -163,6 +166,7 @@ export default function LuxuryCustomerMenu({
   useEffect(() => {
     const savedName = sessionStorage.getItem(nameStorageKey);
     const savedPhone = sessionStorage.getItem(phoneStorageKey);
+    const savedOrderId = sessionStorage.getItem(orderIdStorageKey);
     if (savedName) {
       setGuestName(savedName);
       setNameDraft(savedName);
@@ -171,7 +175,10 @@ export default function LuxuryCustomerMenu({
       setGuestPhone(savedPhone);
       setPhoneDraft(savedPhone);
     }
-  }, [nameStorageKey, phoneStorageKey]);
+    if (savedOrderId) {
+      setActiveOrderId(savedOrderId);
+    }
+  }, [nameStorageKey, phoneStorageKey, orderIdStorageKey]);
 
   // Fetch Public Menu
   const { data, error } = useQuery({
@@ -182,14 +189,44 @@ export default function LuxuryCustomerMenu({
 
   // Live order status & service requests
   const { data: status } = useQuery({
-    queryKey: ["public-status", qrToken],
-    queryFn: () => api.get<PublicStatus>(`/public/menu/${qrToken}/status`),
+    queryKey: ["public-status", qrToken, activeOrderId],
+    queryFn: () =>
+      api.get<PublicStatus>(
+        `/public/menu/${qrToken}/status${activeOrderId ? `?orderId=${activeOrderId}` : ""}`
+      ),
     refetchInterval: 1500,
     enabled: !!data,
   });
 
-  const paidOrder = status?.order && (status.order.status === "PAID" || (status.order as any).orderStatus === "PAID") ? status.order : null;
-  const activeOrder = status?.order && status.order.status !== "CANCELLED" && status.order.status !== "COMPLETED" && status.order.status !== "PAID" && (status.order as any).orderStatus !== "PAID" ? status.order : null;
+  const paidOrder =
+    status?.order &&
+    (status.order.status === "PAID" ||
+      (status.order as any).orderStatus === "PAID")
+      ? status.order
+      : null;
+  const activeOrder =
+    status?.order &&
+    status.order.status !== "CANCELLED" &&
+    status.order.status !== "COMPLETED" &&
+    status.order.status !== "PAID" &&
+    (status.order as any).orderStatus !== "PAID"
+      ? status.order
+      : null;
+
+  // When an order is completed/paid and cleared by cashier, or on fresh scan with no active order
+  useEffect(() => {
+    if (status && !status.order && activeOrderId) {
+      sessionStorage.removeItem(nameStorageKey);
+      sessionStorage.removeItem(phoneStorageKey);
+      sessionStorage.removeItem(orderIdStorageKey);
+      setActiveOrderId(null);
+      setGuestName("");
+      setGuestPhone("");
+      setNameDraft("");
+      setPhoneDraft("");
+      setViewMode("MENU");
+    }
+  }, [status?.order, activeOrderId, nameStorageKey, phoneStorageKey, orderIdStorageKey]);
 
   // Auto-switch to tracking view when an active order exists and user hasn't explicitly navigated
   useEffect(() => {
@@ -235,7 +272,7 @@ export default function LuxuryCustomerMenu({
           kitchenNote: c.modifierLabel || undefined,
         })),
       }),
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
       setCurrentRequestId("req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
       vibrateSuccess();
       playSuccessChime();
@@ -243,6 +280,10 @@ export default function LuxuryCustomerMenu({
       setShowConfirmOrderModal(false);
       setShowCartDrawer(false);
       setViewMode("TRACKING");
+      if (res?.id) {
+        setActiveOrderId(res.id);
+        sessionStorage.setItem(orderIdStorageKey, res.id);
+      }
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
       toast.success(`Order #${res.orderNumber} placed! Waiting for cashier approval.`);
     },
@@ -423,9 +464,23 @@ export default function LuxuryCustomerMenu({
   }
 
   // 1b. PAID / THANK YOU SCREEN
+  const handleStartNewOrder = () => {
+    sessionStorage.removeItem(nameStorageKey);
+    sessionStorage.removeItem(phoneStorageKey);
+    sessionStorage.removeItem(orderIdStorageKey);
+    setActiveOrderId(null);
+    setGuestName("");
+    setGuestPhone("");
+    setNameDraft("");
+    setPhoneDraft("");
+    setCart([]);
+    setViewMode("MENU");
+    queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
+  };
+
   if (paidOrder && !cart.length) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0C0C0E] px-6 text-center text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0C0C0E] px-6 text-center text-white font-sans">
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
           <CheckCircle2 className="h-10 w-10" />
         </div>
@@ -450,7 +505,14 @@ export default function LuxuryCustomerMenu({
             <span className="text-emerald-400">₹{paidOrder.totalAmount}</span>
           </div>
         </div>
-        
+
+        <button
+          type="button"
+          onClick={handleStartNewOrder}
+          className="mt-5 flex h-12 w-full max-w-xs items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-sm font-bold text-black shadow-lg shadow-amber-500/20 transition-all hover:brightness-105 active:scale-[0.98]"
+        >
+          Start New Order · Browse Menu
+        </button>
       </div>
     );
   }

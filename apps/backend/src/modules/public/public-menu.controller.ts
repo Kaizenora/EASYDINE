@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UsePipes } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -50,8 +50,11 @@ export class PublicMenuController {
   }
 
   @Get('menu/:qrToken/status')
-  getStatus(@Param('qrToken') qrToken: string) {
-    return this.publicMenuService.getStatus(qrToken);
+  getStatus(
+    @Param('qrToken') qrToken: string,
+    @Query('orderId') orderId?: string,
+  ) {
+    return this.publicMenuService.getStatus(qrToken, orderId);
   }
 
   @Throttle({ default: { limit: 6, ttl: 60_000 } })

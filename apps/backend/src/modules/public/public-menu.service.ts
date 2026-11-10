@@ -266,55 +266,79 @@ export class PublicMenuService {
   }
 
   /** Live status of the table or takeaway tab, for the guest's QR page. */
-  async getStatus(qrToken: string) {
+  async getStatus(qrToken: string, requestedOrderId?: string) {
     const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
-    
-    const order = await this.prisma.order.findFirst({
-      where:
-        isTakeaway || !table
-          ? {
-              branchId: branch.id,
-              type: 'TAKEAWAY',
-              status: { in: ['OPEN', 'BILLED', 'PAID'] },
-            }
-          : {
-              tableId: table.id,
-              status: { in: ['OPEN', 'BILLED', 'PAID'] },
-            },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        acceptance: true,
-        totalAmount: true,
-        createdAt: true,
-        acceptedAt: true,
-        kots: {
-          select: {
-            id: true,
-            status: true,
-            acceptedAt: true,
-            readyAt: true,
-            servedAt: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: 'desc' },
+
+    const orderSelect = {
+      id: true,
+      orderNumber: true,
+      status: true,
+      acceptance: true,
+      totalAmount: true,
+      createdAt: true,
+      acceptedAt: true,
+      kots: {
+        select: {
+          id: true,
+          status: true,
+          acceptedAt: true,
+          readyAt: true,
+          servedAt: true,
+          createdAt: true,
         },
-        items: {
-          where: { status: { not: 'CANCELLED' } },
-          select: {
-            id: true,
-            nameSnapshot: true,
-            quantity: true,
-            unitPriceSnapshot: true,
-            lineTotal: true,
-            status: true,
-            kitchenNote: true,
-          },
+        orderBy: { createdAt: 'desc' as const },
+      },
+      items: {
+        where: { status: { not: 'CANCELLED' as const } },
+        select: {
+          id: true,
+          nameSnapshot: true,
+          quantity: true,
+          unitPriceSnapshot: true,
+          lineTotal: true,
+          status: true,
+          kitchenNote: true,
         },
       },
-    });
+    };
+
+    let order: any = null;
+
+    if (isTakeaway || !table) {
+      if (requestedOrderId) {
+        order = await this.prisma.order.findFirst({
+          where: {
+            id: requestedOrderId,
+            branchId: branch.id,
+            type: 'TAKEAWAY',
+          },
+          select: orderSelect,
+        });
+      }
+    } else {
+      // Dine-in table:
+      // If table is AVAILABLE, previous session is finished; reset to empty menu for new guests.
+      if (table.status !== 'AVAILABLE') {
+        order = await this.prisma.order.findFirst({
+          where: {
+            tableId: table.id,
+            status: { in: ['OPEN', 'BILLED'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: orderSelect,
+        });
+
+        if (!order && requestedOrderId) {
+          order = await this.prisma.order.findFirst({
+            where: {
+              id: requestedOrderId,
+              tableId: table.id,
+            },
+            select: orderSelect,
+          });
+        }
+      }
+    }
 
     const requests = (!isTakeaway && table)
       ? await this.prisma.tableRequest.findMany({

@@ -159,7 +159,7 @@ export function TableQrDialog({
 
                   {/* Dynamic Restaurant name line overlay */}
                   <div
-                    className="absolute text-left font-serif font-bold text-[#f7e0b5] truncate text-[11px] sm:text-[13px] tracking-wide"
+                    className="absolute text-left font-sans font-bold text-[#f7e0b5] truncate text-[11px] sm:text-[13px] tracking-wide"
                     style={{
                       left: "55.6%",
                       top: "62.4%",
@@ -172,7 +172,7 @@ export function TableQrDialog({
 
                   {/* Dynamic Table No line overlay */}
                   <div
-                    className="absolute text-left font-serif font-bold text-[#f7e0b5] truncate text-[12px] sm:text-[14px] tracking-wide"
+                    className="absolute text-left font-sans font-bold text-[#f7e0b5] truncate text-[12px] sm:text-[14px] tracking-wide"
                     style={{
                       left: "51.8%",
                       top: "66.8%",
