@@ -201,8 +201,9 @@ export function useIngredients(branchId: string | null) {
 export function useLowStockIngredients(branchId: string | null) {
   return useQuery({
     queryKey: ["inventory", "ingredients", branchId, "low-stock"],
-    queryFn: () =>
-      api.get<Ingredient[]>(`/inventory/ingredients/low-stock?branchId=${branchId}`),
+    queryFn: ({ signal }) =>
+      api.get<Ingredient[]>(`/inventory/ingredients/low-stock?branchId=${branchId}`, { signal }),
+    staleTime: 60_000,
     enabled: !!branchId,
   });
 }

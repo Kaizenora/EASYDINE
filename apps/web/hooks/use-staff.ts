@@ -41,14 +41,14 @@ export interface StaffRole {
 export function useStaff() {
   return useQuery({
     queryKey: ["staff"],
-    queryFn: () => api.get<StaffMember[]>("/users"),
+    queryFn: ({ signal }) => api.get<StaffMember[]>("/users", { signal }),
   });
 }
 
 export function useStaffRoles() {
   return useQuery({
     queryKey: ["staff", "roles"],
-    queryFn: () => api.get<StaffRole[]>("/users/roles"),
+    queryFn: ({ signal }) => api.get<StaffRole[]>("/users/roles", { signal }),
   });
 }
 
@@ -80,7 +80,7 @@ export function useDeleteStaff() {
 export function useDepartments() {
   return useQuery({
     queryKey: ["staff", "departments"],
-    queryFn: () => api.get<Department[]>("/users/departments"),
+    queryFn: ({ signal }) => api.get<Department[]>("/users/departments", { signal }),
   });
 }
 

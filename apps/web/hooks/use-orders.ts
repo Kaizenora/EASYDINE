@@ -219,7 +219,7 @@ export type OrderTab = "pending" | "active" | "history";
 export function useAllOrders(branchId: string | null) {
   return useQuery({
     queryKey: ["orders", "manage", branchId, "all"],
-    queryFn: () => api.get<ManagedOrder[]>('/orders/manage?tab=all'),
+    queryFn: ({ signal }) => api.get<ManagedOrder[]>('/orders/manage?tab=all', { signal }),
     enabled: !!branchId,
     refetchInterval: 2000,
   });
@@ -233,11 +233,11 @@ export function useManagedOrders(
 ) {
   return useQuery({
     queryKey: ["orders", "manage", branchId, tab, channel ?? "", type ?? ""],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const q = new URLSearchParams({ branchId: branchId ?? "", tab });
       if (channel) q.set("channel", channel);
       if (type) q.set("type", type);
-      return api.get<ManagedOrder[]>(`/orders/manage?${q.toString()}`);
+      return api.get<ManagedOrder[]>(`/orders/manage?${q.toString()}`, { signal });
     },
     enabled: !!branchId,
     refetchInterval: 10_000,

@@ -2,6 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, useState } from "react";
+import { useCurrentUser } from "@/hooks/use-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { branchViewState, type BranchViewState } from "@/lib/branch-state";
 
@@ -27,9 +29,14 @@ const BranchContext = createContext<BranchContextValue | null>(null);
 const STORAGE_KEY = "easydine_branch_id";
 
 export function BranchProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  const { data: me } = useCurrentUser();
+  const tenantId = me?.user?.restaurantId ?? "current";
+
   const { data: branches, isLoading, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["branches"],
-    queryFn: () => api.get<Branch[]>("/branches"),
+    queryKey: ["branches", tenantId],
+    queryFn: ({ signal }) => api.get<Branch[]>("/branches", { signal }),
+    staleTime: 60_000,
   });
 
   // Lazy initializer runs once on mount (a legitimate one-time read of an
@@ -47,8 +54,16 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   }, [branches, manualBranchId]);
 
   const setBranchId = (id: string) => {
-    setManualBranchId(id);
-    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, id);
+    if (id !== manualBranchId) {
+      setManualBranchId(id);
+      if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, id);
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return key[0] !== "auth" && key[0] !== "branches";
+        },
+      });
+    }
   };
 
   const state = branchViewState({ isPending, isError, count: branches?.length ?? 0 });

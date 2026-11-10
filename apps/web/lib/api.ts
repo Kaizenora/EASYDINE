@@ -41,6 +41,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (res.status === 204) return undefined as T;
     return res.json();
   } catch (err: any) {
+    if (options.signal?.aborted) {
+      throw err;
+    }
     if (err?.name === "AbortError" || err?.message?.includes("timed out")) {
       throw new ApiError("Request timed out. Please try again.", 408);
     }
@@ -52,7 +55,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, options?: RequestInit) => request<T>(path, { method: "GET", ...options }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>

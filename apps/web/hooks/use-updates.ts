@@ -16,7 +16,7 @@ export function useUpdateCheck(enabled = true) {
   return useQuery({
     enabled,
     queryKey: ["system", "update-check"],
-    queryFn: () => api.get<VersionInfo>("/system/update/check"),
+    queryFn: ({ signal }) => api.get<VersionInfo>("/system/update/check", { signal }),
     // The backend caches this for an hour too — refetching more often than
     // that on the client just re-hits the same cached response.
     staleTime: 5 * 60 * 1000,

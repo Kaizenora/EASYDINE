@@ -33,10 +33,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<SessionUser> {
+    const t0 = performance.now();
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: permissionInclude,
     });
+    const durationMs = (performance.now() - t0).toFixed(2);
+    console.log(`[auth-validate] duration=${durationMs}ms`);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Session no longer valid');

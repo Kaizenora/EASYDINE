@@ -26,10 +26,8 @@ export interface Reservation {
 export function useReservations(branchId: string | null, date?: string) {
   return useQuery({
     queryKey: ["reservations", branchId, date],
-    queryFn: () =>
-      api.get<Reservation[]>(
-        `/reservations?branchId=${branchId}${date ? `&date=${date}` : ""}`,
-      ),
+    queryFn: ({ signal }) => api.get<Reservation[]>(
+        `/reservations?branchId=${branchId}${date ? `&date=${date}` : ""}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 30_000,
   });

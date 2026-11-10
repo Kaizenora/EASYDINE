@@ -59,11 +59,13 @@ export interface BranchSettings {
 export function useSettings(branchId: string | null) {
   return useQuery({
     queryKey: ["settings", branchId],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.get<{ restaurant: RestaurantSettings; branch: BranchSettings }>(
         `/settings?branchId=${branchId}`,
+        { signal },
       ),
     enabled: !!branchId,
+    staleTime: 60_000,
   });
 }
 
@@ -84,11 +86,13 @@ export type DisplayBranch = Pick<
 export function useDisplaySettings(branchId: string | null) {
   return useQuery({
     queryKey: ["settings", branchId, "display"],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.get<{ restaurant: DisplayRestaurant; branch: DisplayBranch }>(
         `/settings/display?branchId=${branchId}`,
+        { signal },
       ),
     enabled: !!branchId,
+    staleTime: 60_000,
   });
 }
 

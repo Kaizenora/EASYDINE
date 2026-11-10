@@ -55,7 +55,7 @@ export interface MenuItem {
 export function useCategories(branchId: string | null) {
   return useQuery({
     queryKey: ["menu", "categories", branchId],
-    queryFn: () => api.get<MenuCategory[]>(`/menu/categories?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<MenuCategory[]>(`/menu/categories?branchId=${branchId}`, { signal }),
     enabled: !!branchId,
   });
 }

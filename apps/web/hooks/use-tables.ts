@@ -53,7 +53,7 @@ export interface Floor {
 export function useFloors(branchId: string | null) {
   return useQuery({
     queryKey: ["floors", branchId],
-    queryFn: () => api.get<Floor[]>(`/tables/floors?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<Floor[]>(`/tables/floors?branchId=${branchId}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 10_000,
   });

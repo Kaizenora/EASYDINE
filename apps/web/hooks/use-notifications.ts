@@ -34,7 +34,7 @@ const QUERY_KEY = ["notifications"];
 export function useNotifications() {
   return useQuery({
     queryKey: QUERY_KEY,
-    queryFn: () => api.get<NotificationPage>("/notifications?pageSize=20"),
+    queryFn: ({ signal }) => api.get<NotificationPage>("/notifications?pageSize=20", { signal }),
     refetchInterval: 10_000,
   });
 }

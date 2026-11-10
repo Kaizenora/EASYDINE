@@ -39,12 +39,12 @@ export default function ReportsPage() {
 
   const { data: catalog } = useQuery({
     queryKey: ["reports", "catalog"],
-    queryFn: () => api.get<CatalogEntry[]>("/reports"),
+    queryFn: ({ signal }) => api.get<CatalogEntry[]>("/reports", { signal }),
   });
   const qs = `branchId=${branchId}&from=${range.from}&to=${range.to}`;
   const { data, isLoading, error } = useQuery({
     queryKey: ["reports", key, branchId, range.from, range.to],
-    queryFn: () => api.get<ReportResult>(`/reports/${key}?${qs}`),
+    queryFn: ({ signal }) => api.get<ReportResult>(`/reports/${key}?${qs}`, { signal }),
     enabled: !!branchId && range.from <= range.to,
     retry: false,
   });

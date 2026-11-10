@@ -43,7 +43,7 @@ export interface KotTicket {
 export function useKdsStations(branchId: string | null) {
   return useQuery({
     queryKey: ["kds", "stations", branchId],
-    queryFn: () => api.get<{ id: string; name: string }[]>(`/kds/stations?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<{ id: string; name: string }[]>(`/kds/stations?branchId=${branchId}`, { signal }),
     enabled: !!branchId,
     staleTime: 60_000,
   });
@@ -154,7 +154,7 @@ export interface IncomingOrder {
 export function useKdsIncoming(branchId: string | null, enabled = true) {
   return useQuery({
     queryKey: ["kds", "incoming", branchId],
-    queryFn: () => api.get<IncomingOrder[]>(`/kds/incoming?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<IncomingOrder[]>(`/kds/incoming?branchId=${branchId}`, { signal }),
     enabled: !!branchId && enabled,
     refetchInterval: 15_000,
   });
@@ -201,7 +201,7 @@ export interface KitchenProgressTicket {
 export function useKdsProgress(branchId: string | null) {
   return useQuery({
     queryKey: ["kds", "progress", branchId],
-    queryFn: () => api.get<KitchenProgressTicket[]>(`/kds/progress?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<KitchenProgressTicket[]>(`/kds/progress?branchId=${branchId}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 20_000,
   });
@@ -251,7 +251,7 @@ export interface KitchenPerformanceRow {
 export function useKitchenPerformance(branchId: string | null) {
   return useQuery({
     queryKey: ["kds", "performance", branchId],
-    queryFn: () => api.get<KitchenPerformanceRow[]>(`/kds/performance?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<KitchenPerformanceRow[]>(`/kds/performance?branchId=${branchId}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 60_000,
   });

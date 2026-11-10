@@ -22,7 +22,7 @@ export interface RoleWithPermissions {
 export function useRoles() {
   return useQuery({
     queryKey: ["roles"],
-    queryFn: () => api.get<RoleWithPermissions[]>("/roles"),
+    queryFn: ({ signal }) => api.get<RoleWithPermissions[]>("/roles", { signal }),
   });
 }
 

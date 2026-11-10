@@ -34,7 +34,7 @@ export interface DashboardSummary {
 export function useDashboardSummary(branchId: string | null) {
   return useQuery({
     queryKey: ["dashboard", "summary", branchId],
-    queryFn: () => api.get<DashboardSummary>(`/dashboard/summary?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<DashboardSummary>(`/dashboard/summary?branchId=${branchId}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 15_000,
   });
@@ -48,7 +48,7 @@ export interface DashboardTrends {
 export function useDashboardTrends(branchId: string | null, days = 14) {
   return useQuery({
     queryKey: ["dashboard", "trends", branchId, days],
-    queryFn: () => api.get<DashboardTrends>(`/dashboard/trends?branchId=${branchId}&days=${days}`),
+    queryFn: ({ signal }) => api.get<DashboardTrends>(`/dashboard/trends?branchId=${branchId}&days=${days}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 60_000,
   });
@@ -86,7 +86,7 @@ export const DEFAULT_DASHBOARD_PREFS: DashboardPrefs = {
 export function useDashboardPrefs() {
   return useQuery({
     queryKey: ["dashboard", "preferences"],
-    queryFn: () => api.get<DashboardPrefs>("/dashboard/preferences"),
+    queryFn: ({ signal }) => api.get<DashboardPrefs>("/dashboard/preferences", { signal }),
     staleTime: 5 * 60_000,
   });
 }

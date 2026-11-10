@@ -94,7 +94,7 @@ export function useGst(branchId: string | null, from: string, to: string) {
 export function useBranchOverview(from: string, to: string) {
   return useQuery({
     queryKey: ["acct", "branches", from, to],
-    queryFn: () => api.get<BranchRow[]>(`/accounting/branches?from=${from}&to=${to}`),
+    queryFn: ({ signal }) => api.get<BranchRow[]>(`/accounting/branches?from=${from}&to=${to}`, { signal }),
   });
 }
 

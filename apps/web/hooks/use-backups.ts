@@ -43,7 +43,8 @@ export function useBackups(enabled = true) {
   return useQuery({
     enabled,
     queryKey: ["backups", "list"],
-    queryFn: () => api.get<BackupEntry[]>("/backups"),
+    queryFn: ({ signal }) => api.get<BackupEntry[]>("/backups", { signal }),
+    staleTime: 60_000,
     // Backups can take a while to move from PENDING to VERIFIED/FAILED —
     // poll gently while the list is on screen so the status column updates
     // itself instead of requiring a manual refresh.

@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 import { useBranch } from "@/hooks/use-branch";
 import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import { useLowStockIngredients } from "@/hooks/use-inventory";
@@ -25,6 +27,7 @@ const ENTITY_TO_NAV: Record<string, string> = {
 };
 
 export function useNavBadges(): NavBadges {
+  const pathname = usePathname() ?? "";
   const { branchId } = useBranch();
   const { data: me } = useCurrentUser();
   const user = me?.user;
@@ -33,10 +36,15 @@ export function useNavBadges(): NavBadges {
   const canBackup = hasPermission(user, "backup.manage");
   const canInventory = hasPermission(user, "inventory.manage");
 
+  // Load ancillary background checks lazily only when the specific subtab / view is active
+  const isUpdatesActive = pathname.startsWith("/settings/updates");
+  const isBackupActive = pathname.startsWith("/settings/backup");
+  const isInventoryActive = pathname.startsWith("/inventory");
+
   const { data: notifications } = useNotifications();
-  const { data: update } = useUpdateCheck(canUpdate);
-  const { data: backups } = useBackups(canBackup);
-  const { data: lowStock } = useLowStockIngredients(canInventory ? branchId : null);
+  const { data: update } = useUpdateCheck(canUpdate && isUpdatesActive);
+  const { data: backups } = useBackups(canBackup && isBackupActive);
+  const { data: lowStock } = useLowStockIngredients(canInventory && isInventoryActive ? branchId : null);
 
   const nav: Record<string, boolean> = {};
   const settingsTabs: Record<string, boolean> = {};

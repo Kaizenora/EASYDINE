@@ -9,8 +9,9 @@ import { api } from "@/lib/api";
 export function useCurrentUser() {
   return useQuery({
     queryKey: ["auth", "me"],
-    queryFn: () => api.get<{ user: SessionUser }>("/auth/me"),
+    queryFn: ({ signal }) => api.get<{ user: SessionUser }>("/auth/me", { signal }),
     retry: false,
+    staleTime: 60_000,
   });
 }
 

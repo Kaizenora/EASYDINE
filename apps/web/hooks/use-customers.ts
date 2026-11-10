@@ -42,8 +42,7 @@ export interface CustomerDetail extends Customer {
 export function useCustomers(branchId: string | null, search?: string) {
   return useQuery({
     queryKey: ["customers", branchId, search],
-    queryFn: () =>
-      api.get<Customer[]>(`/customers?branchId=${branchId}${search ? `&search=${search}` : ""}`),
+    queryFn: ({ signal }) => api.get<Customer[]>(`/customers?branchId=${branchId}${search ? `&search=${search}` : ""}`, { signal }),
     enabled: !!branchId,
   });
 }
@@ -51,7 +50,7 @@ export function useCustomers(branchId: string | null, search?: string) {
 export function useCustomer(branchId: string | null, id: string | null) {
   return useQuery({
     queryKey: ["customers", branchId, "detail", id],
-    queryFn: () => api.get<CustomerDetail>(`/customers/${id}?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<CustomerDetail>(`/customers/${id}?branchId=${branchId}`, { signal }),
     enabled: !!branchId && !!id,
   });
 }
@@ -87,7 +86,7 @@ export function useDeleteCustomer(branchId: string | null) {
 export function useCustomerAddresses(branchId: string | null, customerId: string | null) {
   return useQuery({
     queryKey: ["customers", branchId, "addresses", customerId],
-    queryFn: () => api.get<CustomerAddress[]>(`/customers/${customerId}/addresses?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<CustomerAddress[]>(`/customers/${customerId}/addresses?branchId=${branchId}`, { signal }),
     enabled: !!branchId && !!customerId,
   });
 }
@@ -146,7 +145,7 @@ export interface CustomerRewards {
 export function useCustomerRewards(branchId: string | null, id: string | null) {
   return useQuery({
     queryKey: ["customers", branchId, "rewards", id],
-    queryFn: () => api.get<CustomerRewards>(`/customers/${id}/rewards?branchId=${branchId}`),
+    queryFn: ({ signal }) => api.get<CustomerRewards>(`/customers/${id}/rewards?branchId=${branchId}`, { signal }),
     enabled: !!branchId && !!id,
   });
 }
