@@ -1952,6 +1952,12 @@ export class OrdersService {
           id: order.tableId,
         });
       }
+      // Push customer.updated so the Customers dashboard refetches after payment.
+      if (effectiveCustomerId) {
+        this.realtime.emitToBranch(branchId, 'customer.updated', {
+          id: effectiveCustomerId,
+        });
+      }
       void this.webhooks.emitForBranch(branchId, 'order.paid', {
         orderId: updated.id,
         orderNumber: updated.orderNumber,

@@ -17,7 +17,11 @@ export function realtimeInvalidations(event: string, branchId: string): string[]
     case "order.deleted":
       // ["kds"]: incoming orders waiting to be accepted, and tickets that a
       // cancel/decline/payment changed, live on the kitchen screen too.
-      return [["dashboard"], ["floors", branchId], ["orders"], ["kds"]];
+      // ["customers"]: order.paid updates the customer's visit count / loyalty.
+      return [["dashboard"], ["floors", branchId], ["orders"], ["kds"], ["customers", branchId]];
+    case "customer.updated":
+      // Emitted by the backend after an order is fully paid for a linked customer.
+      return [["customers", branchId]];
     case "reservation.created":
     case "reservation.updated":
       return [["reservations", branchId], ["dashboard"]];
@@ -35,6 +39,7 @@ export const REALTIME_EVENTS = [
   "order.created",
   "order.updated",
   "order.deleted",
+  "customer.updated",
   "reservation.created",
   "reservation.updated",
 ] as const;

@@ -1055,6 +1055,11 @@ export default function LuxuryCustomerMenu({
                           src={dishImg}
                           alt={item.name}
                           className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const t = e.currentTarget;
+                            const fb = getDishImage({ ...item, imageUrl: null }, cat.name);
+                            if (t.src !== fb) t.src = fb;
+                          }}
                         />
                       </div>
 
