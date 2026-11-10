@@ -191,23 +191,60 @@ export class OrdersService {
       historical?: { createdAt: Date };
     } = {},
   ) {
+    if (options.clientRequestId) {
+      const existing = await this.prisma.order.findFirst({
+        where: { branchId, clientRequestId: options.clientRequestId },
+        select: { id: true },
+      });
+      if (existing) {
+        return this.getOrder(branchId, existing.id);
+      }
+    }
+
     const channel = options.channel ?? 'STAFF';
-    // Online orders wait for a staff member to accept them unless this
-    // branch is set to auto-confirm (Settings > Online orders).
+    const menuItemIds = [...new Set(dto.items.map((i) => i.menuItemId))];
+    const modifierIds = [
+      ...new Set(dto.items.flatMap((i) => i.modifierIds ?? [])),
+    ];
+
+    const [branch, menuItems, modifiers, table, customer] = await Promise.all([
+      this.prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { autoConfirmOrders: true, taxMode: true },
+      }),
+      this.prisma.menuItem.findMany({
+        where: { id: { in: menuItemIds }, branchId },
+        include: { category: { select: { showOnWebsite: true } } },
+      }),
+      this.prisma.modifier.findMany({ where: { id: { in: modifierIds } } }),
+      dto.tableId
+        ? this.prisma.table.findFirst({
+            where: { id: dto.tableId, floor: { branchId } },
+            select: { id: true },
+          })
+        : null,
+      dto.customerId
+        ? this.prisma.customer.findFirst({
+            where: { id: dto.customerId, branchId },
+            select: { id: true },
+          })
+        : null,
+    ]);
+
     let acceptance: 'NOT_REQUIRED' | 'PENDING' | 'ACCEPTED' = 'NOT_REQUIRED';
     if (options.requireAcceptance) {
-      const branch = await this.prisma.branch.findUnique({
-        where: { id: branchId },
-        select: { autoConfirmOrders: true },
-      });
       acceptance = branch?.autoConfirmOrders ? 'ACCEPTED' : 'PENDING';
     }
-    const menuItemIds = [...new Set(dto.items.map((i) => i.menuItemId))];
-    if (channel === 'ONLINE')
-      await this.assertOrderableOnWebsite(branchId, menuItemIds);
-    const menuItems = await this.prisma.menuItem.findMany({
-      where: { id: { in: menuItemIds }, branchId },
-    });
+
+    if (channel === 'ONLINE') {
+      const hidden = menuItems.filter((m) => m.category?.showOnWebsite === false);
+      if (hidden.length > 0) {
+        throw new BadRequestException(
+          `${hidden.map((h) => '"' + h.name + '"').join(', ')} is not available for online ordering`,
+        );
+      }
+    }
+
     if (menuItems.length !== menuItemIds.length) {
       throw new BadRequestException(
         'One or more menu items are invalid for this branch',
@@ -233,47 +270,24 @@ export class OrdersService {
           : m,
       ]),
     );
-    const taxMode = await this.getBranchTaxMode(branchId);
+    const taxMode = branch?.taxMode ?? 'INCLUSIVE';
 
-    const modifierIds = [
-      ...new Set(dto.items.flatMap((i) => i.modifierIds ?? [])),
-    ];
-    const modifiers = await this.prisma.modifier.findMany({
-      where: { id: { in: modifierIds } },
-    });
-    const modifierById = new Map(modifiers.map((m) => [m.id, m]));
     if (modifiers.length !== modifierIds.length) {
       throw new BadRequestException('One or more modifiers are invalid');
     }
+    const modifierById = new Map(modifiers.map((m) => [m.id, m]));
+
     await this.validateModifierSelections(
       branchId,
       dto.items,
       channel === 'ONLINE',
     );
 
-    // A client-supplied tableId/customerId that belongs to a different
-    // branch/restaurant must never be trusted directly: without this check,
-    // the order below would create a real FK link to another tenant's
-    // table (and flip its status to OCCUPIED) or customer, and this
-    // branch's own staff could then read that other tenant's table/customer
-    // details back out via getOrder()/getReceiptData()'s `include`.
-    if (dto.tableId) {
-      const table = await this.prisma.table.findFirst({
-        where: { id: dto.tableId, floor: { branchId } },
-        select: { id: true },
-      });
-      if (!table) {
-        throw new BadRequestException('Table is invalid for this branch');
-      }
+    if (dto.tableId && !table) {
+      throw new BadRequestException('Table is invalid for this branch');
     }
-    if (dto.customerId) {
-      const customer = await this.prisma.customer.findFirst({
-        where: { id: dto.customerId, branchId },
-        select: { id: true },
-      });
-      if (!customer) {
-        throw new BadRequestException('Customer is invalid for this branch');
-      }
+    if (dto.customerId && !customer) {
+      throw new BadRequestException('Customer is invalid for this branch');
     }
 
     const lineInputs = dto.items.map((cartItem) =>
@@ -517,43 +531,60 @@ export class OrdersService {
     items: CartItemDto[],
     options: { enforceModifierLimits?: boolean; websiteOnly?: boolean } = {},
   ) {
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, branchId },
-      include: { items: true, payments: { select: { id: true } } },
-    });
+    const menuItemIds = [...new Set(items.map((i) => i.menuItemId))];
+    const modifierIds = [...new Set(items.flatMap((i) => i.modifierIds ?? []))];
+
+    const [order, branch, menuItems, modifiers] = await Promise.all([
+      this.prisma.order.findFirst({
+        where: { id: orderId, branchId },
+        include: { items: true, payments: { select: { id: true } } },
+      }),
+      this.prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { taxMode: true },
+      }),
+      this.prisma.menuItem.findMany({
+        where: { id: { in: menuItemIds }, branchId },
+        include: { category: { select: { showOnWebsite: true } } },
+      }),
+      this.prisma.modifier.findMany({
+        where: { id: { in: modifierIds } },
+      }),
+    ]);
+
     if (!order) throw new NotFoundException('Order not found');
     this.assertNoPayments(order);
-    await this.validateModifierSelections(
-      branchId,
-      items,
-      options.enforceModifierLimits ?? false,
-    );
     if (order.status !== 'OPEN') {
       throw new BadRequestException('Order is not open — cannot add items');
     }
 
-    const menuItemIds = [...new Set(items.map((i) => i.menuItemId))];
-    if (options.websiteOnly)
-      await this.assertOrderableOnWebsite(branchId, menuItemIds);
-    const menuItems = await this.prisma.menuItem.findMany({
-      where: { id: { in: menuItemIds }, branchId },
-    });
+    if (options.websiteOnly) {
+      const hidden = menuItems.filter((m) => m.category?.showOnWebsite === false);
+      if (hidden.length > 0) {
+        throw new BadRequestException(
+          `${hidden.map((h) => '"' + h.name + '"').join(', ')} is not available for online ordering`,
+        );
+      }
+    }
+
     if (menuItems.length !== menuItemIds.length) {
       throw new BadRequestException(
         'One or more menu items are invalid for this branch',
       );
     }
     const menuItemById = new Map(menuItems.map((m) => [m.id, m]));
-    const taxMode = await this.getBranchTaxMode(branchId);
+    const taxMode = branch?.taxMode ?? 'INCLUSIVE';
 
-    const modifierIds = [...new Set(items.flatMap((i) => i.modifierIds ?? []))];
-    const modifiers = await this.prisma.modifier.findMany({
-      where: { id: { in: modifierIds } },
-    });
-    const modifierById = new Map(modifiers.map((m) => [m.id, m]));
     if (modifiers.length !== modifierIds.length) {
       throw new BadRequestException('One or more modifiers are invalid');
     }
+    const modifierById = new Map(modifiers.map((m) => [m.id, m]));
+
+    await this.validateModifierSelections(
+      branchId,
+      items,
+      options.enforceModifierLimits ?? false,
+    );
 
     const lineInputs = items.map((cartItem) =>
       this.buildLine(

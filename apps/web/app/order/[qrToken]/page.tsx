@@ -149,6 +149,7 @@ export default function LuxuryCustomerMenu({
   const [extraCheese, setExtraCheese] = useState(false);
   const [extraButter, setExtraButter] = useState(false);
   const [cookingNote, setCookingNote] = useState("");
+  const [currentRequestId, setCurrentRequestId] = useState<string>(() => "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
   const [customizingQty, setCustomizingQty] = useState(1);
   const [isListeningSearchMic, setIsListeningSearchMic] = useState(false);
   const [isListeningCustomMic, setIsListeningCustomMic] = useState(false);
@@ -223,6 +224,7 @@ export default function LuxuryCustomerMenu({
   const placeOrder = useMutation({
     mutationFn: () =>
       api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
+        requestId: currentRequestId,
         guestName: guestName || "Guest",
         guestPhone: guestPhone || undefined,
         notes: cart.map((c) => c.cookingNote).filter(Boolean).join("; ") || undefined,
@@ -233,6 +235,7 @@ export default function LuxuryCustomerMenu({
         })),
       }),
     onSuccess: (res) => {
+      setCurrentRequestId("req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
       vibrateSuccess();
       playSuccessChime();
       setCart([]);
