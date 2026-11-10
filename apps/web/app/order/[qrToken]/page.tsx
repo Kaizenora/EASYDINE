@@ -690,14 +690,20 @@ export default function LuxuryCustomerMenu({
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className={cn("text-sm font-bold", isServed ? "text-white" : "text-neutral-500")}>
-                    Served at your table
+                    {isTakeaway ? "Ready for pickup at counter" : "Served at your table"}
                   </span>
                   {activeOrder.servedAt && (
                     <span className="text-[11px] text-neutral-400">{activeOrder.servedAt}</span>
                   )}
                 </div>
                 <span className="text-xs text-neutral-400">
-                  {isServed ? "Enjoy your meal!" : "Ready soon"}
+                  {isServed
+                    ? isTakeaway
+                      ? "Your order is packed and ready for pickup!"
+                      : "Enjoy your meal!"
+                    : isTakeaway
+                    ? "Packing soon"
+                    : "Ready soon"}
                 </span>
               </div>
             </div>

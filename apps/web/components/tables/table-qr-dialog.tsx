@@ -50,8 +50,17 @@ export function TableQrDialog({
     }
   }, [open, table.id, table.qrToken]);
 
+  const restoName = settingsData?.restaurant?.name || settingsData?.branch?.name || "";
+  const tableNum = table.number ?? table.name ?? "";
+  const queryParams = [
+    restoName ? `resto=${encodeURIComponent(restoName)}` : "",
+    tableNum ? `table=${encodeURIComponent(tableNum)}` : "",
+  ].filter(Boolean).join("&");
+
   const orderUrl =
-    table.qrToken && baseUrl ? `${baseUrl}/order/${table.qrToken}` : null;
+    table.qrToken && baseUrl
+      ? `${baseUrl}/order/${table.qrToken}${queryParams ? `?${queryParams}` : ""}`
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

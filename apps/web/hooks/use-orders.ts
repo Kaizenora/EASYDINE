@@ -212,6 +212,14 @@ export interface ManagedOrder {
   table: { id: string; name: string | null; number: number } | null;
   customer: Customer | null;
   items: { id: string; nameSnapshot: string; quantity: number }[];
+  payments?: { id: string; method: string; amount: string }[];
+  kots?: {
+    id: string;
+    status: string;
+    acceptedAt?: string | null;
+    readyAt?: string | null;
+    servedAt?: string | null;
+  }[];
 }
 
 export type OrderTab = "pending" | "active" | "history";

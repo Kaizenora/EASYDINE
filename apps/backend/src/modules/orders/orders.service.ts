@@ -690,7 +690,28 @@ export class OrdersService {
         ...(filters.channel ? { channel: filters.channel } : {}),
         ...(filters.type ? { type: filters.type as never } : {}),
       },
-      include: { table: true, customer: true, items: true },
+      include: {
+        table: true,
+        customer: true,
+        items: true,
+        kots: {
+          select: {
+            id: true,
+            status: true,
+            acceptedAt: true,
+            readyAt: true,
+            servedAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        payments: {
+          select: {
+            id: true,
+            method: true,
+            amount: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
