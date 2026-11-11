@@ -44,6 +44,7 @@ import { useUpdateKotStatus } from "@/hooks/use-kds";
 import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatCurrency, formatOrderNumber } from "@/lib/format";
 import { tableLabel, type PaymentMethodDto } from "@easydine/types";
+import { openReceiptPrint } from "@/lib/print";
 
 interface MasterDetailOrdersProps {
   branchId: string | null;
@@ -520,6 +521,21 @@ export function MasterDetailOrders({
                     {formatClock(selectedOrder.createdAt)} · {formatElapsed(selectedOrder.createdAt, now)}
                   </p>
                 </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-xl border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
+                    onClick={() => {
+                      if (branchId) openReceiptPrint(selectedOrder.id, branchId);
+                    }}
+                  >
+                    <Printer className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
+                    {selectedOrderIsPaid ? "Reprint Receipt" : "Print Bill"}
+                  </Button>
+                </div>
               </div>
 
               {/* Live Kitchen Status Section with Quick Advance */}
@@ -623,14 +639,39 @@ export function MasterDetailOrders({
                         Collect UPI / Card
                       </Button>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 w-full rounded-xl border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
+                      onClick={() => {
+                        if (branchId) openReceiptPrint(selectedOrder.id, branchId);
+                      }}
+                    >
+                      <Printer className="mr-2 h-4 w-4 text-amber-400" />
+                      Print Bill (Customer Check)
+                    </Button>
                     <p className="text-[11px] text-neutral-400">
                       Settle payment when customer pays at the counter. Order will be marked PAID and moved to History.
                     </p>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 pt-1">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Bill settled. Transaction completed.</span>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Bill settled. Transaction completed.</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
+                      onClick={() => {
+                        if (branchId) openReceiptPrint(selectedOrder.id, branchId);
+                      }}
+                    >
+                      <Printer className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
+                      Reprint Receipt
+                    </Button>
                   </div>
                 )}
               </div>
@@ -665,11 +706,14 @@ export function MasterDetailOrders({
                           {/* Modifiers List */}
                           {item.modifiers && item.modifiers.length > 0 && (
                             <div className="flex flex-col gap-0.5">
-                              {item.modifiers.map((mod: any, mIdx: number) => (
-                                <span key={mIdx} className="text-xs text-neutral-400">
-                                  + {mod.nameSnapshot}
-                                </span>
-                              ))}
+                              {item.modifiers.map((mod: any, mIdx: number) => {
+                                const adj = Number(mod.priceAdjSnapshot || 0);
+                                return (
+                                  <span key={mIdx} className="text-xs text-amber-300 font-medium">
+                                    + {mod.nameSnapshot} {adj > 0 ? `(+₹${adj})` : ""}
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
 

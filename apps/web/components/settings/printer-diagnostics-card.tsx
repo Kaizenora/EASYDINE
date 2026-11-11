@@ -36,10 +36,9 @@ export function PrinterDiagnosticsCard() {
     <Card className="flex flex-col gap-4 p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Thermal printer (receipts &amp; kitchen tickets)</h2>
+          <h2 className="text-sm font-semibold text-foreground">Server-side ESC/POS (Local / Self-hosted only)</h2>
           <p className="text-sm text-muted-foreground">
-            Native ESC/POS printing, independent of the browser print dialog. The printer must be reachable
-            from the machine running EasyDine: USB on a Linux host, or a network printer on port 9100.
+            Native ESC/POS printing, independent of the browser print dialog. Direct hardware connection from the backend server (USB on a local Linux host or network printer on port 9100). In cloud deployments, use the Cashier Bill Printer above.
           </p>
         </div>
         <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching}>

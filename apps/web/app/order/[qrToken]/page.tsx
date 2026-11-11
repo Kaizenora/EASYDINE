@@ -68,21 +68,21 @@ function getDishImage(item: { name: string; imageUrl?: string | null }, catName:
 function formatDeviceTime(val?: string | null): string {
   if (!val) return "";
   try {
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    }
-    // Handle fallback if backend sent raw time like "04:39 AM"
-    const match = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    // If backend sent a bare time like "04:39 AM" or "4:39 PM" (UTC from server formatter)
+    const match = val.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
     if (match) {
       let hours = parseInt(match[1], 10);
       const minutes = parseInt(match[2], 10);
-      const meridiem = match[3]?.toUpperCase();
+      const meridiem = match[4]?.toUpperCase();
       if (meridiem === "PM" && hours < 12) hours += 12;
       if (meridiem === "AM" && hours === 12) hours = 0;
       const now = new Date();
       const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hours, minutes));
       return utcDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     }
     return val;
   } catch {
@@ -131,7 +131,16 @@ interface PublicStatus {
     acceptedAt?: string;
     preparedAt?: string;
     servedAt?: string;
-    items: { id: string; nameSnapshot: string; quantity: number; status: string; unitPriceSnapshot?: string; lineTotal?: string; kitchenNote?: string }[];
+    items: {
+      id: string;
+      nameSnapshot: string;
+      quantity: number;
+      status: string;
+      unitPriceSnapshot?: string;
+      lineTotal?: string;
+      kitchenNote?: string;
+      modifiers?: { id: string; nameSnapshot: string; priceAdjSnapshot?: string | number }[];
+    }[];
     totalAmount?: string;
   } | null;
   openRequests: ("WAITER" | "BILL")[];
@@ -190,8 +199,7 @@ export default function LuxuryCustomerMenu({
 
   // Modals
   const [customizingItem, setCustomizingItem] = useState<{ item: PublicMenuItem; categoryName: string } | null>(null);
-  const [extraCheese, setExtraCheese] = useState(false);
-  const [extraButter, setExtraButter] = useState(false);
+  const [selectedModifierIds, setSelectedModifierIds] = useState<string[]>([]);
   const [cookingNote, setCookingNote] = useState("");
   const [currentRequestId, setCurrentRequestId] = useState<string>(() => "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
   const [customizingQty, setCustomizingQty] = useState(1);
@@ -382,7 +390,8 @@ export default function LuxuryCustomerMenu({
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.quantity,
-          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
+          modifierIds: c.modifierIds ?? [],
+          kitchenNote: c.cookingNote || undefined,
         })),
       }),
     onSuccess: (res: any) => {
@@ -390,6 +399,11 @@ export default function LuxuryCustomerMenu({
       vibrateSuccess();
       playSuccessChime();
       const orderNum = res?.orderNumber || "Pending";
+      const allMods = (data?.categories || [])
+        .flatMap((cat) => cat.items)
+        .flatMap((it) => it.modifierGroups || [])
+        .flatMap((g) => g.modifierGroup.modifiers);
+
       const newActiveOrder = {
         id: res?.id || activeOrderId || "",
         orderNumber: orderNum,
@@ -403,7 +417,15 @@ export default function LuxuryCustomerMenu({
           unitPriceSnapshot: String(c.unitPrice),
           lineTotal: String(c.unitPrice * c.quantity),
           status: "PENDING",
-          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
+          kitchenNote: c.cookingNote || undefined,
+          modifiers: (c.modifierIds || []).map((id) => {
+            const found = allMods.find((m) => m.id === id);
+            return {
+              id,
+              nameSnapshot: found?.name || "Extra",
+              priceAdjSnapshot: found?.priceAdjustment || "0",
+            };
+          }),
         })),
         totalAmount: cartTotalPrice.toFixed(0),
       };
@@ -1029,9 +1051,21 @@ export default function LuxuryCustomerMenu({
                     ₹{item.lineTotal || (parseFloat(item.unitPriceSnapshot || "150") * item.quantity).toFixed(0)}
                   </span>
                 </div>
+                {item.modifiers && item.modifiers.length > 0 && (
+                  <div className="mt-0.5 flex flex-wrap gap-1.5">
+                    {item.modifiers.map((m: any) => {
+                      const adj = Number(m.priceAdjSnapshot || 0);
+                      return (
+                        <span key={m.id} className="text-xs text-amber-300 font-medium">
+                          + {m.nameSnapshot} {adj > 0 ? `(+₹${adj})` : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 {item.kitchenNote && (
-                  <p className="mt-0.5 text-xs text-amber-400 font-medium">
-                    {item.kitchenNote}
+                  <p className="mt-0.5 text-xs text-neutral-400">
+                    Note: &ldquo;{item.kitchenNote}&rdquo;
                   </p>
                 )}
               </div>
@@ -1369,11 +1403,14 @@ export default function LuxuryCustomerMenu({
                           <button
                             type="button"
                             onClick={() => {
+                              const defaultMods = (item.modifierGroups || [])
+                                .flatMap((g) => g.modifierGroup.modifiers)
+                                .filter((m) => m.isDefault)
+                                .map((m) => m.id);
                               setCustomizingItem({ item, categoryName: cat.name });
                               setCustomizingQty(1);
                               setCookingNote("");
-                              setExtraCheese(false);
-                              setExtraButter(false);
+                              setSelectedModifierIds(defaultMods);
                             }}
                             className="flex h-8 items-center rounded-xl bg-[#E5A93C] px-3.5 text-xs font-bold text-black shadow-lg hover:bg-amber-400"
                           >
@@ -1504,89 +1541,159 @@ export default function LuxuryCustomerMenu({
               </div>
             </div>
 
-            {/* Add-ons & Extras */}
-            <div className="mt-4 flex flex-col gap-2">
-              <label className="text-xs font-bold text-neutral-300">Add-ons & Extras</label>
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-xs">
-                <span>Extra cheese</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-amber-400">+₹40</span>
-                  <input
-                    type="checkbox"
-                    checked={extraCheese}
-                    onChange={(e) => setExtraCheese(e.target.checked)}
-                    className="h-4 w-4 rounded accent-[#E5A93C]"
-                  />
-                </div>
-              </label>
+            {/* Add-ons & Modifiers (Configured on Menu Item) */}
+            {(() => {
+              const itemGroups = customizingItem.item.modifierGroups || [];
+              const allMods = itemGroups.flatMap((g) => g.modifierGroup.modifiers);
+              const selectedMods = allMods.filter((m) => selectedModifierIds.includes(m.id));
+              const extraTotal = selectedMods.reduce((sum, m) => sum + parseFloat(m.priceAdjustment || "0"), 0);
+              const basePrice = parseFloat(customizingItem.item.price || "0");
+              const lineUnitPrice = basePrice + extraTotal;
 
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-xs">
-                <span>Extra butter</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-amber-400">+₹20</span>
-                  <input
-                    type="checkbox"
-                    checked={extraButter}
-                    onChange={(e) => setExtraButter(e.target.checked)}
-                    className="h-4 w-4 rounded accent-[#E5A93C]"
-                  />
-                </div>
-              </label>
-            </div>
+              const toggleMod = (groupId: string, modId: string, maxSelect: number) => {
+                setSelectedModifierIds((prev) => {
+                  const grp = itemGroups.find((g) => g.modifierGroup.id === groupId);
+                  const grpModIds = grp?.modifierGroup.modifiers.map((m) => m.id) || [];
+                  const isChecked = prev.includes(modId);
+                  if (isChecked) {
+                    return prev.filter((id) => id !== modId);
+                  }
+                  if (maxSelect === 1) {
+                    const withoutGroup = prev.filter((id) => !grpModIds.includes(id));
+                    return [...withoutGroup, modId];
+                  }
+                  const currentCount = prev.filter((id) => grpModIds.includes(id)).length;
+                  if (maxSelect > 1 && currentCount >= maxSelect) {
+                    toast.info(`You can select at most ${maxSelect} options for this group`);
+                    return prev;
+                  }
+                  return [...prev, modId];
+                });
+              };
 
-            {/* Quantity Stepper & Add Button */}
-            <div className="mt-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm font-bold">
-                <button
-                  onClick={() => setCustomizingQty((q) => Math.max(1, q - 1))}
-                  className="text-neutral-400 hover:text-white"
-                >
-                  −
-                </button>
-                <span>{customizingQty}</span>
-                <button
-                  onClick={() => setCustomizingQty((q) => q + 1)}
-                  className="text-neutral-400 hover:text-white"
-                >
-                  +
-                </button>
-              </div>
+              return (
+                <>
+                  {itemGroups.map(({ modifierGroup: group }) => {
+                    const isSingle = group.maxSelect === 1;
+                    return (
+                      <div key={group.id} className="mt-4 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-neutral-300">
+                            {group.name}
+                            {group.isRequired && (
+                              <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                                Required
+                              </span>
+                            )}
+                          </label>
+                          <span className="text-[11px] text-neutral-500">
+                            {isSingle ? "Choose 1" : group.maxSelect > 1 ? `Up to ${group.maxSelect}` : "Optional"}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {group.modifiers.map((mod) => {
+                            const isChecked = selectedModifierIds.includes(mod.id);
+                            const priceAdj = parseFloat(mod.priceAdjustment || "0");
+                            return (
+                              <label
+                                key={mod.id}
+                                onClick={() => toggleMod(group.id, mod.id, group.maxSelect)}
+                                className={cn(
+                                  "flex cursor-pointer items-center justify-between rounded-xl border p-3 text-xs transition-colors",
+                                  isChecked
+                                    ? "border-[#E5A93C] bg-amber-500/10 text-white"
+                                    : "border-neutral-800 bg-neutral-900/60 text-neutral-300 hover:border-neutral-700"
+                                )}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <input
+                                    type={isSingle ? "radio" : "checkbox"}
+                                    checked={isChecked}
+                                    readOnly
+                                    className="h-4 w-4 rounded accent-[#E5A93C]"
+                                  />
+                                  <span className="font-medium">{mod.name}</span>
+                                </div>
+                                {priceAdj > 0 && (
+                                  <span className="font-semibold text-amber-400">
+                                    +₹{priceAdj.toFixed(0)}
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
 
-              <button
-                type="button"
-                onClick={() => {
-                  const basePrice = parseFloat(customizingItem.item.price);
-                  const extra = (extraCheese ? 40 : 0) + (extraButter ? 20 : 0);
-                  const unitPrice = basePrice + extra;
-                  const lineId = `line-${customizingItem.item.id}-${Date.now()}`;
-                  const extrasList: string[] = [];
-                  if (extraCheese) extrasList.push("Extra cheese (+₹40)");
-                  if (extraButter) extrasList.push("Extra butter (+₹20)");
+                  {/* Quantity Stepper & Add Button */}
+                  <div className="mt-5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setCustomizingQty((q) => Math.max(1, q - 1))}
+                        className="text-neutral-400 hover:text-white"
+                      >
+                        −
+                      </button>
+                      <span>{customizingQty}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomizingQty((q) => q + 1)}
+                        className="text-neutral-400 hover:text-white"
+                      >
+                        +
+                      </button>
+                    </div>
 
-                  setCart((prev) => [
-                    ...prev,
-                    {
-                      id: lineId,
-                      menuItemId: customizingItem.item.id,
-                      name: customizingItem.item.name,
-                      imageUrl: getDishImage(customizingItem.item, customizingItem.categoryName),
-                      isVeg: customizingItem.item.isVeg,
-                      modifierIds: [],
-                      modifierLabel: extrasList.join(", "),
-                      unitPrice,
-                      quantity: customizingQty,
-                      cookingNote: cookingNote.trim(),
-                    },
-                  ]);
+                    <button
+                      type="button"
+                      onClick={() => {
+                        for (const { modifierGroup: group } of itemGroups) {
+                          const count = selectedModifierIds.filter((id) =>
+                            group.modifiers.some((m) => m.id === id)
+                          ).length;
+                          const min = Math.max(group.minSelect, group.isRequired ? 1 : 0);
+                          if (count < min) {
+                            toast.error(`Please select at least ${min} option(s) for "${group.name}"`);
+                            return;
+                          }
+                        }
 
-                  toast.success(`Added ${customizingItem.item.name}`);
-                  setCustomizingItem(null);
-                }}
-                className="flex-1 rounded-xl bg-[#E5A93C] py-3 text-sm font-black text-black hover:bg-amber-400"
-              >
-                Add item · ₹{((parseFloat(customizingItem.item.price) + (extraCheese ? 40 : 0) + (extraButter ? 20 : 0)) * customizingQty).toFixed(0)}
-              </button>
-            </div>
+                        const lineId = `line-${customizingItem.item.id}-${Date.now()}`;
+                        const extrasList = selectedMods.map((m) => {
+                          const p = parseFloat(m.priceAdjustment || "0");
+                          return p > 0 ? `${m.name} (+₹${p.toFixed(0)})` : m.name;
+                        });
+
+                        setCart((prev) => [
+                          ...prev,
+                          {
+                            id: lineId,
+                            menuItemId: customizingItem.item.id,
+                            name: customizingItem.item.name,
+                            imageUrl: getDishImage(customizingItem.item, customizingItem.categoryName),
+                            isVeg: customizingItem.item.isVeg,
+                            modifierIds: selectedModifierIds,
+                            modifierLabel: extrasList.join(", "),
+                            unitPrice: lineUnitPrice,
+                            quantity: customizingQty,
+                            cookingNote: cookingNote.trim(),
+                          },
+                        ]);
+
+                        toast.success(`Added ${customizingItem.item.name}`);
+                        setCustomizingItem(null);
+                      }}
+                      className="flex-1 rounded-xl bg-[#E5A93C] py-3 text-sm font-black text-black hover:bg-amber-400"
+                    >
+                      Add item · ₹{(lineUnitPrice * customizingQty).toFixed(0)}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
