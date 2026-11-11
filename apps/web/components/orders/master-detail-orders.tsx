@@ -51,6 +51,41 @@ interface MasterDetailOrdersProps {
   onRefresh?: () => void;
 }
 
+/** Re-renders every `intervalMs` so relative times ("5 min") stay current. */
+function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/** "just now", "5 min", "2 h 10 min", "3 d" */
+function formatElapsed(createdAt: string | null | undefined, now: number): string {
+  if (!createdAt) return "";
+  const t = new Date(createdAt).getTime();
+  if (Number.isNaN(t)) return "";
+  const mins = Math.max(0, Math.floor((now - t) / 60_000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) {
+    const rem = mins % 60;
+    return rem ? `${hours} h ${rem} min` : `${hours} h`;
+  }
+  return `${Math.floor(hours / 24)} d`;
+}
+
+/** Clock time the order was placed, in the device's local time, e.g. "10:28 AM". */
+function formatClock(createdAt: string | null | undefined): string {
+  if (!createdAt) return "";
+  const d = new Date(createdAt);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 function getCookingStatus(order: ManagedOrder): {
   label: string;
   color: string;
@@ -151,6 +186,8 @@ export function MasterDetailOrders({
 }: MasterDetailOrdersProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Ticks every 30s so "5 min" / "placed 10:28 AM · 7 min" stay current.
+  const now = useNow();
 
   // Tab: Incoming Queue vs Active vs History
   const [activeTab, setActiveTab] = useState<"QUEUE" | "IN_PROGRESS" | "HISTORY">("QUEUE");
@@ -419,7 +456,7 @@ export function MasterDetailOrders({
                           <span className="text-[11px] text-amber-400/90 font-mono">📞 {guestPhone}</span>
                         )}
                       </div>
-                      <span className="text-xs text-neutral-400">1 min</span>
+                      <span className="text-xs text-neutral-400">{formatElapsed(order.createdAt, now)}</span>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-neutral-300">
@@ -503,7 +540,8 @@ export function MasterDetailOrders({
                     {selectedOrder.deliveryPhone || selectedOrder.customer?.phone
                       ? ` · 📞 ${selectedOrder.deliveryPhone || selectedOrder.customer?.phone}`
                       : ""}{" "}
-                    · {selectedOrderIsTakeaway ? "Takeaway QR" : "Table QR"} · placed just now
+                    · {selectedOrderIsTakeaway ? "Takeaway QR" : "Table QR"} · placed{" "}
+                    {formatClock(selectedOrder.createdAt)} · {formatElapsed(selectedOrder.createdAt, now)}
                   </p>
                 </div>
               </div>
