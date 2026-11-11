@@ -35,7 +35,7 @@ import { publishDisplay } from "@/lib/customer-display";
 import { playPaymentReceived } from "@/lib/celebrate";
 import { buildUpiUri } from "@/lib/upi";
 import { QRCodeSVG } from "qrcode.react";
-import { canPrintOnDevice } from "@/lib/device-print";
+import { canPrintEscposLocally } from "@/lib/device-print";
 import { openKotPrint, openReceiptPrint } from "@/lib/print";
 import { round2 } from "@/lib/pricing-preview";
 
@@ -107,7 +107,7 @@ export function CheckoutPanel({
   const canDiscount = hasPermission(me?.user, "discounts.apply");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const phone = canPrintOnDevice();
+  const phone = canPrintEscposLocally();
   const printUsb = usePrintOrderUsb(branchId);
   const printKot = usePrintKot(branchId);
   const onPrinted = (r: PrintJobResult) =>

@@ -1,7 +1,8 @@
-// Printing from the phone itself (EasyDine Android app) or desktop browser (Web Bluetooth):
-// a paired Bluetooth thermal printer, or Android's print dialog (Save as PDF and every installed
-// printer). In a normal browser, Web Bluetooth or the browser print dialog is used.
-import { isNativeApp, plugin } from "@/lib/native";
+// Printing from the phone itself (EasyDine Android app): a paired Bluetooth
+// thermal printer, or Android's print dialog (Save as PDF and every installed
+// printer). Desktop Web Bluetooth is a separate ESC/POS path; browser bill
+// printing uses the receipt-only OS print dialog.
+import { isNativeApp, nativePlatform, plugin } from "./native.ts";
 
 export interface BtPrinter {
   name: string;
@@ -21,12 +22,17 @@ export function nativePrinter(): NativePrinterApi | null {
 }
 
 export function isWebBluetoothSupported(): boolean {
-  return typeof navigator !== "undefined" && typeof (navigator as any).bluetooth !== "undefined";
+  return typeof navigator !== "undefined" && "bluetooth" in navigator;
 }
 
-/** True inside the app on a phone or in a browser supporting Web Bluetooth. */
+/** True inside the Android app when its native printer plugin is installed. */
 export function canPrintOnDevice(): boolean {
-  return (isNativeApp() && !!nativePrinter()) || isWebBluetoothSupported();
+  return isNativeApp() && nativePlatform() === "ANDROID" && !!nativePrinter();
+}
+
+/** True when ESC/POS can be sent locally through Android or browser Bluetooth. */
+export function canPrintEscposLocally(): boolean {
+  return canPrintOnDevice() || isWebBluetoothSupported();
 }
 
 export function savedBtPrinter(): BtPrinter | null {
@@ -66,14 +72,14 @@ export function registerPrinterPicker(listener: (resolve: Resolve) => void) {
 
 /** Opens the "choose a Bluetooth printer" dialog and resolves with the choice. */
 export async function chooseBtPrinter(): Promise<BtPrinter | null> {
-  if (isNativeApp()) {
+  if (canPrintOnDevice()) {
     return new Promise((resolve) => (pickerListener ? pickerListener(resolve) : resolve(null)));
   }
 
   // Web Bluetooth browser prompt
   if (isWebBluetoothSupported()) {
     try {
-      const device = await (navigator as any).bluetooth.requestDevice({
+      const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
           "000018f0-0000-1000-8000-00805f9b34fb",
@@ -101,7 +107,7 @@ async function printViaWebBluetooth(chunks: string[]): Promise<void> {
     throw new Error("Web Bluetooth is not supported in this browser. Use Chrome or Edge over HTTPS/localhost.");
   }
 
-  const device = await (navigator as any).bluetooth.requestDevice({
+  const device = await navigator.bluetooth.requestDevice({
     acceptAllDevices: true,
     optionalServices: [
       "000018f0-0000-1000-8000-00805f9b34fb",
@@ -114,7 +120,7 @@ async function printViaWebBluetooth(chunks: string[]): Promise<void> {
   if (!server) throw new Error("Could not connect to Bluetooth device GATT server.");
 
   const services = await server.getPrimaryServices();
-  let writeChar: any = null;
+  let writeChar: BluetoothRemoteGATTCharacteristic | undefined;
 
   for (const service of services) {
     const chars = await service.getCharacteristics();
@@ -140,10 +146,12 @@ async function printViaWebBluetooth(chunks: string[]): Promise<void> {
     const CHUNK_SIZE = 100;
     for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
       const slice = bytes.slice(offset, offset + CHUNK_SIZE);
-      if (writeChar.writeValueWithoutResponse) {
+      if (writeChar.properties.writeWithoutResponse) {
         await writeChar.writeValueWithoutResponse(slice);
+      } else if (writeChar.properties.write) {
+        await writeChar.writeValueWithResponse(slice);
       } else {
-        await writeChar.writeValue(slice);
+        throw new Error("The printer Bluetooth characteristic does not support writing.");
       }
     }
   }
@@ -151,8 +159,9 @@ async function printViaWebBluetooth(chunks: string[]): Promise<void> {
 
 /** Sends ESC/POS data (base64 from the server) to the chosen Bluetooth printer. */
 export async function printEscposOnDevice(chunks: string[]): Promise<void> {
-  const np = nativePrinter();
-  if (np) {
+  if (canPrintOnDevice()) {
+    const np = nativePrinter();
+    if (!np) throw new Error("The Android printer plugin is not available.");
     let printer = savedBtPrinter();
     if (!printer) {
       printer = await chooseBtPrinter();
@@ -174,9 +183,8 @@ export async function printEscposOnDevice(chunks: string[]): Promise<void> {
 /** Opens browser/system print dialog for a bill / receipt / ticket. */
 export async function printHtmlOnDevice(html: string, name: string): Promise<void> {
   const np = nativePrinter();
-  if (np) {
-    await np.printHtml({ html, name });
-    return;
+  if (!canPrintOnDevice() || !np) {
+    throw new Error("Native receipt printing requires the EasyDine Android printer plugin.");
   }
-  window.print();
+  await np.printHtml({ html, name });
 }

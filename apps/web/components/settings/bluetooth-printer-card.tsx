@@ -1,7 +1,7 @@
 "use client";
 
-import { Bluetooth, CheckCircle2, ChefHat, Printer, RefreshCw, Smartphone, Sparkles, Unplug } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Bluetooth, CheckCircle2, ChefHat, Printer } from "lucide-react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,26 +9,28 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBranch } from "@/hooks/use-branch";
-import { useOpenCashDrawer, usePrintTestSlip } from "@/hooks/use-print";
-import { canPrintOnDevice, chooseBtPrinter, saveBtPrinter, savedBtPrinter } from "@/lib/device-print";
+import { useOpenCashDrawer, usePrintTestBill, usePrintTestSlip } from "@/hooks/use-print";
+import {
+  canPrintOnDevice,
+  chooseBtPrinter,
+  saveBtPrinter,
+  savedBtPrinter,
+  type BtPrinter,
+} from "@/lib/device-print";
+import {
+  getReceiptPrintLayout,
+  isReceiptPrintLayout,
+  saveReceiptPrintLayout,
+  type ReceiptPrintLayout,
+} from "@/lib/receipt-print-layout";
 import { toast } from "@/lib/toast";
 
-const subscribe = (cb: () => void) => {
-  window.addEventListener("storage", cb);
-  window.addEventListener("easydine:printer", cb);
-  return () => {
-    window.removeEventListener("storage", cb);
-    window.removeEventListener("easydine:printer", cb);
-  };
-};
-const read = () => window.localStorage.getItem("easydine.btPrinter") ?? "";
-
 export function BluetoothPrinterCard() {
-  const raw = useSyncExternalStore(subscribe, read, () => "");
   const { branchId } = useBranch();
-  const testReceipt = usePrintTestSlip(branchId);
+  const testBill = usePrintTestBill();
   const testKot = usePrintTestSlip(branchId, "kot");
   const openDrawer = useOpenCashDrawer();
+  const testBillPending = useRef(false);
 
   const [cashierPrinterName, setCashierPrinterName] = useState(() => {
     if (typeof window !== "undefined") {
@@ -44,63 +46,52 @@ export function BluetoothPrinterCard() {
     return "Kitchen KOT 80mm ESC/POS";
   });
 
-  const [note, setNote] = useState<string | null>(null);
   const [pairingCashier, setPairingCashier] = useState(false);
   const [pairingKitchen, setPairingKitchen] = useState(false);
+  const [pairedPrinter, setPairedPrinter] = useState<BtPrinter | null>(savedBtPrinter);
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [receiptLayout, setReceiptLayout] = useState<ReceiptPrintLayout>(getReceiptPrintLayout);
 
   const native = canPrintOnDevice();
-  const savedPrinter = raw ? savedBtPrinter() : null;
 
   const savePrinters = () => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("easydine.cashierPrinterName", cashierPrinterName);
       window.localStorage.setItem("easydine.kitchenPrinterName", kitchenPrinterName);
-      saveBtPrinter({ name: cashierPrinterName, address: "00:11:22:33:44:55" });
+      if (native && pairedPrinter) saveBtPrinter(pairedPrinter);
       window.dispatchEvent(new Event("easydine:printer"));
       toast.success("Printer configuration saved");
     }
   };
 
-  const handlePairWebBluetooth = async (target: "cashier" | "kitchen") => {
-    if (native) {
+  const handlePairAndroidPrinter = async (target: "cashier" | "kitchen") => {
+    if (!native) return;
+    if (target === "cashier") setPairingCashier(true);
+    else setPairingKitchen(true);
+    try {
       const p = await chooseBtPrinter();
       if (p) {
+        setPairedPrinter(p);
         if (target === "cashier") setCashierPrinterName(p.name);
         else setKitchenPrinterName(p.name);
         window.dispatchEvent(new Event("easydine:printer"));
         toast.success(`Paired ${p.name}`);
       }
-      return;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not pair the Bluetooth printer.");
+    } finally {
+      setPairingCashier(false);
+      setPairingKitchen(false);
     }
+  };
 
-    if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
-      try {
-        if (target === "cashier") setPairingCashier(true);
-        else setPairingKitchen(true);
-
-        const nav = navigator as unknown as { bluetooth: { requestDevice: (opt: any) => Promise<{ name?: string }> } };
-        const device = await nav.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb"],
-        });
-
-        const name = device.name || (target === "cashier" ? "Bluetooth POS Thermal" : "Bluetooth Kitchen KOT");
-        if (target === "cashier") {
-          setCashierPrinterName(name);
-        } else {
-          setKitchenPrinterName(name);
-        }
-        toast.success(`Connected to ${name}`);
-      } catch (err) {
-        // User cancelled or bluetooth not available
-        toast.info("Bluetooth pairing window closed or cancelled.");
-      } finally {
-        setPairingCashier(false);
-        setPairingKitchen(false);
-      }
-    } else {
-      toast.info("Web Bluetooth requires Chrome/Edge with Bluetooth enabled. You can also specify the printer profile name directly below.");
+  const changeReceiptLayout = (value: string) => {
+    if (!isReceiptPrintLayout(value)) return;
+    try {
+      saveReceiptPrintLayout(value);
+      setReceiptLayout(value);
+    } catch {
+      toast.error("Could not save the receipt paper layout on this device.");
     }
   };
 
@@ -116,13 +107,13 @@ export function BluetoothPrinterCard() {
               Thermal & Bluetooth Printers
             </h2>
             <p className="text-xs text-muted-foreground">
-              Connect 58mm / 80mm ESC-POS wireless and Bluetooth thermal printers for Cashier & Kitchen
+              Pair Bluetooth printers in the Android app. Desktop bills use the OS print dialog and installed printer drivers.
             </p>
           </div>
         </div>
         <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 gap-1.5 py-1">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          ESC/POS Engine Ready
+          {native ? "Native printer ready" : "OS print dialog"}
         </Badge>
       </div>
 
@@ -140,7 +131,7 @@ export function BluetoothPrinterCard() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Prints customer bills, payment slips, and triggers automatic cash drawer kick.
+            Opens customer bills in the print dialog. Cash drawer behavior depends on the selected printer path.
           </p>
 
           <div className="space-y-1.5">
@@ -157,38 +148,50 @@ export function BluetoothPrinterCard() {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={pairingCashier}
-              onClick={() => handlePairWebBluetooth("cashier")}
-              className="gap-1.5 text-xs"
-            >
-              <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
-              {pairingCashier ? "Scanning..." : "Pair Bluetooth"}
-            </Button>
+            {native ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pairingCashier}
+                onClick={() => void handlePairAndroidPrinter("cashier")}
+                className="gap-1.5 text-xs"
+              >
+                <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
+                {pairingCashier ? "Scanning..." : "Pair Bluetooth"}
+              </Button>
+            ) : (
+              <p className="w-full text-xs text-muted-foreground">
+                Bluetooth pairing is available only in the Android app. Choose a Windows-installed printer in the print dialog.
+              </p>
+            )}
 
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              disabled={testReceipt.isPending}
+              disabled={testBill.isPending}
               onClick={() =>
                 setConfirmAction({
                   title: "Confirm Test Bill Print",
-                  message: `Send a test receipt slip to ${cashierPrinterName}?`,
-                  onConfirm: () =>
-                    testReceipt.mutate(undefined, {
-                      onSuccess: () => toast.success("Test bill slip printed on Cashier printer!"),
+                  message: "Open a synthetic test bill in the print dialog? No order or payment will be created.",
+                  onConfirm: () => {
+                    if (testBillPending.current) return;
+                    testBillPending.current = true;
+                    testBill.mutate(undefined, {
+                      onSuccess: () => toast.success("Print dialog opened"),
                       onError: (e) => toast.error(e instanceof Error ? e.message : "Print test failed"),
-                    }),
+                      onSettled: () => {
+                        testBillPending.current = false;
+                      },
+                    });
+                  },
                 })
               }
               className="gap-1.5 text-xs"
             >
               <Printer className="h-3.5 w-3.5" />
-              {testReceipt.isPending ? "Printing..." : "Test Bill Print"}
+              {testBill.isPending ? "Opening..." : "Test Bill Print"}
             </Button>
 
             <Button
@@ -244,17 +247,23 @@ export function BluetoothPrinterCard() {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={pairingKitchen}
-              onClick={() => handlePairWebBluetooth("kitchen")}
-              className="gap-1.5 text-xs"
-            >
-              <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
-              {pairingKitchen ? "Scanning..." : "Pair Bluetooth"}
-            </Button>
+            {native ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pairingKitchen}
+                onClick={() => void handlePairAndroidPrinter("kitchen")}
+                className="gap-1.5 text-xs"
+              >
+                <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
+                {pairingKitchen ? "Scanning..." : "Pair Bluetooth"}
+              </Button>
+            ) : (
+              <p className="w-full text-xs text-muted-foreground">
+                Bluetooth pairing is available only in the Android app.
+              </p>
+            )}
 
             <Button
               type="button"
@@ -281,9 +290,28 @@ export function BluetoothPrinterCard() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Label htmlFor="receipt-print-layout">Bill paper layout (this device)</Label>
+          <p className="text-xs text-muted-foreground">
+            Uses the OS print dialog and compatible installed printer drivers; model support varies.
+          </p>
+        </div>
+        <select
+          id="receipt-print-layout"
+          className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+          value={receiptLayout}
+          onChange={(event) => changeReceiptLayout(event.target.value)}
+        >
+          <option value="58mm">58 mm thermal</option>
+          <option value="80mm">80 mm thermal</option>
+          <option value="A4">A4</option>
+        </select>
+      </div>
+
       <div className="flex items-center justify-between border-t border-border pt-4">
         <p className="text-xs text-muted-foreground">
-          Works with all standard 58mm / 80mm ESC-POS Bluetooth and USB thermal receipt printers (TVS, Epson, Xprinter, NGX, Everycom).
+          Desktop printing supports compatible Windows-installed USB, LAN, or Bluetooth-driver printers. Verify compatibility with the printer model and driver.
         </p>
         <Button size="sm" onClick={savePrinters} className="gap-1.5 text-xs font-semibold">
           <CheckCircle2 className="h-3.5 w-3.5" />
@@ -306,6 +334,7 @@ export function BluetoothPrinterCard() {
             </Button>
             <Button
               size="sm"
+              disabled={testBill.isPending}
               onClick={() => {
                 confirmAction?.onConfirm();
                 setConfirmAction(null);

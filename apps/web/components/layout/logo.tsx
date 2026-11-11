@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { LogoImage } from "@/components/layout/logo-image";
 
 export function Logo({
   className,
@@ -19,14 +20,10 @@ export function Logo({
         className="relative flex items-center justify-center shrink-0 overflow-hidden rounded-xl bg-amber-500/10 p-0.5 border border-amber-500/20 shadow-sm"
         style={{ width: size, height: size }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <LogoImage
           src={src}
           alt="Restaurant Logo"
           className="w-full h-full object-contain"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "/logo.png";
-          }}
         />
       </div>
       {withText && (

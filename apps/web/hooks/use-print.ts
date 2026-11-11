@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { billQueryString, type BillQuery } from "@/lib/print";
-import { canPrintOnDevice, printEscposOnDevice } from "@/lib/device-print";
+import { billQueryString, printHtmlDocument, type BillQuery } from "@/lib/print";
+import { canPrintEscposLocally, printEscposOnDevice } from "@/lib/device-print";
+import { buildTestBillHtml } from "@/lib/test-bill";
 
 export interface PrinterDiagnostics {
   connection: "USB" | "NETWORK";
@@ -28,11 +29,18 @@ export interface PrintJobResult {
   unsupportedChars?: string[];
 }
 
+/** Prints a local synthetic bill through the same receipt document path as a real bill. */
+export function usePrintTestBill() {
+  return useMutation({
+    mutationFn: () => printHtmlDocument(buildTestBillHtml(), "Test bill", true),
+  });
+}
+
 /** kind "kot" prints a sample kitchen ticket instead of the receipt test slip. */
 export function usePrintTestSlip(branchId?: string | null, kind?: "kot") {
   return useMutation({
     mutationFn: async () => {
-      const onDevice = canPrintOnDevice();
+      const onDevice = canPrintEscposLocally();
       const q = [branchId ? `branchId=${branchId}` : "", kind ? `kind=${kind}` : "", onDevice ? "via=device" : ""]
         .filter(Boolean)
         .join("&");
@@ -53,7 +61,7 @@ export function usePrintOrderUsb(branchId: string | null) {
     mutationFn: async ({ orderId, drawer, adjustments }: { orderId: string; drawer?: boolean; adjustments?: BillQuery }) => {
       // In the phone app the bill goes to the phone's own Bluetooth printer;
       // everywhere else to the printer attached to the restaurant computer.
-      const onDevice = canPrintOnDevice();
+      const onDevice = canPrintEscposLocally();
       const r = await api.post<PrintJobResult & { escpos?: string[] }>(
         `/orders/${orderId}/print/usb?branchId=${branchId}${drawer ? "&drawer=true" : ""}${onDevice ? "&via=device" : ""}${billQueryString(adjustments)}`,
       );
@@ -75,7 +83,7 @@ export interface KotPrintResult extends PrintJobResult {
 export function usePrintKot(branchId: string | null) {
   return useMutation({
     mutationFn: async ({ orderId, reprint }: { orderId: string; reprint?: boolean }) => {
-      const onDevice = canPrintOnDevice();
+      const onDevice = canPrintEscposLocally();
       const r = await api.post<KotPrintResult & { escpos?: string[] }>(
         `/orders/${orderId}/print/kot?branchId=${branchId}${reprint ? "&reprint=true" : ""}${onDevice ? "&via=device" : ""}`,
       );
@@ -88,7 +96,7 @@ export function usePrintKot(branchId: string | null) {
 export function useOpenCashDrawer() {
   return useMutation({
     mutationFn: async (branchId?: string | null) => {
-      const onDevice = canPrintOnDevice();
+      const onDevice = canPrintEscposLocally();
       const q = [branchId ? `branchId=${branchId}` : "", onDevice ? "via=device" : ""].filter(Boolean).join("&");
       const r = await api.post<{ ok: true; escpos?: string[] }>(`/orders/print/drawer${q ? `?${q}` : ""}`);
       if (onDevice && r.escpos) await printEscposOnDevice(r.escpos);
