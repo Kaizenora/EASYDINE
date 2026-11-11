@@ -597,17 +597,24 @@ export default function LuxuryCustomerMenu({
 
   // Loading or Error screen
   if (error) {
+    // 404 = this QR code does not match any table (wrong, replaced or rotated
+    // code), which retrying cannot fix; anything else is a connection problem.
+    const invalidCode = error instanceof ApiError && error.status === 404;
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
         <UtensilsCrossed className="h-12 w-12 text-[#E5A93C]" />
-        <h2 className="text-xl font-bold">Connecting to Session...</h2>
-        <p className="text-sm text-neutral-400">Loading dining menu for {qrToken}...</p>
-        <button
+        <h2 className="text-xl font-bold">{invalidCode ? "This QR code is not valid" : "Could not load the menu"}</h2>
+        <p className="max-w-xs text-sm text-neutral-400">
+          {invalidCode
+            ? "It may be old or replaced. Please ask the staff for the current QR card at your table."
+            : "Check your internet connection and try again."}
+        </p>
+        {!invalidCode && <button
           onClick={() => window.location.reload()}
           className="mt-4 rounded-xl bg-[#E5A93C] px-6 py-2.5 text-xs font-bold text-black hover:bg-amber-400"
         >
           Retry
-        </button>
+        </button>}
       </div>
     );
   }

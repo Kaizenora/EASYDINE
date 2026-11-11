@@ -147,6 +147,7 @@ export class GatewayPaymentsService {
         createdById: userId,
       },
     });
+    await this.saveCustomerDetails(row.id, input.customerName, input.customerPhone);
     const base = this.baseUrl(input.origin);
     try {
       const ctx = this.gateways.context(restaurantId, connection, mode);
@@ -297,7 +298,10 @@ export class GatewayPaymentsService {
       });
     }
     try {
+      const typed = await this.loadCustomerDetails(p.id);
       await this.orders.checkout(p.branchId, p.orderId, p.createdById, {
+        customerName: typed.name ?? undefined,
+        customerPhone: typed.phone ?? undefined,
         payments: [
           {
             method: 'OTHER',
@@ -694,5 +698,50 @@ export class GatewayPaymentsService {
       note: p.note,
       createdAt: p.createdAt,
     };
+  }
+
+  // ---- optional customer details (works with or without the migration) ----
+  private detailsColumns: { ok: boolean; at: number } | null = null;
+
+  /** True when gateway_payments has the customerName/customerPhone columns. */
+  private async customerDetailsSupported(): Promise<boolean> {
+    const c = this.detailsColumns;
+    if (c && (c.ok || Date.now() - c.at < 60_000)) return c.ok;
+    let ok = false;
+    try {
+      const rows = await this.prisma.$queryRaw<{ n: bigint | number }[]>`
+        SELECT count(*) AS n FROM information_schema.columns
+        WHERE table_name = 'gateway_payments'
+          AND column_name IN ('customerName', 'customerPhone')`;
+      ok = Number(rows[0]?.n ?? 0) === 2;
+    } catch {
+      ok = false;
+    }
+    this.detailsColumns = { ok, at: Date.now() };
+    return ok;
+  }
+
+  private async saveCustomerDetails(id: string, name?: string, phone?: string) {
+    const n = name?.trim() || null;
+    const ph = phone?.trim() || null;
+    if (!n && !ph) return;
+    if (!(await this.customerDetailsSupported())) return;
+    try {
+      await this.prisma.$executeRaw`UPDATE gateway_payments
+        SET "customerName" = ${n}, "customerPhone" = ${ph} WHERE id = ${id}`;
+    } catch (e) {
+      this.logger.warn(`Could not save payer details for ${id}: ${(e as Error).message}`);
+    }
+  }
+
+  private async loadCustomerDetails(id: string): Promise<{ name: string | null; phone: string | null }> {
+    if (!(await this.customerDetailsSupported())) return { name: null, phone: null };
+    try {
+      const rows = await this.prisma.$queryRaw<{ customerName: string | null; customerPhone: string | null }[]>`
+        SELECT "customerName", "customerPhone" FROM gateway_payments WHERE id = ${id}`;
+      return { name: rows[0]?.customerName ?? null, phone: rows[0]?.customerPhone ?? null };
+    } catch {
+      return { name: null, phone: null };
+    }
   }
 }

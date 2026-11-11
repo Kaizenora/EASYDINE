@@ -22,6 +22,9 @@ export function realtimeInvalidations(event: string, branchId: string): string[]
     case "customer.updated":
       // Emitted by the backend after an order is fully paid for a linked customer.
       return [["customers", branchId]];
+    case "table.request":
+    case "table.requests.updated":
+      return [["table-requests", branchId]];
     case "reservation.created":
     case "reservation.updated":
       return [["reservations", branchId], ["dashboard"]];
@@ -36,6 +39,8 @@ export const REALTIME_EVENTS = [
   "kot.reprinted",
   "table.updated",
   "table.layout.updated",
+  "table.request",
+  "table.requests.updated",
   "order.created",
   "order.updated",
   "order.deleted",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
@@ -41,15 +42,19 @@ export function TableQrDialog({
     (typeof window !== "undefined" ? window.location.origin : "");
   const baseUrlIsConfigured = !!(branchQrBaseUrl || configuredBaseUrl);
 
+  // The dialog keeps the table it was opened with, so a token generated just
+  // now comes from the mutation result instead of waiting for a re-open.
+  const qrToken = table.qrToken ?? rotate.data?.qrToken ?? null;
+
   // Auto-generate QR token if table does not yet have one
   useEffect(() => {
-    if (open && !table.qrToken && !rotate.isPending) {
+    if (open && !qrToken && !rotate.isPending && !rotate.isError) {
       rotate.mutate(table.id, {
         onError: (err) =>
           toast.error(err instanceof ApiError ? err.message : "Could not generate QR code"),
       });
     }
-  }, [open, table.id, table.qrToken]);
+  }, [open, table.id, qrToken, rotate.isError]);
 
   const restoName = settingsData?.restaurant?.name || settingsData?.branch?.name || "";
   const tableNum = table.name || (table.number ? `Table ${table.number}` : "");
@@ -59,8 +64,8 @@ export function TableQrDialog({
   ].filter(Boolean).join("&");
 
   const orderUrl =
-    table.qrToken && baseUrl
-      ? `${baseUrl}/order/${table.qrToken}${queryParams ? `?${queryParams}` : ""}`
+    qrToken && baseUrl
+      ? `${baseUrl}/order/${qrToken}${queryParams ? `?${queryParams}` : ""}`
       : null;
 
   const handleCopy = () => {
@@ -73,34 +78,31 @@ export function TableQrDialog({
 
   return (
     <>
-      {/* Print-specific style ensuring ONLY the standee card prints full-bleed and color-accurate */}
+      {/* Print: only the standee copy in #qr-print-root is printed. It lives outside the dialog
+          (a scrolling, transformed box clipped the card and cut the QR), so everything else is hidden. */}
       <style>{`
+        #qr-print-root { display: none; }
         @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-qr-standee, #printable-qr-standee * {
-            visibility: visible !important;
-          }
-          #printable-qr-standee {
-            position: fixed !important;
-            left: 50% !important;
-            top: 50% !important;
-            transform: translate(-50%, -50%) !important;
-            width: 130mm !important;
-            max-width: 92vw !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            border: none !important;
+          body > *:not(#qr-print-root) { display: none !important; }
+          #qr-print-root {
+            display: flex !important;
+            justify-content: center;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          @page {
-            size: A4 portrait;
-            margin: 10mm;
-          }
+          #qr-print-root .standee { width: 130mm !important; box-shadow: none !important; border: none !important; }
+          @page { size: A4 portrait; margin: 10mm; }
         }
       `}</style>
+      {open &&
+        orderUrl &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div id="qr-print-root" aria-hidden>
+            <StandeeCard orderUrl={orderUrl} restoName={restoName} tableLabel={tableNum || `Table ${table.number}`} className="standee" />
+          </div>,
+          document.body,
+        )}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="border-neutral-800 bg-[#121214] text-white sm:max-w-md max-h-[92vh] overflow-y-auto text-center p-5">
@@ -128,61 +130,12 @@ export function TableQrDialog({
           <div className="flex flex-col items-center justify-center py-2">
             {orderUrl ? (
               <div className="flex flex-col items-center gap-3">
-                <div
-                  id="printable-qr-standee"
-                  className="relative w-[280px] sm:w-[320px] aspect-[682/1024] rounded-2xl overflow-hidden shadow-2xl border border-amber-500/30 select-none bg-[#4a2612]"
-                >
-                  {/* Standee background template image */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/qr-template.jpg"
-                    alt="Menu QR Standee"
-                    className="w-full h-full object-cover block pointer-events-none"
-                  />
-
-                  {/* Dynamic scannable QR code overlay right over the white card box */}
-                  <div
-                    className="absolute bg-white rounded-[14px] sm:rounded-[18px] p-[6%] flex items-center justify-center shadow-md"
-                    style={{
-                      left: "37.4%",
-                      top: "18.0%",
-                      width: "50.3%",
-                      height: "32.8%",
-                    }}
-                  >
-                    <QRCodeSVG
-                      value={orderUrl}
-                      level="Q"
-                      className="w-full h-full"
-                    />
-                  </div>
-
-                  {/* Dynamic Restaurant name line overlay */}
-                  <div
-                    className="absolute text-left font-sans font-bold text-[#f7e0b5] truncate text-[11px] sm:text-[13px] tracking-wide"
-                    style={{
-                      left: "55.6%",
-                      top: "62.4%",
-                      width: "36%",
-                    }}
-                    title={restoName || "EasyDine"}
-                  >
-                    {restoName || "EasyDine"}
-                  </div>
-
-                  {/* Dynamic Table No line overlay */}
-                  <div
-                    className="absolute text-left font-sans font-bold text-[#f7e0b5] truncate text-[12px] sm:text-[14px] tracking-wide"
-                    style={{
-                      left: "51.8%",
-                      top: "66.8%",
-                      width: "36%",
-                    }}
-                    title={tableNum || `Table ${table.number}`}
-                  >
-                    {tableNum || `Table ${table.number}`}
-                  </div>
-                </div>
+                <StandeeCard
+                  orderUrl={orderUrl}
+                  restoName={restoName}
+                  tableLabel={tableNum || `Table ${table.number}`}
+                  className="w-[280px] sm:w-[320px]"
+                />
 
                 <div className="flex items-center gap-1.5 max-w-xs">
                   <p className="truncate font-mono text-[11px] text-neutral-400 bg-neutral-900/80 px-2.5 py-1 rounded-lg border border-neutral-800">
@@ -282,5 +235,55 @@ export function TableQrDialog({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * The accepted chocolate-brown standee: /qr-template.jpg with the scannable QR laid
+ * exactly over the template's white box, plus restaurant name and table number.
+ * Text sizes use container units so the card looks the same at any width (screen or print).
+ */
+function StandeeCard({
+  orderUrl,
+  restoName,
+  tableLabel,
+  className,
+}: {
+  orderUrl: string;
+  restoName: string;
+  tableLabel: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`relative aspect-[682/1024] overflow-hidden rounded-2xl border border-amber-500/30 bg-[#4a2612] shadow-2xl select-none ${className ?? ""}`}
+      style={{ containerType: "inline-size" }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/qr-template.jpg" alt="Menu QR Standee" className="pointer-events-none block h-full w-full object-cover" />
+
+      {/* Scannable QR over the template's white box (x 37.4-87.7%, y 18.0-50.8%). */}
+      <div
+        className="absolute flex items-center justify-center bg-white shadow-md"
+        style={{ left: "37.4%", top: "18.0%", width: "50.3%", height: "32.8%", borderRadius: "5cqw", padding: "2.5cqw" }}
+      >
+        <QRCodeSVG value={orderUrl} level="Q" marginSize={0} style={{ width: "100%", height: "100%" }} />
+      </div>
+
+      <div
+        className="absolute truncate text-left font-sans font-bold tracking-wide text-[#f7e0b5]"
+        style={{ left: "55.6%", top: "62.4%", width: "36%", fontSize: "4cqw" }}
+        title={restoName || "EasyDine"}
+      >
+        {restoName || "EasyDine"}
+      </div>
+      <div
+        className="absolute truncate text-left font-sans font-bold tracking-wide text-[#f7e0b5]"
+        style={{ left: "51.8%", top: "66.8%", width: "36%", fontSize: "4.4cqw" }}
+        title={tableLabel}
+      >
+        {tableLabel}
+      </div>
+    </div>
   );
 }

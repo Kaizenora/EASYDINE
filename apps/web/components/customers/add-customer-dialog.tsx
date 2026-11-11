@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateCustomer, type Customer } from "@/hooks/use-customers";
 import { ApiError } from "@/lib/api";
+import { isValidPhoneInput } from "@easydine/types";
 
 export function AddCustomerDialog({
   branchId,
@@ -28,9 +29,12 @@ export function AddCustomerDialog({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const createCustomer = useCreateCustomer(branchId);
+  const empty = !name.trim() && !phone.trim() && !email.trim();
+  const phoneInvalid = phone.trim() !== "" && !isValidPhoneInput(phone);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (empty || phoneInvalid) return;
     createCustomer.mutate(
       { name: name || undefined, phone: phone || undefined, email: email || undefined },
       {
@@ -62,7 +66,17 @@ export function AddCustomerDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="c-phone">Phone</Label>
-            <Input id="c-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              id="c-phone"
+              value={phone}
+              aria-invalid={phoneInvalid}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            {phoneInvalid && (
+              <p role="alert" className="text-xs text-destructive">
+                Enter a valid phone number.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="c-email">Email</Label>
@@ -74,7 +88,7 @@ export function AddCustomerDialog({
             />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={createCustomer.isPending}>
+            <Button type="submit" disabled={createCustomer.isPending || empty || phoneInvalid}>
               {createCustomer.isPending ? "Adding…" : "Add customer"}
             </Button>
           </DialogFooter>

@@ -26,3 +26,7 @@ test("every subscribed event maps to at least one cache", () => {
   for (const e of REALTIME_EVENTS) assert.ok(keys(e).length > 0, e);
   assert.deepEqual(keys("something.else"), []);
 });
+
+test("a guest's call-waiter/bill push refreshes the table-requests bar", () => {
+  assert.ok(keys("table.request").includes("table-requests/b1"));
+});

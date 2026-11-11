@@ -42,7 +42,7 @@ export interface CustomerDetail extends Customer {
 export function useCustomers(branchId: string | null, search?: string) {
   return useQuery({
     queryKey: ["customers", branchId, search],
-    queryFn: ({ signal }) => api.get<Customer[]>(`/customers?branchId=${branchId}${search ? `&search=${search}` : ""}`, { signal }),
+    queryFn: ({ signal }) => api.get<Customer[]>(`/customers?branchId=${branchId}${search ? `&search=${encodeURIComponent(search)}` : ""}`, { signal }),
     enabled: !!branchId,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,

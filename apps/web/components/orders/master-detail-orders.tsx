@@ -1,5 +1,6 @@
 "use client";
 
+import { formatClock, formatElapsed } from "@/lib/order-time";
 import {
   AlertCircle,
   Check,
@@ -59,31 +60,6 @@ function useNow(intervalMs = 30_000): number {
     return () => clearInterval(id);
   }, [intervalMs]);
   return now;
-}
-
-/** "just now", "5 min", "2 h 10 min", "3 d" */
-function formatElapsed(createdAt: string | null | undefined, now: number): string {
-  if (!createdAt) return "";
-  const t = new Date(createdAt).getTime();
-  if (Number.isNaN(t)) return "";
-  const mins = Math.max(0, Math.floor((now - t) / 60_000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) {
-    const rem = mins % 60;
-    return rem ? `${hours} h ${rem} min` : `${hours} h`;
-  }
-  return `${Math.floor(hours / 24)} d`;
-}
-
-/** Clock time the order was placed, in the device's local time, e.g. "10:28 AM". */
-function formatClock(createdAt: string | null | undefined): string {
-  if (!createdAt) return "";
-  const d = new Date(createdAt);
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function getCookingStatus(order: ManagedOrder): {
@@ -254,7 +230,7 @@ export function MasterDetailOrders({
   // Mutations for Accept & Reject
   const acceptOrder = useMutation({
     mutationFn: (id: string) =>
-      api.post<{ printStatus?: "NO_PRINTER" | "PRINTED" | "FAILED"; printError?: string }>(`/orders/${id}/accept`),
+      api.post<{ printStatus?: "NO_PRINTER" | "SENT" | "PRINTED" | "FAILED" | "UNKNOWN"; printError?: string }>(`/orders/${id}/accept`),
     onSuccess: (data) => {
       vibrateSuccess();
       playSuccessChime();
@@ -262,8 +238,8 @@ export function MasterDetailOrders({
       queryClient.invalidateQueries({ queryKey: ["floors"] });
       queryClient.invalidateQueries({ queryKey: ["kds"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      if (data?.printStatus === "PRINTED") {
-        toast.success("Order accepted · KOT printed");
+      if (data?.printStatus === "SENT" || data?.printStatus === "PRINTED") {
+        toast.success("Order accepted · KOT sent to the printer");
       } else if (data?.printStatus === "FAILED") {
         toast.warning(`Order accepted · Printer offline (${data.printError || "KOT visible on kitchen display"})`);
       } else {

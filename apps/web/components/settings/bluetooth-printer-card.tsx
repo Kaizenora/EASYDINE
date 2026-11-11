@@ -11,11 +11,21 @@ import { Label } from "@/components/ui/label";
 import { useBranch } from "@/hooks/use-branch";
 import { useOpenCashDrawer, usePrintTestBill, usePrintTestSlip } from "@/hooks/use-print";
 import {
+  BLE_SENT_MESSAGE,
   canPrintOnDevice,
+  canReconnectWithoutChooser,
   chooseBtPrinter,
+  forgetWebPrinter,
+  getPrintTransport,
+  isWebBluetoothSupported,
+  pairWebBluetoothPrinter,
   saveBtPrinter,
   savedBtPrinter,
+  savedWebPrinter,
+  setPrintTransport,
   type BtPrinter,
+  type PrintTransport,
+  type WebBtPrinter,
 } from "@/lib/device-print";
 import {
   getReceiptPrintLayout,
@@ -53,6 +63,40 @@ export function BluetoothPrinterCard() {
   const [receiptLayout, setReceiptLayout] = useState<ReceiptPrintLayout>(getReceiptPrintLayout);
 
   const native = canPrintOnDevice();
+
+  // Optional direct Web Bluetooth (desktop Chrome/Edge). System print stays the default.
+  const webBle = !native && isWebBluetoothSupported();
+  const testSlip = usePrintTestSlip(branchId);
+  const [webPrinter, setWebPrinter] = useState<WebBtPrinter | null>(() => (typeof window === "undefined" ? null : savedWebPrinter()));
+  const [transport, setTransportState] = useState<PrintTransport>(() => (typeof window === "undefined" ? "system" : getPrintTransport()));
+  const [pairingWeb, setPairingWeb] = useState(false);
+  const [webMessage, setWebMessage] = useState<string | null>(null);
+
+  const handlePairWebPrinter = async () => {
+    setPairingWeb(true);
+    setWebMessage(null);
+    try {
+      const p = await pairWebBluetoothPrinter();
+      if (p) {
+        setWebPrinter(p);
+        toast.success(`Verified ${p.name}. Choose "Direct Bluetooth" below to use it.`);
+      }
+    } catch (error) {
+      setWebMessage(error instanceof Error ? error.message : "Could not verify the Bluetooth printer.");
+    } finally {
+      setPairingWeb(false);
+    }
+  };
+
+  const changeTransport = (value: string) => {
+    const next: PrintTransport = value === "ble" ? "ble" : "system";
+    try {
+      setPrintTransport(next);
+      setTransportState(next);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not change the print method.");
+    }
+  };
 
   const savePrinters = () => {
     if (typeof window !== "undefined") {
@@ -276,7 +320,7 @@ export function BluetoothPrinterCard() {
                   message: `Send a sample kitchen order ticket to ${kitchenPrinterName}?`,
                   onConfirm: () =>
                     testKot.mutate(undefined, {
-                      onSuccess: () => toast.success("Test KOT ticket printed to Kitchen!"),
+                      onSuccess: () => toast.success("Test ticket sent to the kitchen printer. Check the paper."),
                       onError: (e) => toast.error(e instanceof Error ? e.message : "Kitchen print failed"),
                     }),
                 })
@@ -289,6 +333,83 @@ export function BluetoothPrinterCard() {
           </div>
         </div>
       </div>
+
+
+      {webBle && (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="text-sm font-semibold text-foreground">Direct Bluetooth printing (optional)</span>
+              <p className="text-xs text-muted-foreground">
+                Off by default: system printing keeps working as is. Works only with printers that expose a supported
+                profile; support varies by model.
+              </p>
+            </div>
+            <select
+              aria-label="Print method"
+              className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+              value={transport}
+              onChange={(e) => changeTransport(e.target.value)}
+            >
+              <option value="system">System print (default)</option>
+              <option value="ble" disabled={!webPrinter || !canReconnectWithoutChooser()}>
+                Direct Bluetooth
+              </option>
+            </select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {webPrinter ? `Verified printer: ${webPrinter.name}` : "No Bluetooth printer chosen."}
+            {!canReconnectWithoutChooser() && " This browser cannot reconnect to a chosen printer on its own, so direct Bluetooth is unavailable here."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={pairingWeb} onClick={() => void handlePairWebPrinter()} className="gap-1.5 text-xs">
+              <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
+              {pairingWeb ? "Checking..." : webPrinter ? "Choose a different printer" : "Choose Bluetooth printer"}
+            </Button>
+            {webPrinter && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => {
+                  forgetWebPrinter();
+                  setWebPrinter(null);
+                  setTransportState("system");
+                }}
+              >
+                Forget
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="gap-1.5 text-xs"
+              disabled={transport !== "ble" || testSlip.isPending}
+              onClick={() =>
+                setConfirmAction({
+                  title: "Send a test slip",
+                  message: "Send a labeled sample slip (not a real bill) to the Bluetooth printer?",
+                  onConfirm: () =>
+                    testSlip.mutate(undefined, {
+                      onSuccess: () => toast.success(`Test slip: ${BLE_SENT_MESSAGE}`),
+                      onError: (e) => toast.error(e instanceof Error ? e.message : "Test slip failed"),
+                    }),
+                })
+              }
+            >
+              <Printer className="h-3.5 w-3.5" />
+              {testSlip.isPending ? "Sending..." : "Test Print (Bluetooth)"}
+            </Button>
+          </div>
+          {webMessage && (
+            <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {webMessage}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

@@ -45,3 +45,24 @@ export function formatCustomerAddress(a: {
     .filter(Boolean)
     .join(", ");
 }
+
+/**
+ * Canonical form of a phone number used to recognise the same customer twice:
+ * digits only, no 00 / +CC prefix, no national trunk 0. Indian numbers (the
+ * stored format is a 10-digit mobile) reduce to those 10 digits whether typed
+ * as "98765 43210", "+91 98765-43210", "919876543210" or "09876543210".
+ * Returns null when what is left cannot be a phone number (7-15 digits).
+ */
+export function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d.length >= 7 && d.length <= 15 ? d : null;
+}
+
+/** A phone field's text is acceptable when it only holds phone characters and reduces to a real number. */
+export function isValidPhoneInput(raw: string): boolean {
+  return /^\+?[\d\s\-()]+$/.test(raw.trim()) && normalizePhone(raw) !== null;
+}

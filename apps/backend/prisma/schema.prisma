@@ -2678,6 +2678,11 @@ model GatewayPayment {
   providerPaymentId String?
   checkoutUrl       String?
   note              String?
+  // NOTE: gateway_payments also has nullable "customerName"/"customerPhone"
+  // (migration 20261111210000). They are deliberately NOT modelled here so
+  // every Prisma query keeps working on a database where that migration has not
+  // been applied yet; GatewayPaymentsService reads/writes them with guarded raw
+  // SQL (see customerDetailsSupported()).
   createdById       String
   appliedAt         DateTime?
   createdAt         DateTime             @default(now())

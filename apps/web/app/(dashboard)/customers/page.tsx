@@ -13,11 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useBranch } from "@/hooks/use-branch";
 import { useCustomers, useDeleteCustomer, type Customer } from "@/hooks/use-customers";
 import { ApiError } from "@/lib/api";
+import { QueryError } from "@/components/ui/query-error";
 
 export default function CustomersPage() {
   const { branchId } = useBranch();
   const [search, setSearch] = useState("");
-  const { data: customers, isLoading } = useCustomers(branchId, search || undefined);
+  const { data: customers, isLoading, error, refetch, isFetching } = useCustomers(branchId, search || undefined);
   const deleteCustomer = useDeleteCustomer(branchId);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
@@ -56,6 +57,8 @@ export default function CustomersPage() {
               <Skeleton key={i} className="h-14 rounded-lg" />
             ))}
           </div>
+        ) : error && !customers ? (
+          <QueryError error={error} what="customers" onRetry={() => void refetch()} retrying={isFetching} className="m-2" />
         ) : customers && customers.length > 0 ? (
           customers.map((c) => (
             <Link

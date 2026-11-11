@@ -355,31 +355,24 @@ export class TablesService {
 
     if (order) {
       if (!order.customerId && (order.guestName || order.deliveryPhone)) {
+        // Same safe logic as checkout: phone identifies (normalized, per
+        // branch), a name alone never merges and a name-only guest simply
+        // gets no shared record.
         try {
-          let customer: any = null;
-          if (order.deliveryPhone) {
-            customer = await this.prisma.customer.findFirst({
-              where: { branchId, phone: order.deliveryPhone },
-            });
-          }
-          if (!customer) {
-            customer = await this.prisma.customer.create({
-              data: {
-                branchId,
-                name: order.guestName || 'Guest',
-                phone: order.deliveryPhone || null,
-              },
-            });
-          }
-          if (customer) {
-            await this.prisma.order.update({
+          const resolvedId = await this.ordersService.resolveOrCreateCustomer(
+            branchId,
+            { name: order.guestName, phone: order.deliveryPhone },
+          );
+          if (resolvedId) {
+            const linked = await this.prisma.order.update({
               where: { id: order.id },
-              data: { customerId: customer.id },
+              data: { customerId: resolvedId },
+              include: { customer: true },
             });
-            customerName = customer.name || customerName;
+            customerName = linked.customer?.name || customerName;
           }
         } catch {
-          // ignore customer auto-creation error
+          // customer linking must never block settling the table
         }
       }
 

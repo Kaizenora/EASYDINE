@@ -1,6 +1,6 @@
 "use client";
 
-import { kitchenProgress, type PaymentMethodDto } from "@easydine/types";
+import { isValidPhoneInput, kitchenProgress, type PaymentMethodDto } from "@easydine/types";
 import { ArrowLeft, CheckCircle2, ChefHat, Pencil, Printer } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -97,6 +97,9 @@ export function CheckoutPanel({
   const [checkingGiftCard, setCheckingGiftCard] = useState(false);
   const [splitCount, setSplitCount] = useState("1");
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
+  // Optional "save customer" details, used only when no customer is picked.
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const checkout = useCheckoutOrder(branchId);
@@ -241,8 +244,10 @@ export function CheckoutPanel({
     return attempt.current.id;
   };
 
+  const phoneInvalid = newCustomerPhone.trim() !== "" && !isValidPhoneInput(newCustomerPhone);
+
   const handleCheckout = () => {
-    if (!bill || repricing) return;
+    if (!bill || repricing || phoneInvalid) return;
     const payments =
       plan.applied > 0
         ? [
@@ -253,8 +258,11 @@ export function CheckoutPanel({
             },
           ]
         : [];
+    const saveNew = !customer;
     const dto = {
       customerId: customer?.id,
+      ...(saveNew && newCustomerName.trim() ? { customerName: newCustomerName.trim() } : {}),
+      ...(saveNew && newCustomerPhone.trim() ? { customerPhone: newCustomerPhone.trim() } : {}),
       ...(locked ? {} : settled),
       ...(!locked && Number(discountValue) > 0 && discountReason.trim()
         ? { discountReason: discountReason.trim() }
@@ -473,6 +481,33 @@ export function CheckoutPanel({
       )}
 
       <CustomerPicker branchId={branchId} customer={customer} onSelect={setCustomer} />
+      {!customer && !initialCustomer && (
+        <div className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              aria-label="Save customer name"
+              placeholder="Name (optional)"
+              value={newCustomerName}
+              maxLength={80}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+            />
+            <Input
+              aria-label="Save customer phone"
+              placeholder="Phone (optional)"
+              inputMode="tel"
+              value={newCustomerPhone}
+              maxLength={25}
+              aria-invalid={phoneInvalid || undefined}
+              onChange={(e) => setNewCustomerPhone(e.target.value)}
+            />
+          </div>
+          {phoneInvalid && (
+            <p role="alert" className="text-xs text-destructive">
+              Enter a valid phone number, or clear it.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
@@ -761,7 +796,7 @@ export function CheckoutPanel({
       <div className="sticky bottom-0 z-10 -mx-1 bg-card px-1 pb-1 pt-2 max-lg:border-t max-lg:border-border max-lg:shadow-[0_-8px_12px_-10px_rgba(0,0,0,0.25)]">
         <Button
           className="h-12 w-full text-base"
-          disabled={checkout.isPending || !bill || repricing || !plan.valid}
+          disabled={checkout.isPending || !bill || repricing || !plan.valid || phoneInvalid}
           onClick={handleCheckout}
         >
           {checkout.isPending

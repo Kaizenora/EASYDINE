@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -138,6 +139,14 @@ async function bootstrap() {
   });
   app.setGlobalPrefix('api');
   app.useStaticAssets(uploadsDir(), { prefix: '/api/uploads/' });
+  if (process.env.NODE_ENV === 'production' && !process.env.UPLOADS_DIR) {
+    // Menu photos are saved to disk and referenced by URL. On a host whose
+    // filesystem is wiped on every deploy (many PaaS free tiers) the files
+    // vanish and the saved URLs become broken-image icons.
+    new Logger('Uploads').warn(
+      `UPLOADS_DIR is not set: uploads go to ${uploadsDir()}, which is lost on redeploy unless that path is a persistent volume. See docs/PROPOSAL-uploads-persistence.md`,
+    );
+  }
 
   // Full route/schema map — genuinely useful in dev, but an unauthenticated
   // information-disclosure surface (every endpoint shape, DTO field, and

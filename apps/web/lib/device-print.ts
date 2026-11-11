@@ -30,9 +30,170 @@ export function canPrintOnDevice(): boolean {
   return isNativeApp() && nativePlatform() === "ANDROID" && !!nativePrinter();
 }
 
-/** True when ESC/POS can be sent locally through Android or browser Bluetooth. */
+// --- Direct Web Bluetooth printing (optional, off by default) ----------------
+// System/browser printing stays the default transport. Direct BLE is used only
+// when the cashier has paired a printer whose GATT profile was VERIFIED and has
+// explicitly switched the active transport to "ble".
+
+export type PrintTransport = "system" | "ble";
+
+/** A printer profile this app knows how to write to: one service, one characteristic. */
+export interface BleProfile {
+  service: string;
+  characteristic: string;
+}
+
+/** The only profiles we write to. Nothing outside this list is ever guessed. */
+export const SUPPORTED_BLE_PROFILES: readonly BleProfile[] = [
+  { service: "000018f0-0000-1000-8000-00805f9b34fb", characteristic: "00002af1-0000-1000-8000-00805f9b34fb" },
+  { service: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", characteristic: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+  { service: "49535343-fe7d-4ae5-8fa9-9fafd205e455", characteristic: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
+];
+
+/** A device the browser was allowed to use AND whose profile we confirmed. */
+export interface WebBtPrinter {
+  id: string;
+  name: string;
+  profile: BleProfile;
+}
+
+const WEB_PRINTER_KEY = "easydine.webBtPrinter";
+const TRANSPORT_KEY = "easydine.printTransport";
+
+export const BLE_UNSUPPORTED_MESSAGE =
+  "This Bluetooth device is not a supported receipt printer profile, so it was not saved. Keep using system printing (install the printer in your OS and use the print dialog).";
+export const BLE_RECONNECT_MESSAGE =
+  "The Bluetooth printer is not available. Switch it on, then open Settings > Printers and choose it again. Nothing was sent. System printing still works.";
+export const BLE_INTERRUPTED_MESSAGE =
+  "Connection to the printer dropped while sending - the print may be incomplete. Check the printer, then reprint manually if needed. It was not retried, so nothing is duplicated.";
+export const BLE_SENT_MESSAGE = "Data sent to the printer. Check the paper to confirm it printed.";
+
+export class BlePrinterError extends Error {
+  readonly kind: "unsupported" | "unavailable" | "interrupted" | "busy";
+  constructor(message: string, kind: "unsupported" | "unavailable" | "interrupted" | "busy") {
+    super(message);
+    this.kind = kind;
+  }
+}
+
+function readJson<T>(key: string): T | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProfile(p: unknown): p is BleProfile {
+  const x = p as BleProfile | null;
+  return (
+    !!x &&
+    typeof x.service === "string" &&
+    typeof x.characteristic === "string" &&
+    SUPPORTED_BLE_PROFILES.some((k) => k.service === x.service && k.characteristic === x.characteristic)
+  );
+}
+
+/** The saved verified printer, or null (also null for anything that fails validation). */
+export function savedWebPrinter(): WebBtPrinter | null {
+  const v = readJson<WebBtPrinter>(WEB_PRINTER_KEY);
+  if (!v || typeof v.id !== "string" || !v.id || typeof v.name !== "string" || !isProfile(v.profile)) return null;
+  return v;
+}
+
+export function forgetWebPrinter() {
+  try {
+    window.localStorage.removeItem(WEB_PRINTER_KEY);
+    window.localStorage.setItem(TRANSPORT_KEY, "system");
+  } catch {
+    // storage blocked: nothing was saved either
+  }
+}
+
+/** "system" unless the cashier explicitly chose BLE AND a verified printer is saved. */
+export function getPrintTransport(): PrintTransport {
+  try {
+    if (window.localStorage.getItem(TRANSPORT_KEY) === "ble" && savedWebPrinter()) return "ble";
+  } catch {
+    // fall through to the default
+  }
+  return "system";
+}
+
+export function setPrintTransport(t: PrintTransport) {
+  if (t === "ble" && !savedWebPrinter()) throw new Error("Choose and verify a Bluetooth printer first.");
+  window.localStorage.setItem(TRANSPORT_KEY, t);
+  window.dispatchEvent(new Event("easydine:printer"));
+}
+
+/** Whether the browser can silently reconnect to an already-allowed device. */
+export function canReconnectWithoutChooser(): boolean {
+  return (
+    isWebBluetoothSupported() &&
+    typeof (navigator.bluetooth as { getDevices?: unknown }).getDevices === "function"
+  );
+}
+
+/**
+ * Confirms a connected GATT server exposes one of the supported printer
+ * profiles with a writable characteristic. Reads only - nothing is written.
+ */
+export async function verifyPrinterProfile(server: BluetoothRemoteGATTServer): Promise<BleProfile | null> {
+  for (const profile of SUPPORTED_BLE_PROFILES) {
+    try {
+      const service = await server.getPrimaryService(profile.service);
+      const c = await service.getCharacteristic(profile.characteristic);
+      if (c.properties.write || c.properties.writeWithoutResponse) return profile;
+    } catch {
+      // not this profile; try the next supported one
+    }
+  }
+  return null;
+}
+
+/**
+ * Opens the browser's device chooser and verifies the pick. MUST be called
+ * straight from a click handler (the chooser needs a user gesture). Saves the
+ * printer only after verification, and never writes any bytes to it.
+ */
+export async function pairWebBluetoothPrinter(): Promise<WebBtPrinter | null> {
+  if (!isWebBluetoothSupported()) {
+    throw new BlePrinterError("Web Bluetooth is not available in this browser. Use Chrome or Edge, or system printing.", "unavailable");
+  }
+  let device: BluetoothDevice;
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: SUPPORTED_BLE_PROFILES.map((p) => p.service),
+    });
+  } catch {
+    return null; // chooser dismissed
+  }
+  try {
+    const server = await device.gatt?.connect();
+    if (!server) throw new BlePrinterError(BLE_RECONNECT_MESSAGE, "unavailable");
+    const profile = await verifyPrinterProfile(server);
+    if (!profile) throw new BlePrinterError(BLE_UNSUPPORTED_MESSAGE, "unsupported");
+    const printer: WebBtPrinter = { id: device.id, name: device.name || "Bluetooth printer", profile };
+    window.localStorage.setItem(WEB_PRINTER_KEY, JSON.stringify(printer));
+    return printer;
+  } finally {
+    try {
+      device.gatt?.disconnect();
+    } catch {
+      // already disconnected
+    }
+  }
+}
+
+/**
+ * True when ESC/POS bytes should be sent from this device: the Android app, or
+ * a browser where the cashier explicitly selected a verified BLE printer.
+ * Everything else (the default) uses system/server printing.
+ */
 export function canPrintEscposLocally(): boolean {
-  return canPrintOnDevice() || isWebBluetoothSupported();
+  return canPrintOnDevice() || (canReconnectWithoutChooser() && getPrintTransport() === "ble");
 }
 
 export function savedBtPrinter(): BtPrinter | null {
@@ -76,83 +237,66 @@ export async function chooseBtPrinter(): Promise<BtPrinter | null> {
     return new Promise((resolve) => (pickerListener ? pickerListener(resolve) : resolve(null)));
   }
 
-  // Web Bluetooth browser prompt
-  if (isWebBluetoothSupported()) {
-    try {
-      const device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [
-          "000018f0-0000-1000-8000-00805f9b34fb",
-          "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
-          "49535343-fe7d-4ae5-8fa9-9fafd205e455",
-        ],
-      });
-      const printer: BtPrinter = {
-        name: device.name || "Bluetooth Thermal Printer",
-        address: device.id || "web-bluetooth",
-      };
-      saveBtPrinter(printer);
-      return printer;
-    } catch {
-      return null;
-    }
-  }
-
   return null;
 }
 
-/** Sends raw ESC/POS bytes via Web Bluetooth GATT service. */
+let bleJobActive = false;
+
+/**
+ * Sends ESC/POS bytes to the saved, verified printer. Reconnects through
+ * getDevices() - it never opens the chooser. A dropped connection stops the
+ * job and is reported as ambiguous; the job is NEVER retried or resent.
+ */
 async function printViaWebBluetooth(chunks: string[]): Promise<void> {
-  if (!isWebBluetoothSupported()) {
-    throw new Error("Web Bluetooth is not supported in this browser. Use Chrome or Edge over HTTPS/localhost.");
-  }
+  const saved = savedWebPrinter();
+  if (!saved || !canReconnectWithoutChooser()) throw new BlePrinterError(BLE_RECONNECT_MESSAGE, "unavailable");
+  if (bleJobActive) throw new BlePrinterError("Another Bluetooth print is still being sent. Wait for it, then print again.", "busy");
+  bleJobActive = true;
+  let device: BluetoothDevice | undefined;
+  try {
+    const allowed = await (navigator.bluetooth as unknown as { getDevices: () => Promise<BluetoothDevice[]> }).getDevices();
+    device = allowed.find((d) => d.id === saved.id);
+    if (!device?.gatt) throw new BlePrinterError(BLE_RECONNECT_MESSAGE, "unavailable");
 
-  const device = await navigator.bluetooth.requestDevice({
-    acceptAllDevices: true,
-    optionalServices: [
-      "000018f0-0000-1000-8000-00805f9b34fb",
-      "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
-      "49535343-fe7d-4ae5-8fa9-9fafd205e455",
-    ],
-  });
-
-  const server = await device.gatt?.connect();
-  if (!server) throw new Error("Could not connect to Bluetooth device GATT server.");
-
-  const services = await server.getPrimaryServices();
-  let writeChar: BluetoothRemoteGATTCharacteristic | undefined;
-
-  for (const service of services) {
-    const chars = await service.getCharacteristics();
-    for (const c of chars) {
-      if (c.properties.write || c.properties.writeWithoutResponse) {
-        writeChar = c;
-        break;
+    let characteristic: BluetoothRemoteGATTCharacteristic;
+    try {
+      const server = await device.gatt.connect();
+      const profile = await verifyPrinterProfile(server);
+      if (!profile || profile.service !== saved.profile.service || profile.characteristic !== saved.profile.characteristic) {
+        throw new BlePrinterError(BLE_UNSUPPORTED_MESSAGE, "unsupported");
       }
+      characteristic = await (await server.getPrimaryService(profile.service)).getCharacteristic(profile.characteristic);
+    } catch (e) {
+      if (e instanceof BlePrinterError) throw e;
+      throw new BlePrinterError(BLE_RECONNECT_MESSAGE, "unavailable"); // nothing was sent yet
     }
-    if (writeChar) break;
-  }
 
-  if (!writeChar) {
-    throw new Error("No writable ESC/POS characteristic found on this Bluetooth device.");
-  }
-
-  for (const base64Chunk of chunks) {
-    const binary = atob(base64Chunk);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-    // Send in chunks of 100 bytes to accommodate BLE MTU
-    const CHUNK_SIZE = 100;
-    for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
-      const slice = bytes.slice(offset, offset + CHUNK_SIZE);
-      if (writeChar.properties.writeWithoutResponse) {
-        await writeChar.writeValueWithoutResponse(slice);
-      } else if (writeChar.properties.write) {
-        await writeChar.writeValueWithResponse(slice);
-      } else {
-        throw new Error("The printer Bluetooth characteristic does not support writing.");
+    let sentAnything = false;
+    try {
+      for (const base64Chunk of chunks) {
+        const binary = atob(base64Chunk);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        // 100-byte slices stay under the conservative BLE write size.
+        for (let offset = 0; offset < bytes.length; offset += 100) {
+          const slice = bytes.slice(offset, offset + 100);
+          if (characteristic.properties.writeWithoutResponse) await characteristic.writeValueWithoutResponse(slice);
+          else await characteristic.writeValueWithResponse(slice);
+          sentAnything = true;
+        }
       }
+    } catch {
+      throw new BlePrinterError(
+        sentAnything ? BLE_INTERRUPTED_MESSAGE : BLE_RECONNECT_MESSAGE,
+        sentAnything ? "interrupted" : "unavailable",
+      );
+    }
+  } finally {
+    bleJobActive = false;
+    try {
+      device?.gatt?.disconnect();
+    } catch {
+      // already disconnected
     }
   }
 }
@@ -172,12 +316,12 @@ export async function printEscposOnDevice(chunks: string[]): Promise<void> {
     return;
   }
 
-  if (isWebBluetoothSupported()) {
+  if (canReconnectWithoutChooser() && getPrintTransport() === "ble") {
     await printViaWebBluetooth(chunks);
     return;
   }
 
-  throw new Error("Bluetooth printing requires the EasyDine app or a Web Bluetooth supported browser (Chrome/Edge).");
+  throw new Error("Direct Bluetooth printing is not enabled. Use system printing, or choose a Bluetooth printer in Settings > Printers.");
 }
 
 /** Opens browser/system print dialog for a bill / receipt / ticket. */

@@ -9,6 +9,7 @@ import type {
   UpdateOrderDto,
 } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLiveAwareInterval } from "@/hooks/use-live-interval";
 import type { Customer } from "@/hooks/use-customers";
 import { api } from "@/lib/api";
 
@@ -227,11 +228,13 @@ export interface ManagedOrder {
 export type OrderTab = "pending" | "active" | "history";
 
 export function useAllOrders(branchId: string | null) {
+  // 2s poll only when the live socket is down; order.* pushes refresh it otherwise.
+  const pollMs = useLiveAwareInterval(2000, 10_000);
   return useQuery({
     queryKey: ["orders", "manage", branchId, "all"],
     queryFn: ({ signal }) => api.get<ManagedOrder[]>('/orders/manage?tab=all', { signal }),
     enabled: !!branchId,
-    refetchInterval: 2000,
+    refetchInterval: pollMs,
   });
 }
 

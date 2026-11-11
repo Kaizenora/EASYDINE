@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLiveAwareInterval } from "@/hooks/use-live-interval";
 import { BellRing, Receipt, CheckCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,12 +20,14 @@ interface TableRequestRow {
 export function TableRequestsBar({ branchId }: { branchId: string | null }) {
   const queryClient = useQueryClient();
   const prevCount = useRef(0);
+  // The `table.request` push refreshes this; poll fast only if the socket is down.
+  const pollMs = useLiveAwareInterval(3_000, 15_000);
 
   const { data } = useQuery({
     queryKey: ["table-requests", branchId],
     queryFn: () => api.get<TableRequestRow[]>(`/tables/requests?branchId=${branchId}`),
     enabled: !!branchId,
-    refetchInterval: 3_000,
+    refetchInterval: pollMs,
   });
 
   useEffect(() => {

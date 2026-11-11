@@ -9,6 +9,7 @@ import {
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
+  normalizePhone,
   canTransitionKot,
   KOT_STARTED_STATUSES,
   type BillPreviewDto,
@@ -166,6 +167,19 @@ export class OrdersService {
     return branch?.taxMode ?? 'INCLUSIVE';
   }
 
+  /**
+   * Finds or creates the customer for a name/phone the cashier or guest typed.
+   *  - An explicit customerId (same branch) always wins.
+   *  - A phone identifies a person: matched per branch on its NORMALIZED digits
+   *    (so "+91 98765 43210" and "9876543210" are the same customer, also
+   *    against rows saved earlier in another format).
+   *  - A name NEVER identifies a person: name-only input creates a new record
+   *    and is never attached to an existing same-name customer.
+   *  - Concurrent calls for the same branch+phone are serialised with a
+   *    transaction-scoped Postgres advisory lock, so two simultaneous payments
+   *    cannot create two rows (no schema change / unique index needed, which
+   *    would fail on databases that already hold legacy duplicates).
+   */
   async resolveOrCreateCustomer(
     branchId: string,
     params: {
@@ -184,7 +198,6 @@ export class OrdersService {
       if (existing) return existing.id;
     }
 
-    const rawPhone = params.phone?.trim();
     const rawName = params.name?.trim();
     const isGeneric =
       !rawName ||
@@ -192,61 +205,61 @@ export class OrdersService {
         rawName.toLowerCase(),
       );
     const meaningfulName = isGeneric ? null : rawName;
-    const meaningfulPhone =
-      rawPhone && rawPhone.length >= 3 ? rawPhone : null;
+    const phone = normalizePhone(params.phone);
 
-    if (!meaningfulPhone && !meaningfulName) return null;
+    if (!phone && !meaningfulName) return null;
 
-    let customer: any = null;
-    if (meaningfulPhone) {
-      customer = await prismaClient.customer.findFirst({
-        where: { branchId, phone: meaningfulPhone },
-      });
-    }
-    if (!customer && meaningfulName) {
-      customer = await prismaClient.customer.findFirst({
-        where: {
+    let created = false;
+    const work = async (client: any): Promise<string> => {
+      if (!phone) {
+        const row = await client.customer.create({
+          data: { branchId, name: meaningfulName, phone: null },
+        });
+        created = true;
+        return row.id as string;
+      }
+      await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${branchId}:${phone}`}, 0))`;
+      const rows: { id: string; name: string | null; phone: string | null }[] =
+        await client.$queryRaw`SELECT id, name, phone FROM customers
+          WHERE "branchId" = ${branchId} AND phone IS NOT NULL
+            AND right(regexp_replace(phone, '[^0-9]', '', 'g'), ${phone.length}::int) = ${phone}
+          ORDER BY "createdAt" ASC, id ASC LIMIT 1`;
+      const found = rows[0];
+      if (found) {
+        if (
+          meaningfulName &&
+          (!found.name ||
+            ['guest', 'walk-in'].includes(found.name.toLowerCase()) ||
+            found.name.startsWith('Customer '))
+        ) {
+          await client.customer.update({
+            where: { id: found.id },
+            data: { name: meaningfulName },
+          });
+        }
+        return found.id;
+      }
+      const row = await client.customer.create({
+        data: {
           branchId,
-          name: { equals: meaningfulName, mode: 'insensitive' },
+          name: meaningfulName ?? `Customer ${phone}`,
+          phone,
         },
       });
+      created = true;
+      return row.id as string;
+    };
+
+    const id: string = tx
+      ? await work(tx)
+      : phone
+        ? await this.prisma.$transaction((t) => work(t))
+        : await work(this.prisma);
+
+    if (created) {
+      this.realtime.emitToBranch(branchId, 'customer.updated', { id });
     }
-
-    if (customer) {
-      if (
-        meaningfulName &&
-        (!customer.name ||
-          ['guest', 'walk-in'].includes(customer.name.toLowerCase()))
-      ) {
-        await prismaClient.customer.update({
-          where: { id: customer.id },
-          data: { name: meaningfulName },
-        });
-      }
-      if (meaningfulPhone && !customer.phone) {
-        await prismaClient.customer.update({
-          where: { id: customer.id },
-          data: { phone: meaningfulPhone },
-        });
-      }
-      return customer.id;
-    }
-
-    const newCustomer = await prismaClient.customer.create({
-      data: {
-        branchId,
-        name:
-          meaningfulName ||
-          (meaningfulPhone ? `Customer ${meaningfulPhone}` : 'Guest'),
-        phone: meaningfulPhone || null,
-      },
-    });
-
-    this.realtime.emitToBranch(branchId, 'customer.updated', {
-      id: newCustomer.id,
-    });
-
-    return newCustomer.id;
+    return id;
   }
 
   async createOrder(
@@ -1772,17 +1785,11 @@ export class OrdersService {
       effectiveCustomerId = customer.id;
     }
     if (!effectiveCustomerId) {
-      const phone =
-        order.deliveryPhone ??
-        (dto as any).customerPhone ??
-        (dto as any).guestPhone;
-      const name =
-        order.guestName ??
-        (dto as any).customerName ??
-        (dto as any).guestName;
+      // What the cashier typed at payment wins over what the order carried;
+      // with neither, nothing is created (a true walk-in stays anonymous).
       effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
-        name,
-        phone,
+        name: dto.customerName || order.guestName,
+        phone: dto.customerPhone || order.deliveryPhone,
       });
     }
     // If we now have a customer but the order doesn't have one linked yet,

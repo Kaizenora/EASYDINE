@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidPhoneInput } from "./customers";
 
 export const orderTypeSchema = z.enum([
   "DINE_IN",
@@ -173,6 +174,16 @@ export const checkoutSchema = z.object({
   // Why a manual discount was given; stored on the order.
   discountReason: z.string().trim().min(1).max(200).optional(),
   customerId: z.string().optional(),
+  // Optional "save this customer" details typed at payment time. A phone
+  // identifies the customer (matched per branch on its normalized digits); a
+  // name alone never matches an existing customer.
+  customerName: z.string().trim().max(80).optional(),
+  customerPhone: z
+    .string()
+    .trim()
+    .max(25)
+    .refine((v) => v === "" || isValidPhoneInput(v), "Enter a valid phone number")
+    .optional(),
   giftCardCode: z.string().optional(),
   payments: z
     .array(
