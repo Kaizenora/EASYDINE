@@ -11,7 +11,10 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
     id: 'tbl-1',
     number: '5',
     qrToken: 'test-qr-token',
-    floor: { branchId: 'branch-1' },
+    floor: {
+      branchId: 'branch-1',
+      branch: { id: 'branch-1', name: 'Main Branch' },
+    },
   };
 
   beforeEach(() => {
@@ -42,6 +45,7 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
         });
       }),
       addItems: jest.fn(),
+      resolveOrCreateCustomer: jest.fn().mockResolvedValue('cust-1'),
     };
 
     notifications = { notifyByPermission: jest.fn() };
@@ -56,7 +60,7 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
       'test-qr-token',
       items,
       'Siddharth',
-      '+91 9876543210',
+      '9876543210',
       'req-001',
       'Extra spicy',
     );
@@ -68,13 +72,13 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
         type: 'QR_ORDER',
         tableId: 'tbl-1',
         guestName: 'Siddharth',
-        guestPhone: '+91 9876543210',
+        guestPhone: '9876543210',
         notes: 'Extra spicy',
       }),
-      { channel: 'ONLINE' },
+      { channel: 'ONLINE', requireAcceptance: true },
     );
 
-    expect(order.deliveryPhone).toBe('+91 9876543210');
+    expect(order.deliveryPhone).toBe('9876543210');
     expect(order.guestName).toBe('Siddharth');
   });
 
@@ -97,7 +101,7 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
         guestName: 'Guest',
         guestPhone: undefined,
       }),
-      { channel: 'ONLINE' },
+      { channel: 'ONLINE', requireAcceptance: true },
     );
 
     expect(order.deliveryPhone).toBeNull();

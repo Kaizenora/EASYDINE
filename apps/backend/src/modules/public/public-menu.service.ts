@@ -324,6 +324,13 @@ export class PublicMenuService {
           lineTotal: true,
           status: true,
           kitchenNote: true,
+          modifiers: {
+            select: {
+              id: true,
+              nameSnapshot: true,
+              priceAdjSnapshot: true,
+            },
+          },
         },
       },
     };
@@ -425,6 +432,11 @@ export class PublicMenuService {
           lineTotal: String(it.lineTotal),
           status: it.status,
           kitchenNote: it.kitchenNote,
+          modifiers: ((it as any).modifiers || []).map((m: any) => ({
+            id: m.id,
+            nameSnapshot: m.nameSnapshot,
+            priceAdjSnapshot: m.priceAdjSnapshot ? Number(m.priceAdjSnapshot) : 0,
+          })),
         })),
       },
       openRequests: requests.map((r) => r.type),

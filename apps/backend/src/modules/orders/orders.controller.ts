@@ -453,6 +453,65 @@ export class OrdersController {
   // "payment pending"; for a paid order it is the receipt. Either way it only
   // reads: printing it any number of times never charges or closes anything.
   @Auth('bills.print')
+  @Get('sample-receipt')
+  async sampleReceipt(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+    @Query('paperSize') paperSizeQuery: string,
+    @Res() res: Response,
+  ) {
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const branch = await this.ordersService.getBranchForReceipt(branchId);
+    const paperSize = paperSizeQuery === '58mm' || paperSizeQuery === 'A4' ? paperSizeQuery : '80mm';
+    const html = buildReceiptHtml({
+      isTest: true,
+      paperSize,
+      restaurantName: branch.restaurant.name,
+      currency: branch.restaurant.currency,
+      branch: {
+        name: branch.name,
+        address: branch.address,
+        phone: branch.phone,
+        gstNumber: branch.gstNumber,
+        taxRegime: branch.taxRegime,
+        taxMode: branch.taxMode,
+        taxLabel: branch.taxLabel,
+        taxId: branch.taxId,
+      },
+      order: {
+        orderNumber: 'TEST-0001',
+        type: 'DINE_IN',
+        createdAt: new Date(),
+        table: { label: 'Table Test' },
+        customer: { name: 'Sample Customer', phone: '+91 98765 43210' },
+        isProvisional: true,
+        subtotal: 360,
+        discountAmount: 0,
+        taxAmount: branch.taxMode === 'EXCLUSIVE' ? 18 : 17.14,
+        tipAmount: 0,
+        loyaltyPointsRedeemed: 0,
+        loyaltyDiscountAmount: 0,
+        totalAmount: 360,
+        items: [
+          {
+            nameSnapshot: 'Paneer Mutter',
+            quantity: 1,
+            unitPriceSnapshot: 300,
+            lineTotal: 360,
+            taxRateSnapshot: 5,
+            modifiers: [
+              { nameSnapshot: 'Extra Cheese', priceAdjSnapshot: 40 },
+              { nameSnapshot: 'Extra Butter', priceAdjSnapshot: 20 },
+            ],
+          },
+        ],
+        payments: [],
+      },
+    });
+    res.type('html').send(html);
+  }
+
+  @Auth('bills.print')
   @Get(':id/receipt')
   async receipt(
     @CurrentUser() user: SessionUser,
@@ -472,7 +531,9 @@ export class OrdersController {
     if (overrides.isProvisional) {
       await this.ordersService.recordBillPrinted(branchId, id, user.id);
     }
+    const paperSize = query.paperSize === '58mm' || query.paperSize === 'A4' ? query.paperSize : '80mm';
     const html = buildReceiptHtml({
+      paperSize,
       restaurantName: order.branch.restaurant.name,
       currency: order.branch.restaurant.currency,
       branch: {

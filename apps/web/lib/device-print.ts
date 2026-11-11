@@ -1,7 +1,7 @@
 // Printing from the phone itself (EasyDine Android app) or desktop browser (Web Bluetooth):
 // a paired Bluetooth thermal printer, or Android's print dialog (Save as PDF and every installed
 // printer). In a normal browser, Web Bluetooth or the browser print dialog is used.
-import { isNativeApp, plugin } from "@/lib/native";
+import { isNativeApp, plugin } from "./native.ts";
 
 export interface BtPrinter {
   name: string;

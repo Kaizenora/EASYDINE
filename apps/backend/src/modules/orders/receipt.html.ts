@@ -85,6 +85,8 @@ export function buildReceiptHtml({
   branch,
   currency,
   order,
+  paperSize = '80mm',
+  isTest = false,
 }: {
   restaurantName: string;
   branch: {
@@ -99,6 +101,8 @@ export function buildReceiptHtml({
   };
   currency: string;
   order: ReceiptOrder;
+  paperSize?: '58mm' | '80mm' | 'A4';
+  isTest?: boolean;
 }): string {
   const sym = CURRENCY_SYMBOLS[currency] ?? `${currency} `;
   const money = (n: number) => `${sym}${Number(n).toFixed(2)}`;
@@ -115,7 +119,7 @@ export function buildReceiptHtml({
   const itemRows = order.items
     .map((item) => {
       const modifierLines = item.modifiers
-        .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}</div>`)
+        .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}${m.priceAdjSnapshot > 0 ? ` (+${money(m.priceAdjSnapshot)})` : ''}</div>`)
         .join('');
       return `
         <tr>
@@ -211,28 +215,50 @@ export function buildReceiptHtml({
 <style>
   * { box-sizing: border-box; }
   html { margin: 0; }
-  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 4mm; color: #111; width: 80mm; }
   p { margin: 0 0 3px; }
   .receipt { width: 100%; margin: 0; }
-  h1 { font-size: 15px; text-align: center; margin: 0 0 2px; }
   .center { text-align: center; }
   .muted { color: #555; font-size: 11px; line-height: 1.35; }
   .rule { border: none; border-top: 1px dashed #999; margin: 5px 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th { text-align: left; font-size: 10px; text-transform: uppercase; color: #777; padding-bottom: 2px; }
   td { padding: 1px 0; vertical-align: top; word-break: break-word; }
   .num { text-align: right; white-space: nowrap; padding-left: 6px; }
   .sub { font-size: 10px; color: #777; }
   .totals td { padding: 1px 0; }
-  .grand td { font-weight: 700; font-size: 13px; border-top: 1px solid #111; padding-top: 3px; }
   .vf { text-align: center; font-size: 11px; }
   .vf svg { display: block; margin: 4px auto; }
   .footer { text-align: center; margin-top: 6px; font-size: 11px; }
+${paperSize === '58mm' ? `
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 2mm; color: #111; width: 54mm; }
+  h1 { font-size: 13px; text-align: center; margin: 0 0 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .grand td { font-weight: 700; font-size: 11px; border-top: 1px solid #111; padding-top: 2px; }
+  @page { size: 58mm auto; margin: 0; }
+  @media print {
+    html, body { width: 54mm; }
+    .no-print { display: none; }
+  }
+` : paperSize === 'A4' ? `
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0 auto; padding: 10mm; color: #111; width: 100%; max-width: 170mm; }
+  h1 { font-size: 18px; text-align: center; margin: 0 0 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .grand td { font-weight: 700; font-size: 15px; border-top: 1px solid #111; padding-top: 4px; }
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print {
+    html, body { width: 100%; max-width: 170mm; }
+    .no-print { display: none; }
+  }
+` : `
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 4mm; color: #111; width: 80mm; }
+  h1 { font-size: 15px; text-align: center; margin: 0 0 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .grand td { font-weight: 700; font-size: 13px; border-top: 1px solid #111; padding-top: 3px; }
   @page { size: 80mm auto; margin: 0; }
   @media print {
     html, body { width: 80mm; }
     .no-print { display: none; }
   }
+`}
 </style>
 </head>
 <body>
@@ -240,6 +266,7 @@ export function buildReceiptHtml({
     window.addEventListener('message', function (e) { if (e.data === 'print') window.print(); });
   </script>
   <div class="receipt">
+    ${isTest ? '<div class="center" style="font-weight: 700; font-size: 11px; margin: 3px 0 6px; border: 1px dashed #333; padding: 2px;">*** TEST RECEIPT &mdash; NOT A SALE ***</div>' : ''}
     <h1>${esc(restaurantName)}</h1>
     <p class="center muted">
       ${esc(branch.name)}${branch.address ? `<br>${esc(branch.address)}` : ''}
@@ -283,7 +310,9 @@ export function buildReceiptHtml({
     }
     <hr class="rule">
     <p class="footer">${
-      order.isProvisional
+      isTest
+        ? `*** TEST BILL &mdash; Printer configured successfully (${paperSize}) ***`
+        : order.isProvisional
         ? 'Bill only &mdash; not a receipt. Payment pending.'
         : 'Thank you! Visit again.'
     }</p>

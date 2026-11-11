@@ -1,19 +1,27 @@
 "use client";
 
-import { Bluetooth, CheckCircle2, ChefHat, Printer, RefreshCw, Smartphone, Sparkles, Unplug } from "lucide-react";
+import { AlertCircle, Bluetooth, CheckCircle2, FileText, Info, Laptop, Printer, Sparkles, Unplug } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useBranch } from "@/hooks/use-branch";
-import { useOpenCashDrawer, usePrintTestSlip } from "@/hooks/use-print";
-import { canPrintOnDevice, chooseBtPrinter, saveBtPrinter, savedBtPrinter } from "@/lib/device-print";
+import {
+  chooseBtPrinter,
+  isWebBluetoothSupported,
+  saveBtPrinter,
+  savedBtPrinter,
+  type BtPrinter,
+} from "@/lib/device-print";
+import { isNativeApp } from "@/lib/native";
+import {
+  type CashierPaperSize,
+  getCashierPaperSize,
+  openTestReceiptPrint,
+  setCashierPaperSize,
+} from "@/lib/print";
 import { toast } from "@/lib/toast";
 
-const subscribe = (cb: () => void) => {
+const subscribeBt = (cb: () => void) => {
   window.addEventListener("storage", cb);
   window.addEventListener("easydine:printer", cb);
   return () => {
@@ -21,301 +29,286 @@ const subscribe = (cb: () => void) => {
     window.removeEventListener("easydine:printer", cb);
   };
 };
-const read = () => window.localStorage.getItem("easydine.btPrinter") ?? "";
+
+const subscribePaper = (cb: () => void) => {
+  window.addEventListener("storage", cb);
+  window.addEventListener("easydine:paperSize", cb);
+  return () => {
+    window.removeEventListener("storage", cb);
+    window.removeEventListener("easydine:paperSize", cb);
+  };
+};
 
 export function BluetoothPrinterCard() {
-  const raw = useSyncExternalStore(subscribe, read, () => "");
-  const { branchId } = useBranch();
-  const testReceipt = usePrintTestSlip(branchId);
-  const testKot = usePrintTestSlip(branchId, "kot");
-  const openDrawer = useOpenCashDrawer();
+  const [paperSize, setPaperSizeState] = useState<CashierPaperSize>("80mm");
+  const [testPrintStatus, setTestPrintStatus] = useState<string | null>(null);
+  const [pairingBle, setPairingBle] = useState(false);
+  const [pairedDevice, setPairedDevice] = useState<BtPrinter | null>(null);
 
-  const [cashierPrinterName, setCashierPrinterName] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.localStorage.getItem("easydine.cashierPrinterName") || "POS-80 Bluetooth Thermal";
-    }
-    return "POS-80 Bluetooth Thermal";
-  });
+  useEffect(() => {
+    setPaperSizeState(getCashierPaperSize());
+    setPairedDevice(savedBtPrinter());
+  }, []);
 
-  const [kitchenPrinterName, setKitchenPrinterName] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.localStorage.getItem("easydine.kitchenPrinterName") || "Kitchen KOT 80mm ESC/POS";
-    }
-    return "Kitchen KOT 80mm ESC/POS";
-  });
+  const handleSelectPaperSize = (size: CashierPaperSize) => {
+    setPaperSizeState(size);
+    setCashierPaperSize(size);
+    toast.info(`Paper format set to ${size}`);
+  };
 
-  const [note, setNote] = useState<string | null>(null);
-  const [pairingCashier, setPairingCashier] = useState(false);
-  const [pairingKitchen, setPairingKitchen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
-
-  const native = canPrintOnDevice();
-  const savedPrinter = raw ? savedBtPrinter() : null;
-
-  const savePrinters = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("easydine.cashierPrinterName", cashierPrinterName);
-      window.localStorage.setItem("easydine.kitchenPrinterName", kitchenPrinterName);
-      saveBtPrinter({ name: cashierPrinterName, address: "00:11:22:33:44:55" });
-      window.dispatchEvent(new Event("easydine:printer"));
-      toast.success("Printer configuration saved");
+  const handlePrintTestBill = () => {
+    setTestPrintStatus("Print dialog opened");
+    try {
+      openTestReceiptPrint(paperSize);
+    } catch {
+      setTestPrintStatus("Could not open print dialog");
     }
   };
 
-  const handlePairWebBluetooth = async (target: "cashier" | "kitchen") => {
-    if (native) {
-      const p = await chooseBtPrinter();
-      if (p) {
-        if (target === "cashier") setCashierPrinterName(p.name);
-        else setKitchenPrinterName(p.name);
+  const handlePairBle = async () => {
+    setPairingBle(true);
+    try {
+      const printer = await chooseBtPrinter();
+      if (printer) {
+        setPairedDevice(printer);
         window.dispatchEvent(new Event("easydine:printer"));
-        toast.success(`Paired ${p.name}`);
+        toast.success(`Paired with ${printer.name}`);
       }
-      return;
-    }
-
-    if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
-      try {
-        if (target === "cashier") setPairingCashier(true);
-        else setPairingKitchen(true);
-
-        const nav = navigator as unknown as { bluetooth: { requestDevice: (opt: any) => Promise<{ name?: string }> } };
-        const device = await nav.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb"],
-        });
-
-        const name = device.name || (target === "cashier" ? "Bluetooth POS Thermal" : "Bluetooth Kitchen KOT");
-        if (target === "cashier") {
-          setCashierPrinterName(name);
-        } else {
-          setKitchenPrinterName(name);
-        }
-        toast.success(`Connected to ${name}`);
-      } catch (err) {
-        // User cancelled or bluetooth not available
-        toast.info("Bluetooth pairing window closed or cancelled.");
-      } finally {
-        setPairingCashier(false);
-        setPairingKitchen(false);
-      }
-    } else {
-      toast.info("Web Bluetooth requires Chrome/Edge with Bluetooth enabled. You can also specify the printer profile name directly below.");
+    } catch (err) {
+      toast.info("Bluetooth pairing window closed or cancelled.");
+    } finally {
+      setPairingBle(false);
     }
   };
+
+  const handleUnpairBle = () => {
+    saveBtPrinter(null);
+    setPairedDevice(null);
+    window.dispatchEvent(new Event("easydine:printer"));
+    toast.info("Bluetooth printer disconnected");
+  };
+
+  const isBleAvailable = isWebBluetoothSupported() || isNativeApp();
 
   return (
     <Card className="flex flex-col gap-6 p-4 sm:p-6">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Bluetooth className="h-5 w-5" aria-hidden />
+            <Printer className="h-5 w-5" aria-hidden />
           </div>
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-foreground">
-              Thermal & Bluetooth Printers
+              Cashier Bill Printer
             </h2>
             <p className="text-xs text-muted-foreground">
-              Connect 58mm / 80mm ESC-POS wireless and Bluetooth thermal printers for Cashier & Kitchen
+              Set up and test receipt printing for customer bills on this cashier computer
             </p>
           </div>
         </div>
         <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 gap-1.5 py-1">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          ESC/POS Engine Ready
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          Ready for Printing
         </Badge>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Cashier Printer Card */}
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/60 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Printer className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">Cashier Bill Printer</span>
-            </div>
-            <span className="rounded bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              Counter POS
-            </span>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Prints customer bills, payment slips, and triggers automatic cash drawer kick.
-          </p>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="cashier-pr-name" className="text-xs text-muted-foreground">
-              Printer Device Name / Model
-            </Label>
-            <Input
-              id="cashier-pr-name"
-              value={cashierPrinterName}
-              onChange={(e) => setCashierPrinterName(e.target.value)}
-              placeholder="e.g. POS-80 Bluetooth / RP326"
-              className="h-9 text-xs"
-            />
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={pairingCashier}
-              onClick={() => handlePairWebBluetooth("cashier")}
-              className="gap-1.5 text-xs"
-            >
-              <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
-              {pairingCashier ? "Scanning..." : "Pair Bluetooth"}
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={testReceipt.isPending}
-              onClick={() =>
-                setConfirmAction({
-                  title: "Confirm Test Bill Print",
-                  message: `Send a test receipt slip to ${cashierPrinterName}?`,
-                  onConfirm: () =>
-                    testReceipt.mutate(undefined, {
-                      onSuccess: () => toast.success("Test bill slip printed on Cashier printer!"),
-                      onError: (e) => toast.error(e instanceof Error ? e.message : "Print test failed"),
-                    }),
-                })
-              }
-              className="gap-1.5 text-xs"
-            >
-              <Printer className="h-3.5 w-3.5" />
-              {testReceipt.isPending ? "Printing..." : "Test Bill Print"}
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={openDrawer.isPending}
-              onClick={() =>
-                setConfirmAction({
-                  title: "Confirm Open Cash Drawer",
-                  message: "Trigger cash drawer kick pulse on the connected receipt printer?",
-                  onConfirm: () =>
-                    openDrawer.mutate(branchId, {
-                      onSuccess: () => toast.success("Cash drawer kick pulse sent!"),
-                      onError: () => toast.error("Cash drawer pulse error"),
-                    }),
-                })
-              }
-              className="text-xs"
-            >
-              Kick Drawer
-            </Button>
-          </div>
+      {/* Cashier First-Time Setup Instructions */}
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs">
+        <div className="flex items-center gap-2 font-semibold text-foreground mb-1.5">
+          <Laptop className="h-4 w-4 text-primary" />
+          <span>Easy Cashier Printer Setup (3 simple steps):</span>
         </div>
-
-        {/* Kitchen KOT Printer Card */}
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/60 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ChefHat className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-semibold text-foreground">Kitchen (KOT) Printer</span>
-            </div>
-            <span className="rounded bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              Chef Station
-            </span>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Instantly cuts tickets in kitchen when orders are confirmed from Cashier or Table QR.
-          </p>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="kitchen-pr-name" className="text-xs text-muted-foreground">
-              Kitchen Printer Device Name
-            </Label>
-            <Input
-              id="kitchen-pr-name"
-              value={kitchenPrinterName}
-              onChange={(e) => setKitchenPrinterName(e.target.value)}
-              placeholder="e.g. Kitchen KOT 80mm ESC/POS"
-              className="h-9 text-xs"
-            />
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={pairingKitchen}
-              onClick={() => handlePairWebBluetooth("kitchen")}
-              className="gap-1.5 text-xs"
-            >
-              <Bluetooth className="h-3.5 w-3.5 text-blue-500" />
-              {pairingKitchen ? "Scanning..." : "Pair Bluetooth"}
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={testKot.isPending}
-              onClick={() =>
-                setConfirmAction({
-                  title: "Confirm Kitchen KOT Test Print",
-                  message: `Send a sample kitchen order ticket to ${kitchenPrinterName}?`,
-                  onConfirm: () =>
-                    testKot.mutate(undefined, {
-                      onSuccess: () => toast.success("Test KOT ticket printed to Kitchen!"),
-                      onError: (e) => toast.error(e instanceof Error ? e.message : "Kitchen print failed"),
-                    }),
-                })
-              }
-              className="gap-1.5 text-xs"
-            >
-              <ChefHat className="h-3.5 w-3.5 text-amber-500" />
-              {testKot.isPending ? "Printing..." : "Test KOT Ticket"}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between border-t border-border pt-4">
-        <p className="text-xs text-muted-foreground">
-          Works with all standard 58mm / 80mm ESC-POS Bluetooth and USB thermal receipt printers (TVS, Epson, Xprinter, NGX, Everycom).
+        <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-1">
+          <li>
+            <strong className="text-foreground">Connect printer to this computer</strong> via USB cable, Wi-Fi, or system Bluetooth, and install its manufacturer driver.
+          </li>
+          <li>
+            <strong className="text-foreground">Select your receipt paper width</strong> below (58mm, 80mm thermal, or A4).
+          </li>
+          <li>
+            <strong className="text-foreground">Click &quot;Print test bill&quot;</strong> and select your printer from the browser print dialog.
+          </li>
+        </ol>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Note: In this hosted web app, bill printing uses your device&apos;s installed printer drivers via the browser print dialog. Driver support depends on your operating system (Windows/macOS/Linux).
         </p>
-        <Button size="sm" onClick={savePrinters} className="gap-1.5 text-xs font-semibold">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Save Printer Settings
-        </Button>
       </div>
 
-      {/* Confirmation Dialog for Printer Operations */}
-      <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{confirmAction?.title}</DialogTitle>
-          </DialogHeader>
-          <p className="py-2 text-sm text-muted-foreground">
-            {confirmAction?.message}
+      {/* Paper Size Configuration */}
+      <div className="flex flex-col gap-3">
+        <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
+          Receipt Paper Size
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Choose the roll width of your thermal printer. This drives the receipt layout and margins when printing.
+        </p>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {/* 80mm Thermal */}
+          <button
+            type="button"
+            onClick={() => handleSelectPaperSize("80mm")}
+            className={`flex flex-col items-start rounded-xl border p-3.5 text-left transition-all ${
+              paperSize === "80mm"
+                ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary"
+                : "border-border bg-card/60 hover:border-border/80 hover:bg-card"
+            }`}
+          >
+            <div className="flex w-full items-center justify-between">
+              <span className="text-sm font-bold text-foreground">80mm Thermal</span>
+              {paperSize === "80mm" && (
+                <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-primary text-black font-semibold">
+                  Active
+                </Badge>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground mt-1">
+              Standard POS receipt rolls (3.15 inch). Recommended for all restaurant bills.
+            </span>
+          </button>
+
+          {/* 58mm Thermal */}
+          <button
+            type="button"
+            onClick={() => handleSelectPaperSize("58mm")}
+            className={`flex flex-col items-start rounded-xl border p-3.5 text-left transition-all ${
+              paperSize === "58mm"
+                ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary"
+                : "border-border bg-card/60 hover:border-border/80 hover:bg-card"
+            }`}
+          >
+            <div className="flex w-full items-center justify-between">
+              <span className="text-sm font-bold text-foreground">58mm Thermal</span>
+              {paperSize === "58mm" && (
+                <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-primary text-black font-semibold">
+                  Active
+                </Badge>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground mt-1">
+              Compact / mobile 2-inch roll printers. Compact narrow layout.
+            </span>
+          </button>
+
+          {/* A4 Standard */}
+          <button
+            type="button"
+            onClick={() => handleSelectPaperSize("A4")}
+            className={`flex flex-col items-start rounded-xl border p-3.5 text-left transition-all ${
+              paperSize === "A4"
+                ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary"
+                : "border-border bg-card/60 hover:border-border/80 hover:bg-card"
+            }`}
+          >
+            <div className="flex w-full items-center justify-between">
+              <span className="text-sm font-bold text-foreground">A4 Full Page</span>
+              {paperSize === "A4" && (
+                <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-primary text-black font-semibold">
+                  Active
+                </Badge>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground mt-1">
+              Standard office laser / inkjet printer for full-page invoices.
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Test Bill Printing Action */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card/40 p-4">
+        <div className="space-y-0.5">
+          <div className="text-sm font-medium text-foreground flex items-center gap-2">
+            <span>Test Bill Print</span>
+            <span className="text-xs font-normal text-muted-foreground">({paperSize})</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Renders a safe synthetic sample bill through the real receipt renderer to verify alignment.
           </p>
-          <DialogFooter className="flex gap-2 sm:justify-end">
-            <Button variant="outline" size="sm" onClick={() => setConfirmAction(null)}>
-              Cancel
-            </Button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {testPrintStatus && (
+            <span className="text-xs text-emerald-400 font-medium animate-in fade-in">
+              {testPrintStatus}
+            </span>
+          )}
+          <Button
+            type="button"
+            onClick={handlePrintTestBill}
+            className="gap-2 text-xs font-bold"
+          >
+            <Printer className="h-4 w-4" />
+            Print test bill
+          </Button>
+        </div>
+      </div>
+
+      {/* Direct Bluetooth Thermal Section (Opt-in) */}
+      <div className="rounded-xl border border-border bg-card/40 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bluetooth className="h-4 w-4 text-blue-400" />
+            <span className="text-sm font-semibold text-foreground">
+              Direct Bluetooth Thermal (Optional BLE)
+            </span>
+          </div>
+          {pairedDevice ? (
+            <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-400 text-[10px] gap-1">
+              Paired
+            </Badge>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">Not paired</span>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          For wireless BLE thermal receipt printers paired directly via Web Bluetooth (Chrome/Edge on desktop, or the EasyDine Android app). Only pairs with genuine discoverable BLE devices.
+        </p>
+
+        {pairedDevice ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 p-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-blue-400" />
+              <div>
+                <span className="font-semibold text-foreground">{pairedDevice.name}</span>
+                <span className="ml-2 text-muted-foreground font-mono text-[10px]">({pairedDevice.address})</span>
+              </div>
+            </div>
             <Button
+              type="button"
               size="sm"
-              onClick={() => {
-                confirmAction?.onConfirm();
-                setConfirmAction(null);
-              }}
+              variant="outline"
+              onClick={handleUnpairBle}
+              className="gap-1.5 text-xs h-7 text-red-400 hover:text-red-300"
             >
-              Confirm
+              <Unplug className="h-3 w-3" />
+              Disconnect
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pairingBle || !isBleAvailable}
+              onClick={handlePairBle}
+              className="gap-1.5 text-xs"
+            >
+              <Bluetooth className="h-3.5 w-3.5 text-blue-400" />
+              {pairingBle ? "Scanning for BLE..." : "Pair BLE Printer"}
+            </Button>
+            {!isBleAvailable && (
+              <span className="text-[11px] text-muted-foreground">
+                Web Bluetooth is only supported in Chrome or Edge over HTTPS.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </Card>
   );
 }

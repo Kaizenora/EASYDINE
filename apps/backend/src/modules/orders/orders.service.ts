@@ -61,6 +61,13 @@ const KOT_FORWARD_STATUSES = [
 
 @Injectable()
 export class OrdersService {
+  async getBranchForReceipt(branchId: string) {
+    return this.prisma.branch.findUniqueOrThrow({
+      where: { id: branchId },
+      include: { restaurant: true },
+    });
+  }
+
   private readonly logger = new Logger(OrdersService.name);
 
   constructor(
@@ -2408,20 +2415,7 @@ export class OrdersService {
       return modifier;
     });
 
-    // Extract any extra charges explicitly written in kitchenNote or custom extras
-    // e.g. "Extra cheese (+₹40), Extra butter (+₹20)" -> 40 + 20 = 60
-    let noteExtras = 0;
-    if (cartItem.kitchenNote) {
-      const extraMatches = cartItem.kitchenNote.matchAll(/\(\+₹?(\d+(?:\.\d+)?)\)/g);
-      for (const m of extraMatches) {
-        const val = parseFloat(m[1]);
-        if (!isNaN(val) && val > 0 && val < 50000) {
-          noteExtras += val;
-        }
-      }
-    }
-
-    const basePrice = portionBase + noteExtras;
+    const basePrice = portionBase;
     const modifierTotal = selectedModifiers.reduce(
       (sum, m) => sum + Number(m.priceAdjustment),
       0,
