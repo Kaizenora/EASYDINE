@@ -162,23 +162,18 @@ export default function LuxuryCustomerMenu({
   const [showBillModal, setShowBillModal] = useState(false);
   const [showConfirmOrderModal, setShowConfirmOrderModal] = useState(false);
 
-  // Load customer credentials from session
+  // Whether we have confirmed the current session state from the server.
+  // Until true, we show a loading screen to prevent flickering between screens.
+  const [sessionVerified, setSessionVerified] = useState(false);
+
+  // Step 1: On mount, only load activeOrderId (needed for the status URL).
+  // We deliberately do NOT restore guestName/guestPhone yet — that only happens
+  // after the first status response confirms there is an active order. This
+  // prevents the page from briefly flashing the previous customer's screen.
   useEffect(() => {
-    const savedName = sessionStorage.getItem(nameStorageKey);
-    const savedPhone = sessionStorage.getItem(phoneStorageKey);
     const savedOrderId = sessionStorage.getItem(orderIdStorageKey);
-    if (savedName) {
-      setGuestName(savedName);
-      setNameDraft(savedName);
-    }
-    if (savedPhone) {
-      setGuestPhone(savedPhone);
-      setPhoneDraft(savedPhone);
-    }
-    if (savedOrderId) {
-      setActiveOrderId(savedOrderId);
-    }
-  }, [nameStorageKey, phoneStorageKey, orderIdStorageKey]);
+    if (savedOrderId) setActiveOrderId(savedOrderId);
+  }, [orderIdStorageKey]);
 
   // Fetch Public Menu
   const { data, error } = useQuery({
@@ -194,11 +189,15 @@ export default function LuxuryCustomerMenu({
     ? `/public/menu/${qrToken}/status?orderId=${activeOrderId}`
     : `/public/menu/${qrToken}/status`;
 
-  const { data: status } = useQuery({
+  const { data: status, isFetched: statusFetched } = useQuery({
     queryKey: ["public-status", qrToken, isTakeaway ? activeOrderId : null],
     queryFn: () => api.get<PublicStatus>(statusUrl),
     refetchInterval: 1500,
     enabled: !!data,
+    // No caching — always use fresh server data to avoid showing a previous
+    // customer's paid screen from a stale React Query cache entry.
+    gcTime: 0,
+    staleTime: 0,
   });
 
   const paidOrder =
@@ -216,24 +215,49 @@ export default function LuxuryCustomerMenu({
       ? status.order
       : null;
 
-  // When an order is completed/paid and cleared by cashier, or on fresh scan with no active order.
-  // Backend now NEVER returns a PAID order — so status.order === null means fresh state.
+  // Step 2: After the first status response, decide whether to restore session
+  // or wipe it. This is the key anti-flicker gate.
   useEffect(() => {
-    if (status && !status.order) {
-      // Clear any stale session data so the next guest always starts fresh
+    if (sessionVerified) return;      // already decided
+    if (!data) return;                // menu not loaded yet — status is still disabled
+    if (status === undefined) return; // first fetch not complete yet
+
+    if (status.order) {
+      // There is an active (OPEN / BILLED) order on this table — restore identity.
+      const savedName  = sessionStorage.getItem(nameStorageKey);
+      const savedPhone = sessionStorage.getItem(phoneStorageKey);
+      if (savedName)  { setGuestName(savedName);  setNameDraft(savedName); }
+      if (savedPhone) { setGuestPhone(savedPhone); setPhoneDraft(savedPhone); }
+    } else {
+      // No active order (table free / takeaway order already paid).
+      // Wipe any stale session so the next guest always starts at the welcome screen.
       sessionStorage.removeItem(nameStorageKey);
       sessionStorage.removeItem(phoneStorageKey);
       sessionStorage.removeItem(orderIdStorageKey);
-      if (activeOrderId) {
-        setActiveOrderId(null);
-        setGuestName("");
-        setGuestPhone("");
-        setNameDraft("");
-        setPhoneDraft("");
-        setViewMode("MENU");
-      }
+      setActiveOrderId(null);
+      // guestName stays "" → welcome/name-input screen shown
     }
-  }, [status?.order, activeOrderId, nameStorageKey, phoneStorageKey, orderIdStorageKey]);
+    setSessionVerified(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, status, sessionVerified]);
+
+  // Real-time reset: cashier marks paid while guest is already on the page.
+  // After the initial session is verified, any transition to order===null means
+  // the current session ended and the page should revert to the welcome screen.
+  useEffect(() => {
+    if (!sessionVerified) return;
+    if (status && !status.order) {
+      sessionStorage.removeItem(nameStorageKey);
+      sessionStorage.removeItem(phoneStorageKey);
+      sessionStorage.removeItem(orderIdStorageKey);
+      setActiveOrderId(null);
+      setGuestName("");
+      setGuestPhone("");
+      setNameDraft("");
+      setPhoneDraft("");
+      setViewMode("MENU");
+    }
+  }, [status?.order, sessionVerified, nameStorageKey, phoneStorageKey, orderIdStorageKey]);
 
   // Auto-switch to tracking view when an active order exists and user hasn't explicitly navigated
   useEffect(() => {
@@ -466,6 +490,18 @@ export default function LuxuryCustomerMenu({
         >
           Retry
         </button>
+      </div>
+    );
+  }
+
+  // Session-verification gate: show a neutral loading screen until the first
+  // status response arrives and we know whether to restore or wipe the session.
+  // This prevents ANY flicker between screens on QR scan.
+  if (!sessionVerified) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0C0C0E] text-white">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-neutral-700 border-t-[#E5A93C]" />
+        <p className="text-sm text-neutral-500 font-sans">Loading menu…</p>
       </div>
     );
   }

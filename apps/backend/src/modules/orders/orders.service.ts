@@ -1785,6 +1785,15 @@ export class OrdersService {
         phone,
       });
     }
+    // If we now have a customer but the order doesn't have one linked yet,
+    // link it immediately (outside the tx) so the Customers section updates
+    // even if the payment transaction later fails.
+    if (effectiveCustomerId && !order.customerId) {
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: { customerId: effectiveCustomerId },
+      }).catch(() => { /* non-critical — tx will also set it */ });
+    }
 
     const { bill, locked, paid, auto, pointsToRedeem } = await this.resolveBill(
       branchId,

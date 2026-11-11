@@ -180,6 +180,13 @@ export class PublicMenuService {
 
       const cleanGuestName = guestName?.trim() || 'Takeaway Guest';
 
+      // Resolve or create customer from guest details so they appear in
+      // the Customers section even before the cashier marks the order paid.
+      const takeawayCustomerId = await this.ordersService.resolveOrCreateCustomer(
+        branchId,
+        { name: cleanGuestName, phone: guestPhone },
+      );
+
       return this.ordersService.createOrder(
         branchId,
         createdById,
@@ -189,6 +196,7 @@ export class PublicMenuService {
           guestPhone,
           notes: notes ? `Takeaway · ${notes}` : 'Takeaway Order',
           clientRequestId: requestId,
+          customerId: takeawayCustomerId,
           items: normalizedItems,
         } as any,
         { channel: 'ONLINE', requireAcceptance: true },
@@ -221,11 +229,18 @@ export class PublicMenuService {
       where: { branchId, tableId: table.id, status: 'OPEN' },
     });
     if (openOrder) {
-      if (guestPhone && !openOrder.deliveryPhone) {
-        await this.prisma.order.update({
-          where: { id: openOrder.id },
-          data: { deliveryPhone: guestPhone },
-        });
+      // Update phone and link customer if not done yet
+      const updateData: any = {};
+      if (guestPhone && !openOrder.deliveryPhone) updateData.deliveryPhone = guestPhone;
+      if (!openOrder.customerId) {
+        const existingCustomerId = await this.ordersService.resolveOrCreateCustomer(
+          branchId,
+          { name: guestName, phone: guestPhone },
+        );
+        if (existingCustomerId) updateData.customerId = existingCustomerId;
+      }
+      if (Object.keys(updateData).length > 0) {
+        await this.prisma.order.update({ where: { id: openOrder.id }, data: updateData });
       }
       return this.ordersService.addItems(branchId, openOrder.id, normalizedItems, {
         enforceModifierLimits: true,
@@ -249,6 +264,13 @@ export class PublicMenuService {
 
     const cleanGuestName = guestName?.trim() || 'Guest';
 
+    // Resolve or create customer from guest name/phone so they appear in
+    // the Customers section immediately when order is placed.
+    const qrCustomerId = await this.ordersService.resolveOrCreateCustomer(
+      branchId,
+      { name: cleanGuestName, phone: guestPhone },
+    );
+
     return this.ordersService.createOrder(
       branchId,
       createdById,
@@ -259,6 +281,7 @@ export class PublicMenuService {
         guestPhone,
         notes,
         clientRequestId: requestId,
+        customerId: qrCustomerId,
         items: normalizedItems,
       } as any,
       { channel: 'ONLINE', requireAcceptance: true },
