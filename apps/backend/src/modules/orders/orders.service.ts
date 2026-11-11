@@ -2408,7 +2408,20 @@ export class OrdersService {
       return modifier;
     });
 
-    const basePrice = portionBase;
+    // Extract any extra charges explicitly written in kitchenNote or custom extras
+    // e.g. "Extra cheese (+₹40), Extra butter (+₹20)" -> 40 + 20 = 60
+    let noteExtras = 0;
+    if (cartItem.kitchenNote) {
+      const extraMatches = cartItem.kitchenNote.matchAll(/\(\+₹?(\d+(?:\.\d+)?)\)/g);
+      for (const m of extraMatches) {
+        const val = parseFloat(m[1]);
+        if (!isNaN(val) && val > 0 && val < 50000) {
+          noteExtras += val;
+        }
+      }
+    }
+
+    const basePrice = portionBase + noteExtras;
     const modifierTotal = selectedModifiers.reduce(
       (sum, m) => sum + Number(m.priceAdjustment),
       0,

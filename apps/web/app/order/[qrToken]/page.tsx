@@ -65,6 +65,31 @@ function getDishImage(item: { name: string; imageUrl?: string | null }, catName:
   return getFallback();
 }
 
+function formatDeviceTime(val?: string | null): string {
+  if (!val) return "";
+  try {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    // Handle fallback if backend sent raw time like "04:39 AM"
+    const match = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const meridiem = match[3]?.toUpperCase();
+      if (meridiem === "PM" && hours < 12) hours += 12;
+      if (meridiem === "AM" && hours === 12) hours = 0;
+      const now = new Date();
+      const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hours, minutes));
+      return utcDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    return val;
+  } catch {
+    return val || "";
+  }
+}
+
 interface PublicMenuItem {
   id: string;
   name: string;
@@ -357,7 +382,7 @@ export default function LuxuryCustomerMenu({
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.quantity,
-          kitchenNote: c.modifierLabel || undefined,
+          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
         })),
       }),
     onSuccess: (res: any) => {
@@ -370,7 +395,7 @@ export default function LuxuryCustomerMenu({
         orderNumber: orderNum,
         status: "OPEN",
         acceptance: "PENDING",
-        placedAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        placedAt: new Date().toISOString(),
         items: cart.map((c) => ({
           id: c.id,
           nameSnapshot: c.name,
@@ -378,7 +403,7 @@ export default function LuxuryCustomerMenu({
           unitPriceSnapshot: String(c.unitPrice),
           lineTotal: String(c.unitPrice * c.quantity),
           status: "PENDING",
-          kitchenNote: c.modifierLabel || undefined,
+          kitchenNote: [c.modifierLabel, c.cookingNote].filter(Boolean).join(" · ") || undefined,
         })),
         totalAmount: cartTotalPrice.toFixed(0),
       };
@@ -642,9 +667,14 @@ export default function LuxuryCustomerMenu({
               <>
                 <p className="text-xs font-bold text-neutral-400 mb-2">Your order</p>
                 {orderItems.slice(0, 5).map((it: any, i: number) => (
-                  <div key={i} className="flex justify-between text-xs py-1 border-b border-neutral-900">
-                    <span className="text-neutral-300">{it.nameSnapshot} × {it.quantity}</span>
-                    <span className="text-white font-bold">₹{it.lineTotal || (parseFloat(it.unitPriceSnapshot || "0") * it.quantity).toFixed(0)}</span>
+                  <div key={i} className="py-1.5 border-b border-neutral-900">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-neutral-300 font-medium">{it.nameSnapshot} × {it.quantity}</span>
+                      <span className="text-white font-bold">₹{it.lineTotal || (parseFloat(it.unitPriceSnapshot || "0") * it.quantity).toFixed(0)}</span>
+                    </div>
+                    {it.kitchenNote && (
+                      <p className="mt-0.5 text-[10px] text-amber-400 font-medium">{it.kitchenNote}</p>
+                    )}
                   </div>
                 ))}
                 {orderItems.length > 5 && <p className="text-xs text-neutral-500 mt-1">...and {orderItems.length - 5} more items</p>}
@@ -794,7 +824,7 @@ export default function LuxuryCustomerMenu({
             </button>
           </div>
           <p className="mt-1 text-xs text-neutral-400">
-            {data?.tableName || "Table"} · {guestName} · placed {activeOrder.placedAt || "5:04 PM"}
+            {data?.tableName || "Table"} · {guestName} · placed {formatDeviceTime(activeOrder.placedAt) || formatDeviceTime(new Date().toISOString())}
           </p>
         </div>
 
@@ -826,7 +856,7 @@ export default function LuxuryCustomerMenu({
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-white">Accepted by cashier</span>
                   {activeOrder.acceptedAt && (
-                    <span className="text-[11px] text-neutral-400">{activeOrder.acceptedAt}</span>
+                    <span className="text-[11px] text-neutral-400">{formatDeviceTime(activeOrder.acceptedAt)}</span>
                   )}
                 </div>
                 <span className="text-xs text-neutral-400">
@@ -880,7 +910,7 @@ export default function LuxuryCustomerMenu({
                     </span>
                   )}
                   {activeOrder.preparedAt && (
-                    <span className="text-[11px] text-neutral-400">{activeOrder.preparedAt}</span>
+                    <span className="text-[11px] text-neutral-400">{formatDeviceTime(activeOrder.preparedAt)}</span>
                   )}
                 </div>
                 <span className="text-xs text-neutral-400">
@@ -908,7 +938,7 @@ export default function LuxuryCustomerMenu({
                     {isTakeaway ? "Ready for pickup at counter" : "Served at your table"}
                   </span>
                   {activeOrder.servedAt && (
-                    <span className="text-[11px] text-neutral-400">{activeOrder.servedAt}</span>
+                    <span className="text-[11px] text-neutral-400">{formatDeviceTime(activeOrder.servedAt)}</span>
                   )}
                 </div>
                 <span className="text-xs text-neutral-400">
@@ -963,13 +993,20 @@ export default function LuxuryCustomerMenu({
 
           <div className="mt-3 divide-y divide-neutral-900">
             {orderItems.map((item, idx) => (
-              <div key={item.id || idx} className="flex items-center justify-between py-2 text-sm">
-                <span className="text-neutral-300 font-medium">
-                  {item.nameSnapshot} <span className="text-neutral-500">× {item.quantity}</span>
-                </span>
-                <span className="text-white font-bold">
-                  ₹{item.lineTotal || (parseFloat(item.unitPriceSnapshot || "150") * item.quantity).toFixed(0)}
-                </span>
+              <div key={item.id || idx} className="py-2.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-neutral-300 font-medium">
+                    {item.nameSnapshot} <span className="text-neutral-500">× {item.quantity}</span>
+                  </span>
+                  <span className="text-white font-bold">
+                    ₹{item.lineTotal || (parseFloat(item.unitPriceSnapshot || "150") * item.quantity).toFixed(0)}
+                  </span>
+                </div>
+                {item.kitchenNote && (
+                  <p className="mt-0.5 text-xs text-amber-400 font-medium">
+                    {item.kitchenNote}
+                  </p>
+                )}
               </div>
             ))}
           </div>

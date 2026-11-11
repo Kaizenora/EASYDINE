@@ -395,19 +395,11 @@ export class PublicMenuService {
 
     const isServed = cookingStatus === 'SERVED' || order.status === 'PAID';
 
-    const placedAt = order.createdAt
-      ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : undefined;
-    const acceptedAt = order.acceptedAt
-      ? new Date(order.acceptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : undefined;
+    const placedAt = order.createdAt ? new Date(order.createdAt).toISOString() : undefined;
+    const acceptedAt = order.acceptedAt ? new Date(order.acceptedAt).toISOString() : undefined;
     const latestKot = kots[0];
-    const preparedAt = latestKot?.readyAt
-      ? new Date(latestKot.readyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : undefined;
-    const servedAt = latestKot?.servedAt
-      ? new Date(latestKot.servedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : undefined;
+    const preparedAt = latestKot?.readyAt ? new Date(latestKot.readyAt).toISOString() : undefined;
+    const servedAt = latestKot?.servedAt ? new Date(latestKot.servedAt).toISOString() : undefined;
 
     return {
       order: {
