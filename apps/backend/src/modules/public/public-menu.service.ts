@@ -305,39 +305,31 @@ export class PublicMenuService {
     let order: any = null;
 
     if (isTakeaway || !table) {
+      // Takeaway: only return an active (non-paid) order if we have a specific orderId
       if (requestedOrderId) {
         order = await this.prisma.order.findFirst({
           where: {
             id: requestedOrderId,
             branchId: branch.id,
             type: 'TAKEAWAY',
+            // NEVER return a PAID order — once paid the guest sees the menu fresh
+            status: { in: ['OPEN', 'BILLED'] },
           },
           select: orderSelect,
         });
       }
     } else {
-      // Dine-in table:
-      // If table is AVAILABLE, previous session is finished; reset to empty menu for new guests.
-      if (table.status !== 'AVAILABLE') {
-        order = await this.prisma.order.findFirst({
-          where: {
-            tableId: table.id,
-            status: { in: ['OPEN', 'BILLED'] },
-          },
-          orderBy: { createdAt: 'desc' },
-          select: orderSelect,
-        });
-
-        if (!order && requestedOrderId) {
-          order = await this.prisma.order.findFirst({
-            where: {
-              id: requestedOrderId,
-              tableId: table.id,
-            },
-            select: orderSelect,
-          });
-        }
-      }
+      // Dine-in table: ALWAYS only return OPEN or BILLED orders.
+      // If the order is PAID, we return null so the next guest gets a fresh menu.
+      // We do NOT rely on table.status because releaseTableIfIdle may be async.
+      order = await this.prisma.order.findFirst({
+        where: {
+          tableId: table.id,
+          status: { in: ['OPEN', 'BILLED'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: orderSelect,
+      });
     }
 
     const requests = (!isTakeaway && table)

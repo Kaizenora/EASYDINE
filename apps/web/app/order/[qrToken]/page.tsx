@@ -187,13 +187,16 @@ export default function LuxuryCustomerMenu({
     retry: 1,
   });
 
-  // Live order status & service requests
+  // Live order status & service requests.
+  // For takeaway, pass orderId so we can track the specific order.
+  // For dine-in, the backend always returns the active OPEN/BILLED order by table — no orderId needed.
+  const statusUrl = isTakeaway && activeOrderId
+    ? `/public/menu/${qrToken}/status?orderId=${activeOrderId}`
+    : `/public/menu/${qrToken}/status`;
+
   const { data: status } = useQuery({
-    queryKey: ["public-status", qrToken, activeOrderId],
-    queryFn: () =>
-      api.get<PublicStatus>(
-        `/public/menu/${qrToken}/status${activeOrderId ? `?orderId=${activeOrderId}` : ""}`
-      ),
+    queryKey: ["public-status", qrToken, isTakeaway ? activeOrderId : null],
+    queryFn: () => api.get<PublicStatus>(statusUrl),
     refetchInterval: 1500,
     enabled: !!data,
   });
@@ -213,18 +216,22 @@ export default function LuxuryCustomerMenu({
       ? status.order
       : null;
 
-  // When an order is completed/paid and cleared by cashier, or on fresh scan with no active order
+  // When an order is completed/paid and cleared by cashier, or on fresh scan with no active order.
+  // Backend now NEVER returns a PAID order — so status.order === null means fresh state.
   useEffect(() => {
-    if (status && !status.order && activeOrderId) {
+    if (status && !status.order) {
+      // Clear any stale session data so the next guest always starts fresh
       sessionStorage.removeItem(nameStorageKey);
       sessionStorage.removeItem(phoneStorageKey);
       sessionStorage.removeItem(orderIdStorageKey);
-      setActiveOrderId(null);
-      setGuestName("");
-      setGuestPhone("");
-      setNameDraft("");
-      setPhoneDraft("");
-      setViewMode("MENU");
+      if (activeOrderId) {
+        setActiveOrderId(null);
+        setGuestName("");
+        setGuestPhone("");
+        setNameDraft("");
+        setPhoneDraft("");
+        setViewMode("MENU");
+      }
     }
   }, [status?.order, activeOrderId, nameStorageKey, phoneStorageKey, orderIdStorageKey]);
 
@@ -475,7 +482,8 @@ export default function LuxuryCustomerMenu({
     setPhoneDraft("");
     setCart([]);
     setViewMode("MENU");
-    queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
+    // Invalidate status so the query re-fetches without stale orderId
+    queryClient.removeQueries({ queryKey: ["public-status", qrToken] });
   };
 
   if (paidOrder && !cart.length) {
