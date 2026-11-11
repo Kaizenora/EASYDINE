@@ -439,12 +439,16 @@ export default function LuxuryCustomerMenu({
   // Check-in action with Name & Contact
   const confirmCheckIn = () => {
     const finalName = nameDraft.trim() || "Guest";
-    const finalPhone = phoneDraft.trim() || undefined;
+    const cleanPhone = phoneDraft.replace(/\D/g, "").slice(0, 10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      toast.error("Please enter a valid 10-digit mobile number");
+      return;
+    }
     setGuestName(finalName);
-    setGuestPhone(finalPhone || "");
+    setGuestPhone(cleanPhone);
     sessionStorage.setItem(nameStorageKey, finalName);
-    if (finalPhone) sessionStorage.setItem(phoneStorageKey, finalPhone);
-    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName, phone: finalPhone ?? null }).catch(() => {});
+    sessionStorage.setItem(phoneStorageKey, cleanPhone);
+    api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName, phone: cleanPhone }).catch(() => {});
   };
 
   // Cart calculations
@@ -768,17 +772,33 @@ export default function LuxuryCustomerMenu({
             </div>
 
             <div className="mt-3">
-              <label htmlFor="phone-input" className="text-xs font-black uppercase tracking-wider text-neutral-600">
-                CONTACT NUMBER (PHONE)
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="phone-input" className="text-xs font-black uppercase tracking-wider text-neutral-600">
+                  CONTACT NUMBER (10 DIGITS)
+                </label>
+                <span className="text-[11px] font-semibold text-neutral-500">
+                  {phoneDraft.length}/10
+                </span>
+              </div>
               <input
                 id="phone-input"
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={10}
                 value={phoneDraft}
-                onChange={(e) => setPhoneDraft(e.target.value)}
-                placeholder="+91 98765 43210"
-                className="mt-1.5 w-full rounded-2xl border border-neutral-300/80 bg-[#E6DFD1]/80 px-4 py-3 text-base font-bold text-neutral-900 placeholder:text-neutral-500 focus:border-amber-600 focus:outline-none"
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setPhoneDraft(digits);
+                }}
+                placeholder="10-digit mobile number (e.g. 9876543210)"
+                className="mt-1.5 w-full rounded-2xl border border-neutral-300/80 bg-[#E6DFD1]/80 px-4 py-3 text-base font-bold text-neutral-900 placeholder:text-neutral-500 focus:border-amber-600 focus:outline-none tracking-wider"
               />
+              {phoneDraft.length > 0 && phoneDraft.length < 10 && (
+                <p className="mt-1 text-[11px] font-semibold text-amber-700">
+                  {10 - phoneDraft.length} more digit{10 - phoneDraft.length === 1 ? "" : "s"} required
+                </p>
+              )}
             </div>
 
             <button

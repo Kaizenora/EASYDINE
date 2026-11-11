@@ -63,15 +63,16 @@ export class PublicMenuService {
     if (isTakeaway || !table) return { ok: true };
     const branchId = table.floor.branchId;
 
-    if (guestName || phone) {
+    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(0, 10) : undefined;
+    if (guestName || cleanPhone) {
       await this.ordersService.resolveOrCreateCustomer(branchId, {
         name: guestName,
-        phone,
+        phone: cleanPhone,
       });
     }
 
     if (table.status === 'AVAILABLE') {
-      const noteParts = [guestName?.trim(), phone?.trim()].filter(Boolean);
+      const noteParts = [guestName?.trim(), cleanPhone].filter(Boolean);
       await this.prisma.table.update({
         where: { id: table.id },
         data: {
@@ -179,12 +180,13 @@ export class PublicMenuService {
       if (!createdById) throw new NotFoundException('This branch has no staff to receive the order');
 
       const cleanGuestName = guestName?.trim() || 'Takeaway Guest';
+      const cleanGuestPhone = guestPhone ? guestPhone.replace(/\D/g, '').slice(0, 10) : undefined;
 
       // Resolve or create customer from guest details so they appear in
       // the Customers section even before the cashier marks the order paid.
       const takeawayCustomerId = await this.ordersService.resolveOrCreateCustomer(
         branchId,
-        { name: cleanGuestName, phone: guestPhone },
+        { name: cleanGuestName, phone: cleanGuestPhone },
       );
 
       return this.ordersService.createOrder(
@@ -193,7 +195,7 @@ export class PublicMenuService {
         {
           type: 'TAKEAWAY',
           guestName: cleanGuestName,
-          guestPhone,
+          guestPhone: cleanGuestPhone,
           notes: notes ? `Takeaway · ${notes}` : 'Takeaway Order',
           clientRequestId: requestId,
           customerId: takeawayCustomerId,
@@ -263,12 +265,13 @@ export class PublicMenuService {
     }
 
     const cleanGuestName = guestName?.trim() || 'Guest';
+    const cleanGuestPhone = guestPhone ? guestPhone.replace(/\D/g, '').slice(0, 10) : undefined;
 
     // Resolve or create customer from guest name/phone so they appear in
     // the Customers section immediately when order is placed.
     const qrCustomerId = await this.ordersService.resolveOrCreateCustomer(
       branchId,
-      { name: cleanGuestName, phone: guestPhone },
+      { name: cleanGuestName, phone: cleanGuestPhone },
     );
 
     return this.ordersService.createOrder(
@@ -278,7 +281,7 @@ export class PublicMenuService {
         type: 'QR_ORDER',
         tableId: table.id,
         guestName: cleanGuestName,
-        guestPhone,
+        guestPhone: cleanGuestPhone,
         notes,
         clientRequestId: requestId,
         customerId: qrCustomerId,
