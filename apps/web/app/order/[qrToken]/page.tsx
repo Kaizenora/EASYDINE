@@ -17,7 +17,7 @@ import {
   UtensilsCrossed,
   X,
 } from "lucide-react";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
@@ -36,17 +36,33 @@ const DISH_IMAGE_FALLBACKS: Record<string, string> = {
   default: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=500&auto=format&fit=crop&q=80",
 };
 
-function getDishImage(item: PublicMenuItem, catName: string): string {
-  if (item.imageUrl) return item.imageUrl;
-  const lowerCat = catName.toLowerCase();
-  const lowerName = item.name.toLowerCase();
-  if (lowerName.includes("biryani") || lowerName.includes("rice") || lowerCat.includes("rice")) return DISH_IMAGE_FALLBACKS.rice;
-  if (lowerName.includes("roti") || lowerName.includes("naan") || lowerName.includes("bread") || lowerCat.includes("bread")) return DISH_IMAGE_FALLBACKS.breads;
-  if (lowerName.includes("tikka") || lowerName.includes("kebab") || lowerName.includes("corn") || lowerCat.includes("starter")) return DISH_IMAGE_FALLBACKS.starters;
-  if (lowerName.includes("shake") || lowerName.includes("drink") || lowerName.includes("lemonade") || lowerCat.includes("beverage")) return DISH_IMAGE_FALLBACKS.drinks;
-  if (lowerName.includes("ice cream") || lowerName.includes("kulfi") || lowerCat.includes("dessert")) return DISH_IMAGE_FALLBACKS.dessert;
-  if (lowerCat.includes("main") || lowerName.includes("dal") || lowerName.includes("curry") || lowerName.includes("paneer")) return DISH_IMAGE_FALLBACKS.main;
-  return DISH_IMAGE_FALLBACKS.default;
+function getDishImage(item: { name: string; imageUrl?: string | null }, catName: string = ""): string {
+  const lowerCat = (catName || "").toLowerCase();
+  const lowerName = (item.name || "").toLowerCase();
+
+  const getFallback = () => {
+    if (lowerName.includes("biryani") || lowerName.includes("rice") || lowerCat.includes("rice")) return DISH_IMAGE_FALLBACKS.rice;
+    if (lowerName.includes("roti") || lowerName.includes("naan") || lowerName.includes("bread") || lowerCat.includes("bread")) return DISH_IMAGE_FALLBACKS.breads;
+    if (lowerName.includes("tikka") || lowerName.includes("kebab") || lowerName.includes("corn") || lowerCat.includes("starter")) return DISH_IMAGE_FALLBACKS.starters;
+    if (lowerName.includes("shake") || lowerName.includes("drink") || lowerName.includes("lemonade") || lowerCat.includes("beverage")) return DISH_IMAGE_FALLBACKS.drinks;
+    if (lowerName.includes("ice cream") || lowerName.includes("kulfi") || lowerCat.includes("dessert")) return DISH_IMAGE_FALLBACKS.dessert;
+    if (lowerCat.includes("main") || lowerName.includes("dal") || lowerName.includes("curry") || lowerName.includes("paneer") || lowerName.includes("mutter")) return DISH_IMAGE_FALLBACKS.main;
+    return DISH_IMAGE_FALLBACKS.default;
+  };
+
+  const raw = item.imageUrl?.trim();
+  if (raw && !raw.includes("null") && !raw.includes("undefined")) {
+    if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("data:")) {
+      return raw;
+    }
+    if (raw.startsWith("/")) {
+      return raw;
+    }
+    if (raw.startsWith("uploads/") || raw.startsWith("api/")) {
+      return `/${raw}`;
+    }
+  }
+  return getFallback();
 }
 
 interface PublicMenuItem {
@@ -162,18 +178,38 @@ export default function LuxuryCustomerMenu({
   const [showBillModal, setShowBillModal] = useState(false);
   const [showConfirmOrderModal, setShowConfirmOrderModal] = useState(false);
 
-  // Whether we have confirmed the current session state from the server.
-  // Until true, we show a loading screen to prevent flickering between screens.
+  // Whether we have loaded the initial menu from the server.
   const [sessionVerified, setSessionVerified] = useState(false);
 
-  // Step 1: On mount, only load activeOrderId (needed for the status URL).
-  // We deliberately do NOT restore guestName/guestPhone yet — that only happens
-  // after the first status response confirms there is an active order. This
-  // prevents the page from briefly flashing the previous customer's screen.
+  // Snapshot of the last ACTIVE order when cashier marks it paid.
+  // Since the backend never returns PAID orders (only OPEN/BILLED), when
+  // status.order flips from a live order → null while we are in TRACKING mode,
+  // we capture the order info here so the Thank You screen can display it.
+  const [justPaidSnapshot, setJustPaidSnapshot] = useState<{
+    orderNumber: string;
+    totalAmount?: string;
+    items: { nameSnapshot: string; quantity: number; unitPriceSnapshot?: string; lineTotal?: string }[];
+  } | null>(null);
+
+  // Restore saved credentials from sessionStorage on mount.
+  // Note: sessionStorage is isolated per tab. Restoring them ensures a guest
+  // browsing or ordering does not get wiped while on the page.
   useEffect(() => {
+    const savedName = sessionStorage.getItem(nameStorageKey);
+    const savedPhone = sessionStorage.getItem(phoneStorageKey);
     const savedOrderId = sessionStorage.getItem(orderIdStorageKey);
-    if (savedOrderId) setActiveOrderId(savedOrderId);
-  }, [orderIdStorageKey]);
+    if (savedName) {
+      setGuestName(savedName);
+      setNameDraft(savedName);
+    }
+    if (savedPhone) {
+      setGuestPhone(savedPhone);
+      setPhoneDraft(savedPhone);
+    }
+    if (savedOrderId) {
+      setActiveOrderId(savedOrderId);
+    }
+  }, [nameStorageKey, phoneStorageKey, orderIdStorageKey]);
 
   // Fetch Public Menu
   const { data, error } = useQuery({
@@ -182,6 +218,11 @@ export default function LuxuryCustomerMenu({
     retry: 1,
   });
 
+  // Mark session verified as soon as menu data or error arrives.
+  // If we have a stale activeOrderId in session, we also wait for the first
+  // status response so we can decide whether to restore or clear the session
+  // before showing any screen (prevents flicker between welcome and tracking).
+
   // Live order status & service requests.
   // For takeaway, pass orderId so we can track the specific order.
   // For dine-in, the backend always returns the active OPEN/BILLED order by table — no orderId needed.
@@ -189,16 +230,28 @@ export default function LuxuryCustomerMenu({
     ? `/public/menu/${qrToken}/status?orderId=${activeOrderId}`
     : `/public/menu/${qrToken}/status`;
 
-  const { data: status, isFetched: statusFetched } = useQuery({
+  const { data: status } = useQuery({
     queryKey: ["public-status", qrToken, isTakeaway ? activeOrderId : null],
     queryFn: () => api.get<PublicStatus>(statusUrl),
     refetchInterval: 1500,
     enabled: !!data,
-    // No caching — always use fresh server data to avoid showing a previous
-    // customer's paid screen from a stale React Query cache entry.
     gcTime: 0,
     staleTime: 0,
   });
+
+  // Mark session verified once we have enough info to decide what screen to show.
+  // If there's a stale activeOrderId in sessionStorage, wait for the first status
+  // response before revealing any UI — this prevents the flicker between welcome/
+  // tracking screens that happens when we restore session and then immediately clear it.
+  useEffect(() => {
+    if (!data && !error) return;
+    const savedOrderId = sessionStorage.getItem(orderIdStorageKey);
+    if (savedOrderId && status === undefined) {
+      // Status hasn't arrived yet — keep showing spinner
+      return;
+    }
+    setSessionVerified(true);
+  }, [data, error, status, orderIdStorageKey]);
 
   const paidOrder =
     status?.order &&
@@ -215,56 +268,60 @@ export default function LuxuryCustomerMenu({
       ? status.order
       : null;
 
-  // Step 2: After the first status response, decide whether to restore session
-  // or wipe it. This is the key anti-flicker gate.
+  // Track whether we had an actively tracked order from the server or placed an order in this session
+  const hadActiveOrderRef = useRef(false);
+  const lastActiveOrderRef = useRef<any>(null);
+
+  // Keep track of when we actively see an order from the server
   useEffect(() => {
-    if (sessionVerified) return;      // already decided
-    if (!data) return;                // menu not loaded yet — status is still disabled
-    if (status === undefined) return; // first fetch not complete yet
-
-    if (status.order) {
-      // There is an active (OPEN / BILLED) order on this table — restore identity.
-      const savedName  = sessionStorage.getItem(nameStorageKey);
-      const savedPhone = sessionStorage.getItem(phoneStorageKey);
-      if (savedName)  { setGuestName(savedName);  setNameDraft(savedName); }
-      if (savedPhone) { setGuestPhone(savedPhone); setPhoneDraft(savedPhone); }
-    } else {
-      // No active order (table free / takeaway order already paid).
-      // Wipe any stale session so the next guest always starts at the welcome screen.
-      sessionStorage.removeItem(nameStorageKey);
-      sessionStorage.removeItem(phoneStorageKey);
-      sessionStorage.removeItem(orderIdStorageKey);
-      setActiveOrderId(null);
-      // guestName stays "" → welcome/name-input screen shown
+    if (activeOrder) {
+      hadActiveOrderRef.current = true;
+      lastActiveOrderRef.current = activeOrder;
     }
-    setSessionVerified(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, status, sessionVerified]);
+  }, [activeOrder]);
 
-  // Real-time reset: cashier marks paid while guest is already on the page.
-  // After the initial session is verified, any transition to order===null means
-  // the current session ended and the page should revert to the welcome screen.
-  useEffect(() => {
-    if (!sessionVerified) return;
-    if (status && !status.order) {
-      sessionStorage.removeItem(nameStorageKey);
-      sessionStorage.removeItem(phoneStorageKey);
-      sessionStorage.removeItem(orderIdStorageKey);
-      setActiveOrderId(null);
-      setGuestName("");
-      setGuestPhone("");
-      setNameDraft("");
-      setPhoneDraft("");
-      setViewMode("MENU");
-    }
-  }, [status?.order, sessionVerified, nameStorageKey, phoneStorageKey, orderIdStorageKey]);
-
-  // Auto-switch to tracking view when an active order exists and user hasn't explicitly navigated
+  // Auto-switch to tracking view ONLY when a live cooking/served order exists
   useEffect(() => {
     if (activeOrder && cart.length === 0) {
       setViewMode("TRACKING");
     }
   }, [activeOrder?.orderNumber]);
+
+  // Detect when cashier marks order as paid:
+  // Backend stops returning the order (status.order becomes null).
+  // If the guest was in TRACKING mode and actively had an order (hadActiveOrderRef.current is true),
+  // capture it as justPaidSnapshot so the Thank You screen can render cleanly.
+  // If the guest is scanning fresh or table is cleared (hadActiveOrderRef.current is false),
+  // clear any stale session so new customer starts clean without flicker.
+  useEffect(() => {
+    if (!sessionVerified) return;
+    if (status === undefined) return;
+
+    if (status.order === null) {
+      if (hadActiveOrderRef.current && viewMode === "TRACKING" && cart.length === 0 && !justPaidSnapshot) {
+        // Active order was settled by cashier
+        hadActiveOrderRef.current = false;
+        setJustPaidSnapshot({
+          orderNumber: lastActiveOrderRef.current?.orderNumber || activeOrderId || "",
+          totalAmount: lastActiveOrderRef.current?.totalAmount,
+          items: lastActiveOrderRef.current?.items || [],
+        });
+      } else if (!hadActiveOrderRef.current) {
+        // Fresh scan or table cleared: clear stale sessionStorage so new customer gets fresh start
+        if (activeOrderId || guestName) {
+          sessionStorage.removeItem(nameStorageKey);
+          sessionStorage.removeItem(phoneStorageKey);
+          sessionStorage.removeItem(orderIdStorageKey);
+          setActiveOrderId(null);
+          setGuestName("");
+          setGuestPhone("");
+          setNameDraft("");
+          setPhoneDraft("");
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.order, sessionVerified, viewMode, activeOrderId]);
 
   // Check if waiter and bill requests are active
   const hasWaiterRequest = status?.openRequests?.includes("WAITER");
@@ -307,16 +364,48 @@ export default function LuxuryCustomerMenu({
       setCurrentRequestId("req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
       vibrateSuccess();
       playSuccessChime();
-      setCart([]);
-      setShowConfirmOrderModal(false);
-      setShowCartDrawer(false);
-      setViewMode("TRACKING");
+      const orderNum = res?.orderNumber || "Pending";
+      const newActiveOrder = {
+        id: res?.id || activeOrderId || "",
+        orderNumber: orderNum,
+        status: "OPEN",
+        acceptance: "PENDING",
+        placedAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        items: cart.map((c) => ({
+          id: c.id,
+          nameSnapshot: c.name,
+          quantity: c.quantity,
+          unitPriceSnapshot: String(c.unitPrice),
+          lineTotal: String(c.unitPrice * c.quantity),
+          status: "PENDING",
+          kitchenNote: c.modifierLabel || undefined,
+        })),
+        totalAmount: cartTotalPrice.toFixed(0),
+      };
+
+      hadActiveOrderRef.current = true;
+      lastActiveOrderRef.current = newActiveOrder;
+
       if (res?.id) {
         setActiveOrderId(res.id);
         sessionStorage.setItem(orderIdStorageKey, res.id);
       }
+
+      // Optimistically update status query so tracking view renders smoothly with NO null gap
+      queryClient.setQueryData(
+        ["public-status", qrToken, isTakeaway ? res?.id : null],
+        {
+          order: newActiveOrder,
+          openRequests: [],
+        }
+      );
+
+      setCart([]);
+      setShowConfirmOrderModal(false);
+      setShowCartDrawer(false);
+      setViewMode("TRACKING");
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
-      toast.success(`Order #${res.orderNumber} placed! Waiting for cashier approval.`);
+      toast.success(`Order #${orderNum} placed! Waiting for cashier approval.`);
     },
     onError: (err) =>
       toast.error(err instanceof ApiError ? err.message : "Could not place order. Please try again."),
@@ -508,21 +597,33 @@ export default function LuxuryCustomerMenu({
 
   // 1b. PAID / THANK YOU SCREEN
   const handleStartNewOrder = () => {
+    hadActiveOrderRef.current = false;
+    lastActiveOrderRef.current = null;
     sessionStorage.removeItem(nameStorageKey);
     sessionStorage.removeItem(phoneStorageKey);
     sessionStorage.removeItem(orderIdStorageKey);
     setActiveOrderId(null);
+    setJustPaidSnapshot(null);
     setGuestName("");
     setGuestPhone("");
     setNameDraft("");
     setPhoneDraft("");
     setCart([]);
     setViewMode("MENU");
-    // Invalidate status so the query re-fetches without stale orderId
     queryClient.removeQueries({ queryKey: ["public-status", qrToken] });
   };
 
-  if (paidOrder && !cart.length) {
+  // Show Thank You screen when:
+  // 1. Guest was in TRACKING mode and backend order disappeared (justPaidSnapshot set), OR
+  // 2. Backend explicitly returns a PAID order (paidOrder non-null, legacy path)
+  const showThankYou = (justPaidSnapshot || (paidOrder && viewMode === "TRACKING")) && !cart.length;
+
+  if (showThankYou) {
+    const orderNum = justPaidSnapshot?.orderNumber || paidOrder?.orderNumber || "";
+    const totalAmt = justPaidSnapshot?.totalAmount ?? paidOrder?.totalAmount;
+    const orderItems = justPaidSnapshot?.items?.length
+      ? justPaidSnapshot.items
+      : paidOrder?.items ?? [];
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0C0C0E] px-6 text-center text-white font-sans">
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
@@ -530,25 +631,33 @@ export default function LuxuryCustomerMenu({
         </div>
         <h2 className="text-2xl font-black text-white">{guestName ? `Thank you, ${guestName}!` : "Thank you!"}</h2>
         <p className="text-sm text-neutral-400">
-          Order #{paidOrder.orderNumber} · Bill settled ✓
+          {orderNum ? `Order #${orderNum} · ` : ""}Bill settled ✓
         </p>
         <p className="text-xs text-neutral-500 mt-1">
           We hope you enjoyed your meal. See you again soon!
         </p>
-        <div className="mt-4 rounded-2xl border border-neutral-800 bg-[#141416] p-4 text-left w-full max-w-xs">
-          <p className="text-xs font-bold text-neutral-400 mb-2">Your order</p>
-          {paidOrder.items?.slice(0, 5).map((it: any, i: number) => (
-            <div key={i} className="flex justify-between text-xs py-1 border-b border-neutral-900">
-              <span className="text-neutral-300">{it.nameSnapshot} × {it.quantity}</span>
-              <span className="text-white font-bold">₹{it.lineTotal || (parseFloat(it.unitPriceSnapshot || "0") * it.quantity).toFixed(0)}</span>
-            </div>
-          ))}
-          {(paidOrder.items?.length || 0) > 5 && <p className="text-xs text-neutral-500 mt-1">...and {(paidOrder.items?.length || 0) - 5} more items</p>}
-          <div className="flex justify-between font-bold text-sm mt-2 pt-2 border-t border-neutral-800">
-            <span>Total paid</span>
-            <span className="text-emerald-400">₹{paidOrder.totalAmount}</span>
+        {(orderItems.length > 0 || totalAmt) && (
+          <div className="mt-4 rounded-2xl border border-neutral-800 bg-[#141416] p-4 text-left w-full max-w-xs">
+            {orderItems.length > 0 && (
+              <>
+                <p className="text-xs font-bold text-neutral-400 mb-2">Your order</p>
+                {orderItems.slice(0, 5).map((it: any, i: number) => (
+                  <div key={i} className="flex justify-between text-xs py-1 border-b border-neutral-900">
+                    <span className="text-neutral-300">{it.nameSnapshot} × {it.quantity}</span>
+                    <span className="text-white font-bold">₹{it.lineTotal || (parseFloat(it.unitPriceSnapshot || "0") * it.quantity).toFixed(0)}</span>
+                  </div>
+                ))}
+                {orderItems.length > 5 && <p className="text-xs text-neutral-500 mt-1">...and {orderItems.length - 5} more items</p>}
+              </>
+            )}
+            {totalAmt && (
+              <div className="flex justify-between font-bold text-sm mt-2 pt-2 border-t border-neutral-800">
+                <span>Total paid</span>
+                <span className="text-emerald-400">₹{totalAmt}</span>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         <button
           type="button"
@@ -1439,9 +1548,23 @@ export default function LuxuryCustomerMenu({
               {cart.map((line) => (
                 <div key={line.id} className="flex items-start justify-between py-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-800 shrink-0">
+                    <div className="h-12 w-12 overflow-hidden rounded-xl bg-neutral-800 shrink-0 relative flex items-center justify-center">
+                      <UtensilsCrossed className="h-5 w-5 text-neutral-600 absolute" />
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={line.imageUrl} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={line.imageUrl || getDishImage({ name: line.name, imageUrl: null }, "")}
+                        alt={line.name}
+                        className="h-full w-full object-cover relative z-10"
+                        onError={(e) => {
+                          const t = e.currentTarget;
+                          const fb = getDishImage({ name: line.name, imageUrl: null }, "");
+                          if (t.src !== fb) {
+                            t.src = fb;
+                          } else {
+                            t.style.display = "none";
+                          }
+                        }}
+                      />
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white">{line.name}</h4>
@@ -1518,13 +1641,33 @@ export default function LuxuryCustomerMenu({
             {/* Compact items review */}
             <div className="mt-3 max-h-48 overflow-y-auto space-y-2 rounded-xl border border-neutral-800/80 bg-neutral-900/50 p-3">
               {cart.map((item) => (
-                <div key={item.id} className="flex justify-between items-start text-xs">
-                  <div>
-                    <span className="font-bold text-white">{item.quantity}× {item.name}</span>
-                    {item.modifierLabel && <p className="text-[10px] text-amber-300">{item.modifierLabel}</p>}
-                    {item.cookingNote && <p className="text-[10px] text-neutral-400 italic">“{item.cookingNote}”</p>}
+                <div key={item.id} className="flex justify-between items-center text-xs gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-neutral-800 relative flex items-center justify-center">
+                      <UtensilsCrossed className="h-4 w-4 text-neutral-600 absolute" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.imageUrl || getDishImage({ name: item.name, imageUrl: null }, "")}
+                        alt={item.name}
+                        className="h-full w-full object-cover relative z-10"
+                        onError={(e) => {
+                          const t = e.currentTarget;
+                          const fb = getDishImage({ name: item.name, imageUrl: null }, "");
+                          if (t.src !== fb) {
+                            t.src = fb;
+                          } else {
+                            t.style.display = "none";
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-bold text-white block truncate">{item.quantity}× {item.name}</span>
+                      {item.modifierLabel && <p className="text-[10px] text-amber-300 truncate">{item.modifierLabel}</p>}
+                      {item.cookingNote && <p className="text-[10px] text-neutral-400 italic truncate">“{item.cookingNote}”</p>}
+                    </div>
                   </div>
-                  <span className="font-semibold text-neutral-200">₹{item.unitPrice * item.quantity}</span>
+                  <span className="font-semibold text-neutral-200 shrink-0">₹{item.unitPrice * item.quantity}</span>
                 </div>
               ))}
             </div>
