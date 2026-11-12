@@ -167,7 +167,9 @@ export default function LuxuryCustomerMenu({
   params: Promise<{ qrToken: string }>;
 }) {
   const { qrToken } = use(params);
-  const isTakeaway = qrToken === "takeaway" || qrToken === "qr-takeaway" || qrToken.startsWith("takeaway-");
+  // Takeaway QRs are /order/takeaway-<opaque branch token>; the backend decides
+  // whether the token is valid (bare "takeaway" no longer resolves).
+  const isTakeaway = qrToken.startsWith("takeaway-");
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
   useEffect(() => {
     const up = () => setIsOffline(false);

@@ -47,7 +47,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TableQrDialog } from "./table-qr-dialog";
-import { useUpdateTableStatus, type RestaurantTable } from "@/hooks/use-tables";
+import {
+  useRotateTakeawayQrToken,
+  useTakeawayQrToken,
+  useUpdateTableStatus,
+  type RestaurantTable,
+} from "@/hooks/use-tables";
+import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
 import { QRCodeSVG } from "qrcode.react";
 import { tableLabel, type TableStatusDto } from "@easydine/types";
@@ -102,6 +108,18 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settlePaymentMethod, setSettlePaymentMethod] = useState<"CASH" | "UPI" | "CARD">("UPI");
   const [takeawayQrOpen, setTakeawayQrOpen] = useState(false);
+  // Takeaway QR = /order/takeaway-<opaque token>; never the branch id.
+  const takeawayQr = useTakeawayQrToken(branchId, takeawayQrOpen);
+  const rotateTakeawayQr = useRotateTakeawayQrToken(branchId);
+  const { data: currentUser } = useCurrentUser();
+  const canRotateTakeawayQr = hasPermission(currentUser?.user, "tables.manage");
+  const takeawayPath = takeawayQr.data?.takeawayToken
+    ? `/order/takeaway-${takeawayQr.data.takeawayToken}`
+    : null;
+  const takeawayUrl =
+    takeawayPath && typeof window !== "undefined"
+      ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${takeawayPath}`
+      : null;
 
   // Post-settle Bill Receipt Dialog (User demanded: after confirming, bill must be visible then print option)
   const [receiptData, setReceiptData] = useState<SettleReceipt | null>(null);
@@ -911,27 +929,55 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           </DialogHeader>
 
           <div className="flex flex-col items-center justify-center py-4">
-            <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
-              <QRCodeSVG
-                value={`${typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_BASE_URL || window.location.origin) : ""}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`}
-                size={180}
-                level="M"
-              />
-            </div>
-            <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
-            <p className="text-[11px] text-neutral-500">
-              {typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}` : "/order/takeaway"}
-            </p>
+            {takeawayUrl ? (
+              <>
+                <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
+                  <QRCodeSVG value={takeawayUrl} size={180} level="M" />
+                </div>
+                <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
+                <p className="break-all text-[11px] text-neutral-500">{takeawayUrl}</p>
+              </>
+            ) : (
+              <p className="py-16 text-xs text-neutral-400">
+                {takeawayQr.isError
+                  ? "Could not load the takeaway QR. Please try again."
+                  : "Loading takeaway QR..."}
+              </p>
+            )}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
+            {canRotateTakeawayQr && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
+                disabled={!takeawayUrl || rotateTakeawayQr.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Create a new takeaway QR? Printed takeaway QR codes of this branch will stop working.",
+                    )
+                  )
+                    return;
+                  rotateTakeawayQr.mutate(undefined, {
+                    onSuccess: () => toast.success("New takeaway QR created. Print and replace the old one."),
+                    onError: () => toast.error("Could not create a new takeaway QR"),
+                  });
+                }}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                New QR
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
               className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
+              disabled={!takeawayUrl}
               onClick={() => {
-                const url = `${window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`;
-                navigator.clipboard.writeText(url);
+                if (!takeawayUrl) return;
+                navigator.clipboard.writeText(takeawayUrl);
                 toast.success("Takeaway link copied to clipboard!");
               }}
             >
@@ -940,7 +986,8 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             <Button
               size="sm"
               className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
-              onClick={() => window.open(branchId ? `/order/takeaway-${branchId}` : "/order/takeaway", "_blank")}
+              disabled={!takeawayPath}
+              onClick={() => takeawayPath && window.open(takeawayPath, "_blank")}
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Open Takeaway Menu

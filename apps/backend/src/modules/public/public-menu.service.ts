@@ -5,6 +5,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { OrdersService } from '../orders/orders.service';
 
+/** Branch.takeawayToken is randomBytes(16).toString('hex'). */
+const TAKEAWAY_TOKEN_RE = /^[0-9a-f]{32}$/;
+
 @Injectable()
 export class PublicMenuService {
   constructor(
@@ -14,25 +17,26 @@ export class PublicMenuService {
     private readonly realtime: RealtimeGateway,
   ) {}
 
+  /**
+   * Maps a public QR token to its branch. Takeaway QRs are
+   * `takeaway-<Branch.takeawayToken>`; the token is opaque (32 hex chars) and
+   * is the only thing that identifies the branch. There is deliberately no
+   * fallback: bare `takeaway` / `qr-takeaway` and `takeaway-<branchId>` must
+   * never resolve, or anyone could order at (and poll) another restaurant.
+   */
   private async resolveTarget(qrToken: string) {
-    if (qrToken === 'takeaway' || qrToken.startsWith('takeaway-') || qrToken === 'qr-takeaway') {
-      const branchId = qrToken.startsWith('takeaway-') ? qrToken.replace('takeaway-', '') : null;
-      let branch = branchId
-        ? await this.prisma.branch.findUnique({ where: { id: branchId }, include: { restaurant: true } })
-        : null;
-      if (!branch) {
-        branch =
-          (await this.prisma.branch.findFirst({
-            where: { isActive: true, categories: { some: {} } },
-            include: { restaurant: true },
-          })) ??
-          (await this.prisma.branch.findFirst({
-            where: { isActive: true },
-            orderBy: { createdAt: 'desc' },
-            include: { restaurant: true },
-          }));
+    if (qrToken.startsWith('takeaway')) {
+      const token = qrToken.startsWith('takeaway-') ? qrToken.slice('takeaway-'.length) : '';
+      if (!TAKEAWAY_TOKEN_RE.test(token)) {
+        throw new NotFoundException('This QR code is not recognized');
       }
-      if (!branch) throw new NotFoundException('Restaurant branch not found');
+      const branch = await this.prisma.branch.findUnique({
+        where: { takeawayToken: token },
+        include: { restaurant: true },
+      });
+      if (!branch || !branch.isActive) {
+        throw new NotFoundException('This QR code is not recognized');
+      }
       return { isTakeaway: true, branch, table: null };
     }
 

@@ -297,6 +297,42 @@ export class TablesService {
     return this.prisma.table.update({ where: { id }, data: { qrToken } });
   }
 
+  /**
+   * The branch's takeaway QR token (public link /order/takeaway-<token>).
+   * `ensure` returns the existing token or issues one; `rotate` always issues
+   * a new one, which invalidates every printed takeaway QR of this branch.
+   */
+  async getOrCreateTakeawayToken(branchId: string, action: 'ensure' | 'rotate') {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { takeawayToken: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+    if (action === 'ensure' && branch.takeawayToken) {
+      return { takeawayToken: branch.takeawayToken };
+    }
+    const takeawayToken = randomBytes(16).toString('hex');
+    if (action === 'ensure') {
+      // Two staff opening the dialog at once must not overwrite each
+      // other's freshly printed token: only write while it is still null.
+      const { count } = await this.prisma.branch.updateMany({
+        where: { id: branchId, takeawayToken: null },
+        data: { takeawayToken },
+      });
+      if (count === 0) {
+        const current = await this.prisma.branch.findUnique({
+          where: { id: branchId },
+          select: { takeawayToken: true },
+        });
+        if (current?.takeawayToken) return { takeawayToken: current.takeawayToken };
+        throw new NotFoundException('Branch not found');
+      }
+      return { takeawayToken };
+    }
+    await this.prisma.branch.update({ where: { id: branchId }, data: { takeawayToken } });
+    return { takeawayToken };
+  }
+
   private async assertFloorInBranch(branchId: string, floorId: string) {
     const floor = await this.prisma.floor.findFirst({
       where: { id: floorId, branchId },

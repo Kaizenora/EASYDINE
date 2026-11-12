@@ -160,6 +160,12 @@ model Branch {
   kioskDineInEnabled   Boolean @default(true)
   kioskTakeawayEnabled Boolean @default(true)
 
+  // Takeaway & pickup QR (2026-11-12). Opaque, unguessable credential in the
+  // public /order/takeaway-<token> URL (same idea as Table.qrToken and
+  // kioskToken). Created on first use from the tables page; null = no
+  // takeaway QR issued yet. Never derive it from the branch id.
+  takeawayToken        String? @unique
+
   // -- KOT / Kitchen printer -----------------------------------------------
   // Direct ESC/POS thermal printing. Columns null = derived from paper width
   // (58 mm -> 32, 80 mm -> 48); set it for printers with a narrower head.

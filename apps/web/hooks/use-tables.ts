@@ -174,3 +174,28 @@ export function useRotateQrToken(branchId: string | null) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["floors", branchId] }),
   });
 }
+
+/**
+ * The branch's takeaway QR token (public link /order/takeaway-<token>).
+ * The backend issues it on first use and returns the same one afterwards,
+ * so this is safe to run every time the dialog opens.
+ */
+export function useTakeawayQrToken(branchId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["takeaway-qr", branchId],
+    queryFn: () =>
+      api.post<{ takeawayToken: string }>(`/tables/takeaway-qr?branchId=${branchId}`),
+    enabled: enabled && !!branchId,
+    staleTime: Infinity,
+  });
+}
+
+/** Issues a new takeaway token; every printed takeaway QR of the branch stops working. */
+export function useRotateTakeawayQrToken(branchId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ takeawayToken: string }>(`/tables/takeaway-qr/rotate?branchId=${branchId}`),
+    onSuccess: (data) => queryClient.setQueryData(["takeaway-qr", branchId], data),
+  });
+}
