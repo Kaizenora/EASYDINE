@@ -427,6 +427,7 @@ namespace EasyDine.PrintHelper
                 if (File.Exists(FilePath))
                 {
                     Dictionary<string, object> d = Json.ParseObject(File.ReadAllBytes(FilePath));
+                    if (d == null) Program.Log("Saved pairings could not be read; pair again from EasyDine Settings.");
                     if (d != null)
                         foreach (KeyValuePair<string, object> kv in d)
                         {
@@ -444,7 +445,7 @@ namespace EasyDine.PrintHelper
         {
             Dictionary<string, object> d = new Dictionary<string, object>();
             foreach (KeyValuePair<string, string> kv in _map) d[kv.Key] = kv.Value;
-            File.WriteAllText(FilePath, Json.Write(d), Encoding.UTF8);
+            File.WriteAllText(FilePath, Json.Write(d), new UTF8Encoding(false));
         }
 
         public static string NewToken()
@@ -755,7 +756,8 @@ namespace EasyDine.PrintHelper
         public static Dictionary<string, object> ParseObject(byte[] utf8)
         {
             if (utf8 == null || utf8.Length == 0) return null;
-            try { return Serializer.DeserializeObject(Encoding.UTF8.GetString(utf8)) as Dictionary<string, object>; }
+            // TrimStart: a UTF-8 BOM (e.g. a file saved by Notepad) must not lose the saved pairings.
+            try { return Serializer.DeserializeObject(Encoding.UTF8.GetString(utf8).TrimStart('﻿')) as Dictionary<string, object>; }
             catch { return null; }
         }
 
