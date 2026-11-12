@@ -209,6 +209,37 @@ export function acceptKotQuery(route: Route, timeZone?: string): string {
   return `&${q.toString()}`;
 }
 
+/**
+ * Accept & KOT sent with kotVia=browser: what to do with the server's answer.
+ *  - "dialog": open the print dialog on this PC. BROWSER is the normal answer.
+ *    A server that predates kotVia=browser answers NO_PRINTER/FAILED (or
+ *    nothing) — it did not print anything, so the dialog is still the one
+ *    and only KOT. (That older server silently swallowing the dialog was a
+ *    real cause of "no print dialog opens".)
+ *  - "no-tickets": nothing for the kitchen yet (scheduled order).
+ *  - "server-sent" / "server-unknown": an older server already sent it to a
+ *    branch printer (or may have). Opening a dialog too could duplicate the
+ *    KOT, so we don't; Reprint stays manual.
+ */
+/** Same lead time as the server's OrdersService.SCHEDULE_LEAD_MS. */
+const SCHEDULE_LEAD_MS = 25 * 60_000;
+
+export type BrowserKotDecision = "dialog" | "no-tickets" | "server-sent" | "server-unknown";
+
+export function browserKotDecision(printStatus: string | undefined, scheduledFor?: string | null, now: number = Date.now()): BrowserKotDecision {
+  if (printStatus === "BROWSER") return "dialog";
+  if (printStatus === "NO_TICKETS") return "no-tickets";
+  if (printStatus === "SENT" || printStatus === "PRINTED" || printStatus === "DEVICE") return "server-sent";
+  if (printStatus === "UNKNOWN") return "server-unknown";
+  // Older server: its NO_PRINTER also covers "no tickets yet" for scheduled
+  // orders (sent to the kitchen 25 minutes before their time).
+  if (scheduledFor) {
+    const t = Date.parse(scheduledFor);
+    if (Number.isFinite(t) && t > now + SCHEDULE_LEAD_MS) return "no-tickets";
+  }
+  return "dialog";
+}
+
 // --- results -------------------------------------------------------------------
 
 export type LocalPrintStatus = "QUEUED" | "FAILED" | "UNKNOWN";
@@ -254,7 +285,8 @@ export function describeOutcome(
   error?: string,
 ): string {
   if (status === "QUEUED") {
-    return `${what} sent to "${printerName}" (Windows print queue accepted it). Check the printer to confirm it printed.`;
+    // A switched-off printer may still accept a job into the queue.
+    return `${what} sent to the Windows print queue of "${printerName}" — that is not proof it printed. Check the printer.${error ? ` Note: ${error}` : ""}`;
   }
   if (status === "FAILED") {
     return `${what} was NOT printed on "${printerName}"${error ? `: ${error}` : ""}.`;

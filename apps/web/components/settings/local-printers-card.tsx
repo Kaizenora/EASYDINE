@@ -1,15 +1,24 @@
 "use client";
 
-import { AlertTriangle, Monitor, Printer, RefreshCw } from "lucide-react";
+import { AlertTriangle, Link2, Monitor, Printer, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusNote, useStatusNote } from "@/components/ui/status-note";
 import { usePrintScope } from "@/components/settings/local-printer-scope";
 import { browserStorage, getMappings, listServerPrinters, onServerPc, testLocalPrinter } from "@/lib/local-print";
-import { detectBridge, hasBridgeHost, listInstalledPrinters } from "@/lib/local-printer-bridge";
+import {
+  bridgeKind,
+  detectBridge,
+  getHelperPairing,
+  HELPER_DEFAULT_PORT,
+  listInstalledPrinters,
+  pairHelper,
+  unpairHelper,
+} from "@/lib/local-printer-bridge";
 import {
   clearMapping,
   saveMapping,
@@ -30,8 +39,12 @@ const ROLES: { role: PrinterRole; title: string; hint: string }[] = [
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground disabled:opacity-50";
 
-/** checking → "bridge" (EasyDine Windows app) or "server" (this PC runs the EasyDine server) or "absent". */
-type Mode = "checking" | "bridge" | "server" | "absent";
+/**
+ * checking → "bridge" (EasyDine Windows app), "helper" (EasyDine Print Helper
+ * paired and answering), "server" (this PC runs the EasyDine server), or
+ * "absent" (plain browser: print dialog; the helper can be paired).
+ */
+type Mode = "checking" | "bridge" | "helper" | "server" | "absent";
 
 /**
  * "This computer's printers": pick the Bill and Kitchen printers from the
@@ -45,20 +58,21 @@ type Mode = "checking" | "bridge" | "server" | "absent";
 const noSubscribe = () => () => undefined;
 
 /**
- * Shown only where it can work: on the PC that runs the EasyDine server
- * (opened via localhost) or inside the EasyDine Windows app. Hosted users
- * (e.g. Vercel + Railway) never see it, so nobody is told to pick printers
- * that the hosted server could not reach; their KOT and bills use the
- * browser print dialog.
+ * Hosted users (e.g. Vercel + Railway) are never told to pick printers that
+ * the hosted server would print to: that server cannot reach a printer in the
+ * restaurant. Without the Windows app or the optional Print Helper they get
+ * the print dialog, and this card says so.
  */
 export function LocalPrintersCard() {
-  const local = useSyncExternalStore(noSubscribe, () => hasBridgeHost() || onServerPc(), () => false);
-  return local ? <LocalPrintersCardInner /> : null;
+  const mounted = useSyncExternalStore(noSubscribe, () => true, () => false);
+  return mounted ? <LocalPrintersCardInner /> : null;
 }
 
 function LocalPrintersCardInner() {
   const scope = usePrintScope();
-  const [bridge, setBridge] = useState<Mode>(hasBridgeHost() || onServerPc() ? "checking" : "absent");
+  const [bridge, setBridge] = useState<Mode>(bridgeKind() || onServerPc() ? "checking" : "absent");
+  const [helperDown, setHelperDown] = useState(false);
+  const [pairingVersion, setPairingVersion] = useState(0);
   const [serverUnsupported, setServerUnsupported] = useState(false);
   const [printers, setPrinters] = useState<InstalledPrinter[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -74,8 +88,10 @@ function LocalPrintersCardInner() {
     setLoading(true);
     setListError(null);
     try {
+      const kind = bridgeKind();
       if (await detectBridge()) {
-        setBridge("bridge");
+        setHelperDown(false);
+        setBridge(kind === "helper" ? "helper" : "bridge");
         setPrinters(await listInstalledPrinters());
       } else if (onServerPc()) {
         const r = await listServerPrinters(scope.branchId);
@@ -83,6 +99,7 @@ function LocalPrintersCardInner() {
         setBridge(r.supported ? "server" : "absent");
         if (r.supported) setPrinters(r.printers);
       } else {
+        setHelperDown(kind === "helper");
         setBridge("absent");
       }
     } catch (e) {
@@ -90,10 +107,11 @@ function LocalPrintersCardInner() {
     } finally {
       setLoading(false);
     }
-  }, [scope.branchId]);
+  }, [scope.branchId, pairingVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ready = bridge === "bridge" || bridge === "server";
+  const ready = bridge === "bridge" || bridge === "helper" || bridge === "server";
   const transport: PrintTransport = bridge === "server" ? "server" : "bridge";
+  const thermalOnly = bridge === "server" || bridge === "helper";
 
   useEffect(() => {
     // Ask the bridge once the card is on screen (async, outside render).
@@ -129,19 +147,30 @@ function LocalPrintersCardInner() {
         </p>
       )}
 
+      {bridge === "helper" && (
+        <p className="text-xs text-muted-foreground">
+          Printing through the <strong>EasyDine Print Helper</strong> on this PC (thermal 58 mm / 80 mm printers). Keep its window open while
+          billing; if it is closed, Accept &amp; KOT and bills open the print dialog instead.
+        </p>
+      )}
+
       {bridge === "absent" && (
         <div className="flex items-start gap-2 rounded-lg bg-secondary px-3 py-2 text-sm text-foreground">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <span>
-            {serverUnsupported
-              ? "This EasyDine server is not running directly on Windows, so it cannot use this PC's installed printers. "
-              : "A web browser cannot list this computer's printers or print to one without asking. "}
-            To pick printers here with nothing to install, open EasyDine on the PC that runs the EasyDine server using{" "}
-            <strong>http://localhost</strong> (with your usual port), or use the EasyDine Windows app. Until then, bills open the browser print
-            dialog (you pick the printer each time) and kitchen tickets use the branch printer set up below or the kitchen display — that is a
-            fallback, not silent printing.
+            {helperDown
+              ? "The EasyDine Print Helper is paired with this browser but is not answering. Start it on this PC (and allow this site to access apps on this device if the browser asks), then refresh. "
+              : serverUnsupported
+                ? "This EasyDine server is not running directly on Windows, so it cannot use this PC's installed printers. "
+                : "A web browser cannot list this computer's printers or print to one without asking. "}
+            Until then, <strong>Accept &amp; KOT opens the print dialog</strong> and so do bills — you choose the printer there each time.
+            EasyDine cannot see whether paper came out.
           </span>
         </div>
+      )}
+
+      {(bridge === "absent" || bridge === "helper") && (
+        <HelperPairingPanel paired={!!getHelperPairing()} onChange={() => setPairingVersion((v) => v + 1)} />
       )}
 
       {ready && listError && (
@@ -160,6 +189,7 @@ function LocalPrintersCardInner() {
           <RoleRow
             key={`${r.role}-${scope.branchId}-${transport}`}
             transport={transport}
+            thermalOnly={thermalOnly}
             role={r.role}
             title={r.title}
             hint={r.hint}
@@ -186,6 +216,7 @@ function LocalPrintersCardInner() {
 
 function RoleRow({
   transport,
+  thermalOnly,
   role,
   title,
   hint,
@@ -196,6 +227,8 @@ function RoleRow({
   onClear,
 }: {
   transport: PrintTransport;
+  /** Server-on-this-PC and the Print Helper send thermal commands only (no A4, no driver pages). */
+  thermalOnly: boolean;
   role: PrinterRole;
   title: string;
   hint: string;
@@ -209,14 +242,13 @@ function RoleRow({
   const [printerName, setPrinterName] = useState(
     saved && printers.some((p) => p.name === saved.printerName) ? saved.printerName : "",
   );
-  const [paper, setPaper] = useState<PaperSize>(saved?.paper ?? "80mm");
+  const [paper, setPaper] = useState<PaperSize>(saved && !(thermalOnly && saved.paper === "A4") ? saved.paper : "80mm");
   const [method, setMethod] = useState<PrintMethod>(saved?.method ?? "escpos");
   const [testing, setTesting] = useState(false);
   const { note, show, clear } = useStatusNote();
 
   const savedMissing = !!saved && !printers.some((p) => p.name === saved.printerName);
-  const serverMode = transport === "server";
-  const effectiveMethod: PrintMethod = serverMode ? "escpos" : paper === "A4" ? "driver" : method;
+  const effectiveMethod: PrintMethod = thermalOnly ? "escpos" : paper === "A4" ? "driver" : method;
   const draft: PrinterMapping | null = printerName
     ? { printerName, paper, method: effectiveMethod, transport, savedAt: "" }
     : null;
@@ -271,7 +303,7 @@ function RoleRow({
           <select id={`lp-${role}-paper`} className={selectClass} value={paper} onChange={(e) => setPaper(e.target.value as PaperSize)}>
             <option value="80mm">80 mm roll</option>
             <option value="58mm">58 mm roll</option>
-            {!serverMode && <option value="A4">A4 page</option>}
+            {!thermalOnly && <option value="A4">A4 page</option>}
           </select>
         </div>
         <div className="flex flex-col gap-1">
@@ -280,7 +312,7 @@ function RoleRow({
             id={`lp-${role}-method`}
             className={selectClass}
             value={effectiveMethod}
-            disabled={paper === "A4" || serverMode}
+            disabled={paper === "A4" || thermalOnly}
             onChange={(e) => setMethod(e.target.value as PrintMethod)}
           >
             <option value="escpos">Thermal printer commands</option>
@@ -289,7 +321,7 @@ function RoleRow({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        {serverMode
+        {thermalOnly
           ? "If the test prints garbage or nothing, this printer's Windows driver does not accept thermal printer commands; use a thermal printer's own driver (or \"Generic / Text Only\")."
           : "If the test prints garbage or nothing on a thermal printer, choose \"Through Windows driver\"."}
       </p>
@@ -329,6 +361,93 @@ function RoleRow({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Optional EasyDine Print Helper: a small program on this PC that lets this
+ * browser print to a saved printer without the dialog. One-time pairing with
+ * the code shown in the helper's window, so other websites cannot use it.
+ */
+function HelperPairingPanel({ paired, onChange }: { paired: boolean; onChange: () => void }) {
+  const [code, setCode] = useState("");
+  const [port, setPort] = useState(String(getHelperPairing()?.port ?? HELPER_DEFAULT_PORT));
+  const [busy, setBusy] = useState(false);
+  const { note, show, clear } = useStatusNote();
+
+  const pair = async () => {
+    setBusy(true);
+    clear();
+    try {
+      await pairHelper(code, Number(port));
+      setCode("");
+      show("success", "Paired with the EasyDine Print Helper on this PC. Now choose the Bill and Kitchen printers, test each, and save.");
+      onChange();
+    } catch (e) {
+      show("error", e instanceof Error ? e.message : "Pairing failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-dashed border-border p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Link2 className="h-4 w-4" /> Optional: print without the dialog
+      </div>
+      {paired ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">Paired with the Print Helper (port {getHelperPairing()?.port})</Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void unpairHelper()
+                .then(() => {
+                  show("info", "Unpaired. Accept & KOT and bills use the print dialog again.");
+                  onChange();
+                })
+                .finally(() => setBusy(false));
+            }}
+          >
+            Unpair
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Start the <strong>EasyDine Print Helper</strong> (EasyDinePrintHelper.exe) on this cashier PC, then type the 6-digit code shown
+            in its window. The browser may ask to let this site access apps on this device: choose Allow. Without the helper nothing
+            changes: the print dialog is used.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="helper-code">Pairing code</Label>
+              <Input
+                id="helper-code"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={7}
+                className="w-32"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="123 456"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="helper-port">Port</Label>
+              <Input id="helper-port" inputMode="numeric" className="w-24" value={port} onChange={(e) => setPort(e.target.value)} />
+            </div>
+            <Button size="sm" disabled={busy || code.replace(/\s/g, "").length !== 6} onClick={() => void pair()}>
+              {busy ? "Pairing…" : "Pair"}
+            </Button>
+          </div>
+        </>
+      )}
+      <StatusNote note={note} onClear={clear} />
     </div>
   );
 }

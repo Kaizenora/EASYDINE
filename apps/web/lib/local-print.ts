@@ -19,6 +19,7 @@ import { billQueryString, buildSampleReceiptHtml, getCashierPaperSize, registerB
 import { printKotInFrame, reserveKotPrintFrame, type KotPrintSlot } from "./kot-print-dialog.ts";
 import {
   acceptKotQuery,
+  browserKotDecision,
   classifyBridgeFailure,
   createSingleFlight,
   describeOutcome,
@@ -147,7 +148,9 @@ async function sendToBridge(
       await printHtmlLocal(mapping.printerName, pages, mapping.paper, docName);
     } else {
       if (!payload.escpos?.length) return { status: "FAILED", error: "Nothing to print", code: "BAD_REQUEST" };
-      await printRawLocal(mapping.printerName, payload.escpos, docName);
+      const sent = await printRawLocal(mapping.printerName, payload.escpos, docName);
+      // e.g. "Windows reports the printer as offline." — queued, but say so.
+      if (sent?.warning) return { status: "QUEUED", error: sent.warning };
     }
     return { status: "QUEUED" };
   } catch (e) {
@@ -204,6 +207,7 @@ async function printClaimedKot(
 // --- Accept & KOT --------------------------------------------------------------
 
 type AcceptResponse = {
+  scheduledFor?: string | null;
   printStatus?: "BROWSER" | "DEVICE" | "SKIPPED" | "PRINTER_MISSING" | "NO_TICKETS" | "ALREADY_PRINTED" | "NO_PRINTER" | "SENT" | "PRINTED" | "FAILED" | "UNKNOWN";
   printError?: string;
   deviceKot?: DeviceTickets;
@@ -227,11 +231,12 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
   if (!branchId) return { accepted: false, reason: "error", message: "Choose a branch first." };
   const key = `accept:${orderId}`;
   if (flights.isRunning(key)) return { accepted: false, reason: "busy", message: "Already accepting this order…" };
-  // Hosted / plain browser: the KOT goes through the print dialog. Reserve the
-  // print frame now, synchronously inside the click; it is filled only after
-  // the server confirms the acceptance, and discarded otherwise.
+  // Reserve the print frame now, synchronously inside the click, even when a
+  // saved Kitchen printer may take the KOT: if the helper turns out to be
+  // stopped, the dialog is the fallback. The frame is filled only after the
+  // server confirms the acceptance, and discarded otherwise.
   const mayPrintLocally = hasLocalKitchenRoute(scope);
-  let slot: KotPrintSlot | null = mayPrintLocally ? null : reserveKotPrintFrame();
+  let slot: KotPrintSlot | null = reserveKotPrintFrame();
   const r = await flights.run(key, async (): Promise<AcceptOutcome> => {
     const route: Route = mayPrintLocally ? await routeFor("kitchen", scope) : { kind: "default", reason: "no-bridge" };
     const viaBrowser = route.kind === "default";
@@ -261,12 +266,23 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
     }
 
     if (viaBrowser) {
-      if (res.printStatus !== "BROWSER") {
+      const decision = browserKotDecision(res.printStatus, res.scheduledFor);
+      if (decision !== "dialog") {
         slot?.release();
+        slot = null;
+        if (decision === "no-tickets") {
+          return { accepted: true, kot: null, serverMessage: { kind: "ok", text: "Order accepted. No kitchen ticket yet (scheduled for later)." } };
+        }
         return {
           accepted: true,
           kot: null,
-          serverMessage: { kind: "ok", text: "Order accepted. No kitchen ticket yet (scheduled for later)." },
+          serverMessage:
+            decision === "server-sent"
+              ? { kind: "ok", text: "Order accepted · the server sent the KOT to the branch printer (check the printer)." }
+              : {
+                  kind: "error",
+                  text: "Order accepted · KOT print status unknown on the branch printer. Check it; use Reprint KOT only if nothing came out.",
+                },
         };
       }
       const kot = await openKotDialog(slot ?? reserveKotPrintFrame(), orderId, branchId, false);

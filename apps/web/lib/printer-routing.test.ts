@@ -113,12 +113,14 @@ test("routing: unreadable printer list still uses the saved name (bridge reports
 
 test("failure classification: only 'nothing reached the printer' is FAILED; maybe-printed is UNKNOWN", () => {
   for (const c of ["PRINTER_NOT_FOUND", "PRINTER_UNAVAILABLE", "RAW_REJECTED", "NO_BRIDGE", "FAILED"]) assert.equal(classifyBridgeFailure(c), "FAILED");
-  for (const c of ["TIMEOUT", "PARTIAL", "ERROR", "SOMETHING_NEW"]) assert.equal(classifyBridgeFailure(c), "UNKNOWN");
+  for (const c of ["TIMEOUT", "PARTIAL", "ERROR", "HELPER_LOST", "SOMETHING_NEW"]) assert.equal(classifyBridgeFailure(c), "UNKNOWN");
 });
 
 test("messages never claim paper came out", () => {
   const queued = describeOutcome("KOT", "QUEUED", "Kitchen TM");
-  assert.match(queued, /print queue accepted/);
+  assert.match(queued, /Windows print queue/);
+  assert.match(queued, /not proof it printed/);
+  assert.match(describeOutcome("KOT", "QUEUED", "K", "Windows reports the printer as offline."), /Note: Windows reports the printer as offline/);
   assert.match(queued, /Check the printer/);
   assert.doesNotMatch(queued, /\bprinted successfully\b/i);
   assert.match(describeOutcome("KOT", "UNKNOWN", "K"), /not resent automatically/);

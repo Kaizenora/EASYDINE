@@ -1,11 +1,16 @@
-// Client for the EasyDine Windows app's local print bridge
-// (windows/msix/Launcher/LocalPrintBridge.cs). Only exists inside that app
-// (WebView2); in a normal browser every call reports "no bridge" and callers
-// keep their existing behaviour (server printing or the browser print dialog).
+// Client for a local print bridge on the cashier PC. Two hosts speak the same
+// small protocol (hello / list / printRaw / printHtml):
+//  - "webview": the EasyDine Windows app (windows/msix/Launcher/LocalPrintBridge.cs),
+//    reached through WebView2 postMessage.
+//  - "helper": the optional EasyDine Print Helper (windows/print-helper), a
+//    small exe on 127.0.0.1 that a normal Chrome/Edge tab reaches over HTTP
+//    after a one-time pairing. Thermal (ESC/POS) printing only.
+// With neither, every call reports "no bridge" and callers keep their
+// existing behaviour (the browser print dialog).
 //
 // A plain browser can neither list this PC's printers nor print to a named
 // one without a dialog — that is why this bridge exists at all.
-import type { InstalledPrinter, PaperSize } from "./printer-routing.ts";
+import type { InstalledPrinter, KeyValueStorage, PaperSize } from "./printer-routing.ts";
 
 const CHANNEL = "easydine-print";
 const HELLO_TIMEOUT_MS = 1500;
@@ -25,15 +30,194 @@ export class BridgeError extends Error {
   }
 }
 
+export type BridgeKind = "webview" | "helper";
+
+// --- EasyDine Print Helper (HTTP on loopback) ------------------------------------
+
+export const HELPER_DEFAULT_PORT = 17821;
+const HELPER_KEY = "easydine.printHelper.v1";
+
+export interface HelperPairing {
+  port: number;
+  token: string;
+  pairedAt: string;
+}
+
+function helperStorage(): KeyValueStorage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function parseHelperPairing(raw: string | null): HelperPairing | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<HelperPairing>;
+    if (typeof v.port !== "number" || !Number.isInteger(v.port) || v.port < 1024 || v.port > 65535) return null;
+    if (typeof v.token !== "string" || !/^[A-Za-z0-9_-]{32,128}$/.test(v.token)) return null;
+    return { port: v.port, token: v.token, pairedAt: typeof v.pairedAt === "string" ? v.pairedAt : "" };
+  } catch {
+    return null;
+  }
+}
+
+/** This browser's pairing with the helper on this PC, if any. */
+export function getHelperPairing(storage: KeyValueStorage | null = helperStorage()): HelperPairing | null {
+  try {
+    return parseHelperPairing(storage?.getItem(HELPER_KEY) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+export function forgetHelperPairing(storage: KeyValueStorage | null = helperStorage()) {
+  try {
+    storage?.removeItem(HELPER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+type FetchLike = typeof fetch;
+let helperFetch: FetchLike | null = null;
+/** Tests only. */
+export function __setHelperFetchForTests(f: FetchLike | null) {
+  helperFetch = f;
+}
+
+async function helperCall<T>(
+  pairing: { port: number; token?: string },
+  method: "GET" | "POST",
+  path: string,
+  body: unknown,
+  timeoutMs: number,
+  phase: "probe" | "print",
+): Promise<T> {
+  const doFetch = helperFetch ?? fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    const init: RequestInit & { targetAddressSpace?: string } = {
+      method,
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      signal: controller.signal,
+      // Chrome/Edge Local Network Access: a public HTTPS page may reach this
+      // PC's loopback only with the "apps on this device" permission. Saying
+      // where the request goes lets the browser ask instead of blocking it.
+      targetAddressSpace: "loopback",
+      headers: {
+        ...(pairing.token ? { Authorization: `Bearer ${pairing.token}` } : {}),
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    };
+    res = await doFetch(`http://127.0.0.1:${pairing.port}${path}`, init);
+  } catch (e) {
+    clearTimeout(timer);
+    const aborted = controller.signal.aborted || (e instanceof Error && e.name === "AbortError");
+    if (phase === "probe") {
+      throw new BridgeError(
+        "NO_BRIDGE",
+        aborted
+          ? "The EasyDine Print Helper did not answer in time."
+          : "The EasyDine Print Helper is not reachable: start it on this PC, and allow this site to access apps on this device if the browser asks.",
+      );
+    }
+    // The job may have reached the helper before the connection broke, so
+    // this is never reported as "nothing printed" (and never resent).
+    throw new BridgeError(
+      aborted ? "TIMEOUT" : "HELPER_LOST",
+      aborted
+        ? "No answer from the Print Helper in time"
+        : "Lost the connection to the Print Helper (if its window was closed, nothing was printed)",
+    );
+  }
+  clearTimeout(timer);
+  let data: { ok?: boolean; code?: string; error?: string } & Record<string, unknown> = {};
+  try {
+    data = (await res.json()) as typeof data;
+  } catch {
+    /* empty body */
+  }
+  if (!res.ok || data.ok === false) {
+    if (res.status === 401) {
+      throw new BridgeError("FORBIDDEN", "This browser is no longer paired with the Print Helper. Pair again in Settings › Printers.");
+    }
+    throw new BridgeError(data.code || (res.status >= 500 ? "ERROR" : "BAD_REQUEST"), data.error || `Print Helper answered ${res.status}`);
+  }
+  return data as T;
+}
+
+/**
+ * One-time pairing: the cashier types the code the helper window shows. The
+ * helper binds the token to this site's origin. Call from a click (the
+ * browser may ask to allow access to apps on this device).
+ */
+export async function pairHelper(
+  code: string,
+  port: number = HELPER_DEFAULT_PORT,
+  storage: KeyValueStorage | null = helperStorage(),
+): Promise<HelperPairing> {
+  const clean = code.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(clean)) throw new BridgeError("BAD_CODE", "Type the 6-digit code shown in the Print Helper window.");
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new BridgeError("BAD_REQUEST", "Port must be between 1024 and 65535.");
+  const r = await helperCall<{ token?: string }>({ port }, "POST", "/v1/pair", { code: clean }, 30_000, "probe");
+  const pairing = parseHelperPairing(JSON.stringify({ port, token: r.token, pairedAt: new Date().toISOString() }));
+  if (!pairing) throw new BridgeError("ERROR", "The Print Helper sent an unexpected answer.");
+  storage?.setItem(HELPER_KEY, JSON.stringify(pairing));
+  return pairing;
+}
+
+/** Removes this site's pairing on the helper (best effort) and in this browser. */
+export async function unpairHelper(storage: KeyValueStorage | null = helperStorage()): Promise<void> {
+  const p = getHelperPairing(storage);
+  if (p) await helperCall(p, "POST", "/v1/unpair", {}, 3000, "probe").catch(() => undefined);
+  forgetHelperPairing(storage);
+}
+
+function helperRequest<T>(p: HelperPairing, type: string, args: Record<string, unknown>, timeoutMs: number): Promise<T> {
+  switch (type) {
+    case "hello":
+      return helperCall<T>(p, "GET", "/v1/hello", undefined, timeoutMs, "probe");
+    case "list":
+      return helperCall<T>(p, "GET", "/v1/printers", undefined, timeoutMs, "probe");
+    case "printRaw":
+      return helperCall<T>(p, "POST", "/v1/print-raw", { printer: args.printer, data: args.data, docName: args.docName }, timeoutMs, "print");
+    default:
+      return Promise.reject(
+        new BridgeError(
+          "UNSUPPORTED",
+          'The Print Helper prints thermal (ESC/POS) tickets only. Choose "Thermal (ESC/POS)" for this printer, or use the print dialog.',
+        ),
+      );
+  }
+}
+
+// --- WebView2 host ----------------------------------------------------------------
+
 function host(): WebViewHost | null {
   if (typeof window === "undefined") return null;
   const wv = (window as unknown as { chrome?: { webview?: WebViewHost } }).chrome?.webview;
   return wv && typeof wv.postMessage === "function" ? wv : null;
 }
 
-/** Synchronous hint: true inside a WebView2 host (the bridge may still be absent in an old app version). */
+/** Which bridge this window would use, without contacting it. WebView2 wins. */
+export function bridgeKind(): BridgeKind | null {
+  if (host()) return "webview";
+  return getHelperPairing() ? "helper" : null;
+}
+
+/**
+ * Synchronous hint: a bridge may be usable (WebView2 host, or a paired helper).
+ * It may still be absent (old app version, helper not started): detectBridge() checks.
+ */
 export function hasBridgeHost(): boolean {
-  return host() !== null;
+  return bridgeKind() !== null;
 }
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: BridgeError) => void; timer: ReturnType<typeof setTimeout> };
@@ -58,6 +242,10 @@ function listen(h: WebViewHost) {
 
 function request<T>(type: string, args: Record<string, unknown>, timeoutMs: number): Promise<T> {
   const h = host();
+  if (!h) {
+    const p = getHelperPairing();
+    if (p) return helperRequest<T>(p, type, args, timeoutMs);
+  }
   if (!h) return Promise.reject(new BridgeError("NO_BRIDGE", "This browser cannot use this computer's printers directly."));
   listen(h);
   const id = `p${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -79,9 +267,18 @@ function request<T>(type: string, args: Record<string, unknown>, timeoutMs: numb
 
 let helloPromise: Promise<boolean> | null = null;
 
-/** True when this window is the EasyDine Windows app with a working print bridge. Cached. */
+/**
+ * True when a working print bridge answers right now. The WebView2 answer is
+ * cached; the helper is asked every time (it can be stopped at any moment).
+ */
 export function detectBridge(): Promise<boolean> {
-  if (!hasBridgeHost()) return Promise.resolve(false);
+  const kind = bridgeKind();
+  if (!kind) return Promise.resolve(false);
+  if (kind === "helper") {
+    return request<{ version: number }>("hello", {}, HELLO_TIMEOUT_MS)
+      .then((r) => typeof r?.version === "number" && r.version >= 1)
+      .catch(() => false);
+  }
   if (!helloPromise) {
     helloPromise = request<{ version: number }>("hello", {}, HELLO_TIMEOUT_MS)
       .then((r) => typeof r?.version === "number" && r.version >= 1)
@@ -99,9 +296,9 @@ export async function listInstalledPrinters(): Promise<InstalledPrinter[]> {
 }
 
 /** Raw ESC/POS (base64 chunks, one per ticket) to one named printer. Resolves only when queued. */
-export async function printRawLocal(printer: string, data: string[], docName: string): Promise<{ jobs: number }> {
+export async function printRawLocal(printer: string, data: string[], docName: string): Promise<{ jobs: number; warning?: string }> {
   if (!printer) throw new BridgeError("NO_PRINTER", "No printer was chosen.");
-  return request<{ jobs: number }>("printRaw", { printer, data, docName }, PRINT_TIMEOUT_MS);
+  return request<{ jobs: number; warning?: string }>("printRaw", { printer, data, docName }, PRINT_TIMEOUT_MS);
 }
 
 /** Rendered pages through the printer's Windows driver. Resolves only when queued. */
