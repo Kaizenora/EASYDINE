@@ -29,27 +29,19 @@ export class PublicKioskService {
   ) {}
 
   private async resolveBranch(kioskToken: string) {
-    if (kioskToken === 'default' || kioskToken === 'kiosk') {
-      const branch =
-        (await this.prisma.branch.findFirst({
-          where: { isActive: true, categories: { some: {} } },
-          include: { restaurant: true },
-        })) ??
-        (await this.prisma.branch.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: 'desc' },
-          include: { restaurant: true },
-        }));
-      if (branch) return branch;
+    // Only the branch's own opaque kioskToken opens its kiosk. No "default"
+    // branch and no raw branch id: this endpoint is public, a default would
+    // pick an arbitrary branch across all restaurants, and branch ids are not
+    // secrets (they appear in staff URLs and API responses).
+    // A short/garbage token can never match; avoids a pointless query.
+    if (!/^[a-f0-9]{32}$/.test(kioskToken)) {
+      throw new NotFoundException('This kiosk is not available');
     }
-    const branch = await this.prisma.branch.findFirst({
-      where: {
-        OR: [{ kioskToken }, { id: kioskToken }],
-        isActive: true,
-      },
+    const branch = await this.prisma.branch.findUnique({
+      where: { kioskToken },
       include: { restaurant: true },
     });
-    if (!branch) {
+    if (!branch || !branch.isActive) {
       throw new NotFoundException('This kiosk is not available');
     }
     return branch;

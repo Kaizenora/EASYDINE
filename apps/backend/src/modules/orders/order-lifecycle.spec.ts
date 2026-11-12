@@ -32,9 +32,19 @@ describe('kitchen ticket state machine', () => {
     expect(path).toEqual(['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED']);
   });
 
-  it('never skips a step or goes backwards', () => {
-    expect(canTransitionKot('NEW', 'PREPARING')).toBe(false);
+  // The one sanctioned shortcut: the KDS "Start preparing" button takes a NEW
+  // ticket straight to PREPARING (kitchen-accept is implied). This is the KOT
+  // state only; online-order acceptance is a separate gate (createOrder holds
+  // back the tickets of a PENDING order).
+  it('lets the kitchen start a NEW ticket directly', () => {
+    expect(canTransitionKot('NEW', 'PREPARING')).toBe(true);
+  });
+
+  it('never skips any other step or goes backwards', () => {
     expect(canTransitionKot('NEW', 'READY')).toBe(false);
+    expect(canTransitionKot('NEW', 'SERVED')).toBe(false);
+    expect(canTransitionKot('ACCEPTED', 'SERVED')).toBe(false);
+    expect(canTransitionKot('PREPARING', 'SERVED')).toBe(false);
     expect(canTransitionKot('ACCEPTED', 'READY')).toBe(false);
     expect(canTransitionKot('PREPARING', 'ACCEPTED')).toBe(false);
     expect(canTransitionKot('READY', 'PREPARING')).toBe(false);
