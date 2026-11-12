@@ -271,7 +271,10 @@ export default function LuxuryCustomerMenu({
   const { data: status } = useQuery({
     queryKey: ["public-status", qrToken, isTakeaway ? activeOrderId : null],
     queryFn: () => api.get<PublicStatus>(statusUrl),
-    refetchInterval: 1500,
+    // Every seated phone polls this. 4 s while there is an order to follow,
+    // 10 s otherwise: still prompt for the guest, without a request every
+    // 1.5 s per table loading the server the staff screens depend on.
+    refetchInterval: (q) => (q.state.data?.order ? 4000 : 10000),
     enabled: !!data && !data.outOfService,
     gcTime: 0,
     staleTime: 0,

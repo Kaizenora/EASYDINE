@@ -607,6 +607,8 @@ export class OrdersController {
     const paperSize = query.paperSize === '58mm' || query.paperSize === 'A4' ? query.paperSize : '80mm';
     const html = buildReceiptHtml({
       paperSize,
+      // tz = the printing PC's zone, so the bill shows local time, not UTC.
+      timeZone: safeTimeZone(query.tz),
       restaurantName: order.branch.restaurant.name,
       currency: order.branch.restaurant.currency,
       branch: {

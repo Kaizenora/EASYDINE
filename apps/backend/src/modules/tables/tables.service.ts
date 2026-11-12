@@ -57,6 +57,7 @@ export class TablesService {
             totalAmount: true,
             guestName: true,
             guestCount: true,
+            acceptance: true,
             customer: { select: { name: true, phone: true } },
             items: { select: { id: true, status: true, quantity: true } },
           },
@@ -137,6 +138,9 @@ export class TablesService {
           guestCount,
           orderNumber: activeOrder?.orderNumber || null,
           orderId: activeOrder?.id || null,
+          // Lets the table map tell an order waiting for approval (QR /
+          // online) from one already accepted or entered by staff.
+          acceptance: activeOrder?.acceptance ?? null,
           totalAmount,
           dishesCount,
           serviceRequest,

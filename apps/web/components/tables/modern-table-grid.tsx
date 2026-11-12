@@ -167,7 +167,8 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           tableName: res.tableName || selectedTable.name || `Table ${selectedTable.number}`,
           customerName: res.customerName || selectedTable.customerName || "Guest",
           paymentMethod: res.paymentMethod || vars.method,
-          date: res.date || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          // This PC's clock: the server's own time string is in its zone (UTC).
+          date: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           subtotal: res.subtotal ?? "0.00",
           tax: res.tax ?? "0.00",
           totalAmount: res.totalAmount,
@@ -224,7 +225,9 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     [tables]
   );
   const newOrderTables = useMemo(() =>
-    tables.filter((t) => (t as any).orderNumber && ((t.status as string) === "OCCUPIED" || (t.status as string) === "PREPARING")),
+    // Only orders that really wait for approval; staff orders and accepted
+    // ones never show the "waiting approval" banner.
+    tables.filter((t) => (t as any).orderNumber && (t as any).acceptance === "PENDING"),
     [tables]
   );
 
@@ -317,7 +320,10 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     if (tAny.serviceRequest === "BILL" || status === "BILL_REQUESTED") {
       return { text: "BILL REQUESTED", class: "bg-rose-500/20 text-rose-300 border-rose-500/40", pulse: false };
     }
-    if (status === "OCCUPIED" && tAny.orderNumber && (tAny.acceptance === "PENDING" || !tAny.acceptance)) {
+    // Only an order that really waits for approval (QR / online). A staff
+    // order (NOT_REQUIRED) or an accepted one is not "new"; an older server
+    // that does not send acceptance never shows every table as new either.
+    if (status === "OCCUPIED" && tAny.orderNumber && tAny.acceptance === "PENDING") {
       return { text: "NEW ORDER", class: "bg-amber-500/20 text-amber-300 border-amber-500/40", pulse: true };
     }
     if (status === "SERVED" || tAny.allServed) {
@@ -788,7 +794,17 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               ) : (
                 <Button
                   className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
-                  onClick={() => setSettleDialogOpen(true)}
+                  onClick={() => {
+                    // Closing this dialog clears the selected table, which left
+                    // the settle box with no table (nothing happened). Reopen
+                    // it the same way the tile's "Settle bill" does.
+                    const t = selectedTable;
+                    setSelectedTable(null);
+                    setTimeout(() => {
+                      setSelectedTable(t);
+                      setSettleDialogOpen(true);
+                    }, 0);
+                  }}
                 >
                   <Receipt className="mr-2 h-4 w-4" />
                   Settle bill & Mark table Free

@@ -15,7 +15,7 @@ import {
   printHtmlLocal,
   printRawLocal,
 } from "./local-printer-bridge.ts";
-import { billQueryString, buildSampleReceiptHtml, getCashierPaperSize, registerBillPrintRouter, type BillQuery } from "./print.ts";
+import { billQueryString, buildSampleReceiptHtml, getCashierPaperSize, receiptTzParam, registerBillPrintRouter, type BillQuery } from "./print.ts";
 import { kotPageUrl, printKotInFrame, reserveKotPrintFrame, type KotPrintSlot } from "./kot-print-dialog.ts";
 import { buildKotHtml } from "./kot-html.ts";
 import {
@@ -873,7 +873,7 @@ export async function printBillLocal(
   try {
     if (mapping.method === "driver") {
       const res = await fetch(
-        `/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${mapping.paper}`,
+        `/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${mapping.paper}${receiptTzParam()}`,
         { credentials: "include" },
       );
       if (!res.ok) throw new Error(`Could not load the bill (${res.status})`);

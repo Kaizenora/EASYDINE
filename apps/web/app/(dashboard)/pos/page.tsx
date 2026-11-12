@@ -109,8 +109,13 @@ function PosPageInner() {
   // A table can carry several open bills; the user picks which one gets the
   // new items (default: the newest). Until the table's bills are loaded we do
   // not know whether this is a new bill or a new round, so submitting waits.
+  // Only the first load after picking the table blocks: a cached list from
+  // before a table switch is not trusted, but later background refreshes
+  // (realtime, focus) must not keep the button disabled on a slow server.
   const checkingTable =
-    orderType === "DINE_IN" && !!tableId && (openBillsQuery.isPending || openBillsQuery.isFetching);
+    orderType === "DINE_IN" &&
+    !!tableId &&
+    (openBillsQuery.isPending || (openBillsQuery.isFetching && !openBillsQuery.isFetchedAfterMount));
   const existingOrder =
     existingOrders?.find((o) => o.id === selectedBillId) ?? existingOrders?.[0];
 

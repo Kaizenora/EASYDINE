@@ -82,7 +82,7 @@ export function ProductGrid({
       {isError && !items ? (
         <QueryError error={error} what="the menu" onRetry={() => void refetch()} retrying={isFetching} />
       ) : (
-      <div className="grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-3 lg:gap-4 xl:grid-cols-4 2xl:grid-cols-5">
+      <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3 overflow-y-auto pb-4 lg:gap-4">
         {isLoading &&
           Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         {Array.isArray(filtered) && filtered.map((item) => (

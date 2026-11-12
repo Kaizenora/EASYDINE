@@ -67,7 +67,7 @@ export function useCustomers(branchId: string | null, search?: string) {
     queryKey: ["customers", branchId, search],
     queryFn: ({ signal }) => api.get<Customer[]>(`/customers?branchId=${branchId}${search ? `&search=${encodeURIComponent(search)}` : ""}`, { signal }),
     enabled: !!branchId,
-    refetchInterval: 5000,
+    refetchInterval: 20_000, // also refreshed after every payment and customer edit
     refetchIntervalInBackground: false,
   });
 }

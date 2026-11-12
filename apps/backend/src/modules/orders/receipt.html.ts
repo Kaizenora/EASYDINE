@@ -87,6 +87,7 @@ export function buildReceiptHtml({
   order,
   paperSize = '80mm',
   isTest = false,
+  timeZone,
 }: {
   restaurantName: string;
   branch: {
@@ -103,10 +104,18 @@ export function buildReceiptHtml({
   order: ReceiptOrder;
   paperSize?: '58mm' | '80mm' | 'A4';
   isTest?: boolean;
+  /** IANA zone of the printing PC; the server itself may run in UTC. */
+  timeZone?: string;
 }): string {
   const sym = CURRENCY_SYMBOLS[currency] ?? `${currency} `;
   const money = (n: number) => `${sym}${Number(n).toFixed(2)}`;
-  const dateStr = new Date(order.createdAt).toLocaleString();
+  const dateStr = (() => {
+    try {
+      return new Date(order.createdAt).toLocaleString(undefined, timeZone ? { timeZone } : undefined);
+    } catch {
+      return new Date(order.createdAt).toLocaleString();
+    }
+  })();
   const taxLabel = resolveTaxLabel(branch.taxRegime, branch.taxLabel);
   // gstNumber is the pre-multi-region field every India install already
   // has populated; taxId is the new generic one. India falls back to the
