@@ -51,7 +51,7 @@ export function KioskApp({ token }: { token: string }) {
         : { status: "unreachable" }
       : { status: "loading" };
 
-  const localeTag = locale === "es" ? "es-ES" : "en-GB";
+  const localeTag = locale === "en" ? "en-GB" : "en-IN";
   const fmt = useCallback(
     (n: number | string) => formatCurrency(n, menu?.currency ?? "EUR", localeTag),
     [menu?.currency, localeTag],
@@ -96,7 +96,7 @@ export function KioskApp({ token }: { token: string }) {
     dispatch({ type: "RESET" });
     setIdleWarn(null);
     setConfirmCancel(false);
-    setLocale("es");
+    setLocale("en");
     void menuQuery.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setLocale]);
