@@ -45,7 +45,8 @@ import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatCurrency, formatOrderNumber } from "@/lib/format";
 import { tableLabel, type PaymentMethodDto } from "@easydine/types";
 import { openReceiptPrint } from "@/lib/print";
-import { acceptOrderWithKot, reprintKot as reprintKotRouted } from "@/lib/local-print";
+import { acceptOrderWithKot, prefetchKotPage, toAcceptTarget, type AcceptTarget, reprintKot as reprintKotRouted } from "@/lib/local-print";
+import { kotPageVersion } from "@/lib/printer-routing";
 import { usePrintScope } from "@/components/settings/local-printer-scope";
 import { StatusNote, useStatusNote } from "@/components/ui/status-note";
 
@@ -236,6 +237,13 @@ export function MasterDetailOrders({
   // The outcome is shown inline and honestly (queued / failed / unknown);
   // a failed print never undoes the acceptance — Reprint KOT is explicit.
   const printScope = usePrintScope();
+  // Load the KOT page of waiting orders in the background, so Accept & KOT
+  // opens the print dialog the moment it is clicked.
+  useEffect(() => {
+    for (const o of queueOrders.slice(0, 15)) {
+      prefetchKotPage(o.id, printScope, kotPageVersion((o as any).items));
+    }
+  }, [queueOrders, printScope]);
   const [reprinting, setReprinting] = useState(false);
   const { note: printNote, show: showPrintNote, clear: clearPrintNote } = useStatusNote(20_000);
   const refreshAfterAccept = () => {
@@ -260,7 +268,7 @@ export function MasterDetailOrders({
       .finally(() => setReprinting(false));
   };
   const acceptOrder = useMutation({
-    mutationFn: (id: string) => acceptOrderWithKot(id, printScope).then((r) => ({ id, r })),
+    mutationFn: (t: string | AcceptTarget) => acceptOrderWithKot(t, printScope).then((r) => ({ id: toAcceptTarget(t).id, r })),
     onSuccess: ({ id, r }) => {
       if (!r.accepted) {
         if (r.reason === "busy") return;
@@ -813,7 +821,12 @@ export function MasterDetailOrders({
                   }
                   onClick={() => {
                     // Ignore extra clicks while the first accept is running.
-                    if (!acceptOrder.isPending) acceptOrder.mutate(selectedOrder.id);
+                    if (!acceptOrder.isPending)
+                      acceptOrder.mutate({
+                        id: selectedOrder.id,
+                        scheduledFor: (selectedOrder as any).scheduledFor ?? null,
+                        version: kotPageVersion((selectedOrder as any).items),
+                      });
                   }}
                 >
                   <Check className="mr-2 h-5 w-5 stroke-[3]" />

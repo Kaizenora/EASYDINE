@@ -386,6 +386,12 @@ export class TablesService {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Out of service with no open bill: there is nothing to settle, and
+    // "settling" would only flip the table back to free with a zero bill.
+    if (!order && table.status === 'OUT_OF_SERVICE') {
+      throw new ConflictException('This table is out of service and has no open bill to settle.');
+    }
+
     let checkoutResult: any = null;
     let customerName = order?.customer?.name || order?.guestName || 'Guest';
 

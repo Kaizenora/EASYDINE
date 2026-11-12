@@ -337,6 +337,15 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     return { text: "FREE", class: "bg-neutral-800 text-neutral-400 border-neutral-700", pulse: false };
   }
 
+  // An open bill on the table (items or an order number). An out-of-service
+  // table without one has nothing to settle.
+  const hasOpenBill = (table: RestaurantTable) => {
+    const tAny = table as any;
+    return Boolean(tAny.orderNumber) || (tAny.dishesCount ?? 0) > 0 || Number(tAny.totalAmount || 0) > 0;
+  };
+  const isOutOfServiceIdle = (table: RestaurantTable) =>
+    (table.status as string) === "OUT_OF_SERVICE" && !hasOpenBill(table);
+
   const isFree = (table: RestaurantTable) => {
     return (
       ((table.status as string) === "AVAILABLE" || (table.status as string) === "FREE") &&
@@ -501,6 +510,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           const tAny = table as any;
           const badge = getStatusBadge(table);
           const free = isFree(table);
+          const outOfServiceIdle = isOutOfServiceIdle(table);
           const isNewOrder = badge.text === "NEW ORDER";
 
           // Customer info (Name who booked / seated)
@@ -661,7 +671,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                   </p>
                 ) : (
                   <p className="text-xs text-neutral-500 italic">
-                    {free ? "Available" : "No booking info"}
+                    {free ? "Available" : outOfServiceIdle ? "Not taking guests" : "No booking info"}
                   </p>
                 )}
                 <p className={cn("text-xs font-medium", free ? "text-neutral-500" : "text-amber-300/90")}>
@@ -674,7 +684,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 <span>
                   {statusHint && timeLine ? `${statusHint} · ${timeLine}` : timeLine || `Seats ${table.capacity || 4}`}
                 </span>
-                {!free && (
+                {!free && !outOfServiceIdle && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -752,13 +762,31 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 </Button>
               </div>
 
-              <Button
-                className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
-                onClick={() => setSettleDialogOpen(true)}
-              >
-                <Receipt className="mr-2 h-4 w-4" />
-                Settle bill & Mark table Free
-              </Button>
+              {isOutOfServiceIdle(selectedTable) ? (
+                <>
+                  <p className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-xs text-neutral-400">
+                    This table is out of service. Guests who scan its QR are asked to move to another table. There is no bill to settle.
+                  </p>
+                  <Button
+                    className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
+                    disabled={updateTableStatus.isPending}
+                    onClick={() => {
+                      handleStatusChange(selectedTable.id, "AVAILABLE");
+                      setSelectedTable(null);
+                    }}
+                  >
+                    Put table back in service
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
+                  onClick={() => setSettleDialogOpen(true)}
+                >
+                  <Receipt className="mr-2 h-4 w-4" />
+                  Settle bill & Mark table Free
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

@@ -4,7 +4,7 @@ import { KOT_NEXT_STATUS, type KotStatusDto } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
-import { acceptOrderWithKot, getActivePrintScope } from "@/lib/local-print";
+import { acceptOrderWithKot, getActivePrintScope, type AcceptTarget } from "@/lib/local-print";
 import { isNativeApp } from "@/lib/native";
 import { isNetworkError, outbox } from "@/lib/outbox";
 
@@ -173,8 +173,8 @@ export function useAcceptIncoming(branchId: string | null) {
   return useMutation({
     // Accept + first KOT in the same click, via the KOT routing rule (helper
     // direct print when reachable and mapped, otherwise the print dialog).
-    mutationFn: async (orderId: string) => {
-      const r = await acceptOrderWithKot(orderId, { ...getActivePrintScope(), branchId });
+    mutationFn: async (target: string | AcceptTarget) => {
+      const r = await acceptOrderWithKot(target, { ...getActivePrintScope(), branchId });
       if (!r.accepted && r.reason !== "busy") throw new Error(r.message);
       return r;
     },

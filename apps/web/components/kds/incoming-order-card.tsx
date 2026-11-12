@@ -1,12 +1,14 @@
 "use client";
 
 import { Check, Clock, Globe, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { useAcceptIncoming, useDeclineIncoming, type IncomingOrder } from "@/hooks/use-kds";
+import { getActivePrintScope, prefetchKotPage } from "@/lib/local-print";
+import { kotPageVersion } from "@/lib/printer-routing";
 
 const DECLINE_REASONS = ["Closing soon", "Out of stock", "Too busy", "Outside delivery area"];
 
@@ -19,6 +21,11 @@ function minutesSince(iso: string) {
 // with a big Accept and a deliberate Decline.
 export function IncomingOrderCard({ order, branchId }: { order: IncomingOrder; branchId: string | null }) {
   const accept = useAcceptIncoming(branchId);
+  // KOT page ready before the click, so Accept opens the print dialog at once.
+  const kotVersion = kotPageVersion(order.items);
+  useEffect(() => {
+    if (branchId) prefetchKotPage(order.id, { ...getActivePrintScope(), branchId }, kotVersion);
+  }, [order.id, branchId, kotVersion]);
   const decline = useDeclineIncoming(branchId);
   const [declineOpen, setDeclineOpen] = useState(false);
   const { note, clear, toast } = useNoteToast();
@@ -74,7 +81,7 @@ export function IncomingOrderCard({ order, branchId }: { order: IncomingOrder; b
           className="h-12 flex-1 text-base"
           disabled={accept.isPending}
           onClick={() =>
-            accept.mutate(order.id, {
+            accept.mutate({ id: order.id, scheduledFor: order.scheduledFor, version: kotPageVersion(order.items) }, {
               onSuccess: (r) => {
                 if (!r.accepted) return;
                 if (r.kot && (r.kot.status === "FAILED" || r.kot.status === "UNKNOWN" || r.kot.status === "SKIPPED")) toast.error(r.kot.message);

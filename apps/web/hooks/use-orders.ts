@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveAwareInterval } from "@/hooks/use-live-interval";
 import type { Customer } from "@/hooks/use-customers";
 import { api } from "@/lib/api";
-import { acceptOrderWithKot, getActivePrintScope } from "@/lib/local-print";
+import { acceptOrderWithKot, getActivePrintScope, type AcceptTarget } from "@/lib/local-print";
 import { toast } from "@/lib/toast";
 
 export interface CreatedOrder {
@@ -269,8 +269,8 @@ export function useAcceptOrder(branchId: string | null) {
     // Accept once, then one KOT on this PC's saved Kitchen printer (or the
     // branch printer, as before). Print problems never undo the acceptance;
     // they are shown as an error with the honest status.
-    mutationFn: async (orderId: string) => {
-      const r = await acceptOrderWithKot(orderId, { ...getActivePrintScope(), branchId });
+    mutationFn: async (target: string | AcceptTarget) => {
+      const r = await acceptOrderWithKot(target, { ...getActivePrintScope(), branchId });
       if (!r.accepted) {
         if (r.reason === "busy") return r;
         throw new Error(r.message);

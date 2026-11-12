@@ -16,13 +16,15 @@ import {
   printRawLocal,
 } from "./local-printer-bridge.ts";
 import { billQueryString, buildSampleReceiptHtml, getCashierPaperSize, registerBillPrintRouter, type BillQuery } from "./print.ts";
-import { printKotInFrame, reserveKotPrintFrame, type KotPrintSlot } from "./kot-print-dialog.ts";
+import { kotPageUrl, printKotInFrame, reserveKotPrintFrame, type KotPrintSlot } from "./kot-print-dialog.ts";
 import {
   acceptKotQuery,
   browserKotDecision,
   classifyBridgeFailure,
   createSingleFlight,
   describeOutcome,
+  isScheduledLater,
+  printedButNotAcceptedMessage,
   deviceId,
   isMissingPrinterCode,
   isSameMachineAsServer,
@@ -242,6 +244,148 @@ export type AcceptOutcome =
 
 const flights = createSingleFlight();
 
+export interface AcceptTarget {
+  id: string;
+  /** Known schedule time: a later order gets its kitchen tickets later, so it is not printed first. */
+  scheduledFor?: string | null;
+  /** kotPageVersion(order.items), so a prefetched page is used only while the lines match. */
+  version?: string;
+}
+
+/** Hooks take either an order id or an AcceptTarget. */
+export function toAcceptTarget(t: string | AcceptTarget): AcceptTarget {
+  return typeof t === "string" ? { id: t } : t;
+}
+
+// --- instant print dialog (browser route) ---------------------------------------
+// The KOT page of a waiting order is loaded while it is on screen, so Accept &
+// KOT can open the print dialog in the same moment as the click. Reading the
+// page marks nothing as printed.
+
+const KOT_PAGE_TTL_MS = 5 * 60_000;
+const kotPageCache = new Map<string, { html: string; version: string; at: number }>();
+const kotPageLoads = new Map<string, Promise<string | null>>();
+
+function loadKotPage(orderId: string, branchId: string, version: string): Promise<string | null> {
+  const running = kotPageLoads.get(orderId);
+  if (running) return running;
+  const p = fetch(kotPageUrl(orderId, branchId, { paper: getCashierPaperSize(), timeZone: deviceTimeZone() }), {
+    credentials: "include",
+    cache: "no-store",
+  })
+    .then(async (res) => (res.ok ? await res.text() : null))
+    .catch(() => null)
+    .then((html) => {
+      if (html) kotPageCache.set(orderId, { html, version, at: Date.now() });
+      return html;
+    })
+    .finally(() => kotPageLoads.delete(orderId));
+  kotPageLoads.set(orderId, p);
+  return p;
+}
+
+/**
+ * Loads a waiting order's KOT page in the background. Only for PCs without a
+ * Print Helper route (those print directly, without any dialog).
+ */
+export function prefetchKotPage(orderId: string, scope: PrintScope, version = ""): void {
+  if (!scope.branchId || typeof window === "undefined" || hasLocalKitchenRoute(scope)) return;
+  const hit = kotPageCache.get(orderId);
+  if (hit && hit.version === version && Date.now() - hit.at < KOT_PAGE_TTL_MS) return;
+  void loadKotPage(orderId, scope.branchId, version);
+}
+
+/** The prefetched page, used once. */
+function takeKotPage(orderId: string, version: string | undefined): string | null {
+  const hit = kotPageCache.get(orderId);
+  kotPageCache.delete(orderId);
+  if (!hit || Date.now() - hit.at >= KOT_PAGE_TTL_MS) return null;
+  if (version !== undefined && hit.version !== version) return null;
+  return hit.html;
+}
+
+type AcceptAttempt = { ok: true; res: AcceptResponse } | { ok: false; err: unknown };
+
+/**
+ * Browser route, print first: the acceptance request goes out and the print
+ * dialog opens straight away from the prefetched page (or as soon as the page
+ * arrives) without waiting for the server's answer, which is read after the
+ * dialog. If the order was not accepted after all, staff are told what to do
+ * with the ticket. Nothing is ever printed twice automatically.
+ */
+async function acceptPrintFirst(
+  orderId: string,
+  branchId: string,
+  slot: KotPrintSlot,
+  target: AcceptTarget,
+): Promise<AcceptOutcome> {
+  const accepting: Promise<AcceptAttempt> = api
+    .post<AcceptResponse>(`/orders/${orderId}/accept?branchId=${branchId}${browserKotQuery()}`)
+    .then(
+      (res) => ({ ok: true as const, res }),
+      (err: unknown) => ({ ok: false as const, err }),
+    );
+  const html =
+    takeKotPage(orderId, target.version) ??
+    (await Promise.race([
+      loadKotPage(orderId, branchId, target.version ?? ""),
+      // If the page is slower than the acceptance, the acceptance's own copy is used.
+      accepting.then((a) => (a.ok && a.res.kotHtml ? a.res.kotHtml : null)),
+    ]));
+
+  if (!html) {
+    // No page at all: wait for the server and print from its answer.
+    const a = await accepting;
+    if (!a.ok) {
+      slot.release();
+      return notAcceptedOutcome(a.err, false);
+    }
+    if (browserKotDecision(a.res.printStatus, a.res.scheduledFor) !== "dialog") {
+      slot.release();
+      return { accepted: true, kot: null, serverMessage: { kind: "ok", text: "Order accepted. No kitchen ticket yet (scheduled for later)." } };
+    }
+    const kot = await openKotDialog(slot, orderId, branchId, false, undefined, "Order accepted.", a.res.kotHtml || undefined);
+    return { accepted: true, kot };
+  }
+
+  const d = await printKotInFrame(slot, orderId, branchId, { html });
+  const a = await accepting;
+  if (!a.ok) return notAcceptedOutcome(a.err, d.status === "REQUESTED");
+  const kot: LocalPrintEvent = {
+    orderId,
+    what: "KOT",
+    status: d.status === "REQUESTED" ? "REQUESTED" : "FAILED",
+    message: `Order accepted. ${d.message}`,
+    canReprint: true,
+    at: Date.now(),
+  };
+  publish(kot);
+  return { accepted: true, kot };
+}
+
+function notAcceptedOutcome(err: unknown, printed: boolean): AcceptOutcome {
+  if (err instanceof ApiError && err.status === 409) {
+    return {
+      accepted: false,
+      reason: "already",
+      message: printed
+        ? printedButNotAcceptedMessage("already", err.message)
+        : `${err.message}. The KOT was not printed again — use Reprint KOT if the kitchen did not get it.`,
+    };
+  }
+  if (err instanceof ApiError && (err.status === 0 || err.status === 408)) {
+    return {
+      accepted: false,
+      reason: "unconfirmed",
+      message: printed
+        ? printedButNotAcceptedMessage("unconfirmed")
+        : "Could not confirm the acceptance (connection problem). Refresh the list: if the order shows as accepted, check the kitchen printer and use Reprint KOT if needed. Nothing was printed again.",
+    };
+  }
+  const msg = err instanceof Error ? err.message : "Could not accept order";
+  return { accepted: false, reason: "error", message: printed ? printedButNotAcceptedMessage("error", msg) : msg };
+}
+
 /**
  * Accepts the order exactly once and requests one KOT on this PC's saved
  * Kitchen printer (no dialog) when the bridge is available. Double clicks
@@ -249,11 +393,21 @@ const flights = createSingleFlight();
  * from the server and prints nothing. A print failure never undoes the
  * acceptance — the cashier gets an explicit Reprint instead.
  */
-export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Promise<AcceptOutcome> {
+export async function acceptOrderWithKot(orderIdOrTarget: string | AcceptTarget, scope: PrintScope): Promise<AcceptOutcome> {
+  const target = toAcceptTarget(orderIdOrTarget);
+  const orderId = target.id;
   const branchId = scope.branchId;
   if (!branchId) return { accepted: false, reason: "error", message: "Choose a branch first." };
   const key = `accept:${orderId}`;
   if (flights.isRunning(key)) return { accepted: false, reason: "busy", message: "Already accepting this order…" };
+  // No Print Helper route on this PC: the print dialog opens at once and the
+  // acceptance runs alongside it (orders scheduled for later keep the old order).
+  if (!hasLocalKitchenRoute(scope) && !isScheduledLater(target.scheduledFor)) {
+    const firstSlot = reserveKotPrintFrame();
+    const fast = await flights.run(key, () => acceptPrintFirst(orderId, branchId, firstSlot, target));
+    if (!fast) firstSlot.release();
+    return fast ?? { accepted: false, reason: "busy", message: "Already accepting this order…" };
+  }
   // Reserve the print frame now, synchronously inside the click, even when a
   // saved Kitchen printer may take the KOT: if the helper turns out to be
   // stopped, the dialog is the fallback. The frame is filled only after the
