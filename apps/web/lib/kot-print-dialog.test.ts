@@ -88,3 +88,17 @@ test("kotIds limits the KOT page to those tickets (POS send / one KDS ticket)", 
   assert.equal(u.searchParams.get("kotIds"), "k1,k2");
   assert.equal(new URL(kotPageUrl("o", "b", { kotIds: [] }), "http://x").searchParams.get("kotIds"), null);
 });
+
+test("KOT page sent back with Accept: printed without a second request", async () => {
+  const { slot, calls } = fakeSlot();
+  let fetched = 0;
+  const spy = (async () => {
+    fetched++;
+    return { ok: true, status: 200, text: async () => "<p>wrong</p>" };
+  }) as unknown as typeof fetch;
+  const r = await printKotInFrame(slot, "o1", "b1", { html: "<p>1× Masala Dosa</p>", fetchImpl: spy });
+  assert.equal(r.status, "REQUESTED");
+  assert.equal(fetched, 0);
+  assert.match(calls.written, /Masala Dosa/);
+  assert.equal(calls.printed, 1);
+});

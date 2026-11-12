@@ -126,6 +126,34 @@ describe('GET /orders/:id/kot (printed via the browser dialog)', () => {
     expect(ordersService.getReceiptData).not.toHaveBeenCalled();
   });
 
+  it('POST accept (browser route) returns the same KOT page, so no second request is needed', async () => {
+    const { ctl, ordersService } = controller();
+    ordersService.acceptOrder = jest.fn().mockResolvedValue({ id: 'ord-1', printStatus: 'BROWSER' });
+    const out: any = await ctl.accept(user, 'b-1', 'ord-1', 'browser', undefined, '58mm', 'Asia/Kolkata');
+    expect(out.printStatus).toBe('BROWSER');
+    expect(out.kotHtml).toContain('Paneer Tikka (Half)');
+    expect(out.kotHtml).toContain('size: 58mm');
+    expect(out.kotHtml).not.toMatch(/240|480|579|₹|Total/);
+    expect(ordersService.getReceiptData).toHaveBeenCalledWith('b-1', 'ord-1');
+  });
+
+  it('POST accept: no KOT page when there are no tickets or another route is used', async () => {
+    const { ctl, ordersService } = controller();
+    ordersService.acceptOrder = jest.fn().mockResolvedValue({ id: 'ord-1', printStatus: 'NO_TICKETS' });
+    expect((await ctl.accept(user, 'b-1', 'ord-1', 'browser')) as any).not.toHaveProperty('kotHtml');
+    ordersService.acceptOrder = jest.fn().mockResolvedValue({ id: 'ord-1', printStatus: 'SKIPPED' });
+    expect((await ctl.accept(user, 'b-1', 'ord-1', 'none')) as any).not.toHaveProperty('kotHtml');
+    expect(ordersService.getReceiptData).not.toHaveBeenCalled();
+  });
+
+  it('POST accept: if the KOT page cannot be built, the acceptance still comes back', async () => {
+    const { ctl, ordersService } = controller();
+    ordersService.acceptOrder = jest.fn().mockResolvedValue({ id: 'ord-1', printStatus: 'BROWSER' });
+    ordersService.getReceiptData = jest.fn().mockRejectedValue(new Error('db down'));
+    const out: any = await ctl.accept(user, 'b-1', 'ord-1', 'browser');
+    expect(out).toEqual({ id: 'ord-1', printStatus: 'BROWSER' });
+  });
+
   it('first print carries no REPRINT stamp', () => {
     const html = buildKotHtml({ branchName: 'B', order: { orderNumber: '1', type: 'TAKEAWAY', createdAt: new Date(), table: null, customer: null, items: [] } });
     expect(html).not.toContain('REPRINT');

@@ -928,25 +928,29 @@ export class OrdersService {
       entityId: orderId,
       metadata: { orderNumber: order.orderNumber, type: order.type },
     });
-    try {
-      await this.notifications.notifyByPermission(branchId, 'kds.manage', {
-        type: 'order.new',
-        title: 'New online order',
-        body: `Order ${order.orderNumber} (${order.type.replace('_', ' ')})`,
-        entity: 'Order',
-        entityId: orderId,
+    // Not awaited: the cashier's Accept & KOT (and its print dialog) must not
+    // wait for push notifications to go out. Failures are only logged.
+    void Promise.resolve()
+      .then(() =>
+        this.notifications.notifyByPermission(branchId, 'kds.manage', {
+          type: 'order.new',
+          title: 'New online order',
+          body: `Order ${order.orderNumber} (${order.type.replace('_', ' ')})`,
+          entity: 'Order',
+          entityId: orderId,
+        }),
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to notify kitchen of accepted order ${orderId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
-    } catch (err) {
-      this.logger.warn(
-        `Failed to notify kitchen of accepted order ${orderId}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
 
     if (kot.via === 'browser') {
-      const tickets = await this.prisma.kot.count({
-        where: { orderId, status: { not: 'CANCELLED' } },
-      });
-      const orderDetails = await this.getOrder(branchId, orderId);
+      const [tickets, orderDetails] = await Promise.all([
+        this.prisma.kot.count({ where: { orderId, status: { not: 'CANCELLED' } } }),
+        this.getOrder(branchId, orderId),
+      ]);
       return {
         ...orderDetails,
         printStatus: tickets > 0 ? ('BROWSER' as const) : ('NO_TICKETS' as const),

@@ -310,8 +310,9 @@ export class OrdersController {
     // Without a branch the order lookup would not be scoped to this tenant.
     if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
-    return this.ordersService.acceptOrder(branchId, id, user.id, {
-      via: parseKotVia(kotVia),
+    const via = parseKotVia(kotVia);
+    const result = await this.ordersService.acceptOrder(branchId, id, user.id, {
+      via,
       device: parseDeviceKotOptions({
         format: kotFormat,
         paper: kotPaper,
@@ -319,6 +320,19 @@ export class OrdersController {
       }),
       printer: kotPrinter,
     });
+    // Browser route: hand the KOT page back with the acceptance, so the
+    // cashier PC opens the print dialog at once instead of fetching
+    // GET :id/kot in a second round trip. Same page as that endpoint.
+    if (via === 'browser' && (result as { printStatus?: string }).printStatus === 'BROWSER') {
+      try {
+        const kotHtml = await this.renderKotPage(branchId, id, { tz, paper: kotPaper });
+        return { ...result, kotHtml };
+      } catch {
+        // The order is accepted either way; the client falls back to GET :id/kot.
+        return result;
+      }
+    }
+    return result;
   }
 
   @Auth('orders.accept')
@@ -615,14 +629,30 @@ export class OrdersController {
   ) {
     if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const html = await this.renderKotPage(branchId, id, {
+      tz,
+      paper,
+      reprint: reprint === '1' || reprint === 'true',
+      kotIds: parseKotIds(kotIdsRaw),
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(html);
+  }
+
+  /** KOT page HTML (no prices). Caller must have checked branch access. */
+  private async renderKotPage(
+    branchId: string,
+    id: string,
+    opts: { tz?: string; paper?: string; reprint?: boolean; kotIds?: string[] },
+  ): Promise<string> {
     const order = await this.ordersService.getReceiptData(branchId, id);
     const kotOrder = toKotOrder(order);
     // kotIds: only those kitchen tickets (the round just sent, or the one
     // ticket a KDS screen reprints), never the rest of the order.
-    const kotIds = parseKotIds(kotIdsRaw);
+    const kotIds = opts.kotIds;
     const only = kotIds ? await this.kotPrint.ticketLines(branchId, id, kotIds) : null;
     if (only && only.tickets.length === 0) throw new NotFoundException('KOT not found');
-    const html = buildKotHtml({
+    return buildKotHtml({
       branchName: order.branch.name,
       // Cancelled lines never go to the kitchen.
       order: {
@@ -637,12 +667,10 @@ export class OrdersController {
         only && only.tickets.length === 1
           ? { number: only.tickets[0]!.number, station: only.tickets[0]!.station, reprint: 0 }
           : undefined,
-      paper: parsePaper(paper) ?? '80mm',
-      timeZone: safeTimeZone(tz),
-      copyLabel: reprint === '1' || reprint === 'true' ? 'REPRINT' : undefined,
+      paper: parsePaper(opts.paper) ?? '80mm',
+      timeZone: safeTimeZone(opts.tz),
+      copyLabel: opts.reprint ? 'REPRINT' : undefined,
     });
-    res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(html);
   }
 
   // --- Direct-USB thermal printing (ESC/POS) ---------------------------------

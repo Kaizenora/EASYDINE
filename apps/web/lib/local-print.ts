@@ -232,6 +232,8 @@ type AcceptResponse = {
   printStatus?: "BROWSER" | "DEVICE" | "SKIPPED" | "PRINTER_MISSING" | "NO_TICKETS" | "ALREADY_PRINTED" | "NO_PRINTER" | "SENT" | "PRINTED" | "FAILED" | "UNKNOWN";
   printError?: string;
   deviceKot?: DeviceTickets;
+  /** Browser route: the KOT page itself, so no second request is needed. */
+  kotHtml?: string;
 };
 
 export type AcceptOutcome =
@@ -263,7 +265,7 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
     let res: AcceptResponse;
     try {
       res = await api.post<AcceptResponse>(
-        `/orders/${orderId}/accept?branchId=${branchId}${viaBrowser ? "&kotVia=browser" : acceptKotQuery(route, deviceTimeZone())}`,
+        `/orders/${orderId}/accept?branchId=${branchId}${viaBrowser ? browserKotQuery() : acceptKotQuery(route, deviceTimeZone())}`,
       );
     } catch (err) {
       slot?.release(); // acceptance failed: nothing is printed
@@ -312,6 +314,7 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
         false,
         undefined,
         note ? `Order accepted. ${note}` : "Order accepted.",
+        typeof res.kotHtml === "string" && res.kotHtml.length > 0 ? res.kotHtml : undefined,
       );
       slot = null;
       return { accepted: true, kot };
@@ -391,6 +394,14 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
   return r ?? { accepted: false, reason: "busy", message: "Already accepting this order…" };
 }
 
+/** Accept query for the browser route; paper and time zone let the server return the KOT page with the acceptance. */
+function browserKotQuery(): string {
+  const q = new URLSearchParams({ kotVia: "browser", kotPaper: getCashierPaperSize() });
+  const tz = deviceTimeZone();
+  if (tz) q.set("tz", tz);
+  return `&${q.toString()}`;
+}
+
 /** Synchronous: does this PC have a saved Kitchen printer it could reach without a dialog? */
 function hasLocalKitchenRoute(scope: PrintScope): boolean {
   const k = getMappings(scope).kitchen;
@@ -405,9 +416,10 @@ async function openKotDialog(
   reprint: boolean,
   kotIds?: string[],
   prefix?: string,
+  html?: string,
 ): Promise<LocalPrintEvent> {
   const paper = getCashierPaperSize();
-  const d = await printKotInFrame(slot, orderId, branchId, { reprint, paper, timeZone: deviceTimeZone(), kotIds });
+  const d = await printKotInFrame(slot, orderId, branchId, { reprint, paper, timeZone: deviceTimeZone(), kotIds, html });
   const e: LocalPrintEvent = {
     orderId,
     what: "KOT",

@@ -76,6 +76,19 @@ export function kotPageUrl(
 export const KOT_REQUESTED_MESSAGE =
   "Print dialog opened for the KOT — choose your kitchen printer there. EasyDine cannot see whether it printed: check the kitchen printer and use Reprint KOT if nothing came out.";
 
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    // rAF can be paused in a background tab: the timer is the fallback.
+    const timer = setTimeout(resolve, 50);
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    }
+  });
+}
+
 /**
  * Loads the KOT page into the reserved frame and opens the print dialog.
  * Resolves once the dialog was requested (or failed to open).
@@ -84,17 +97,29 @@ export async function printKotInFrame(
   slot: KotPrintSlot,
   orderId: string,
   branchId: string,
-  opts: { reprint?: boolean; paper?: KotPaper; timeZone?: string; kotIds?: string[]; fetchImpl?: typeof fetch } = {},
+  opts: {
+    reprint?: boolean;
+    paper?: KotPaper;
+    timeZone?: string;
+    kotIds?: string[];
+    fetchImpl?: typeof fetch;
+    /** The KOT page already in hand (sent back with Accept): no request is made. */
+    html?: string;
+  } = {},
 ): Promise<KotDialogResult> {
-  const doFetch = opts.fetchImpl ?? fetch;
   let html: string;
-  try {
-    const res = await doFetch(kotPageUrl(orderId, branchId, opts), { credentials: "include", cache: "no-store" });
-    if (!res.ok) throw new Error(res.status === 403 ? "not allowed for this branch" : `server answered ${res.status}`);
-    html = await res.text();
-  } catch (e) {
-    slot.release();
-    return { status: "FAILED", message: `KOT not printed: could not load the ticket (${e instanceof Error ? e.message : "network error"}). Use Reprint KOT.` };
+  if (opts.html) {
+    html = opts.html;
+  } else {
+    const doFetch = opts.fetchImpl ?? fetch;
+    try {
+      const res = await doFetch(kotPageUrl(orderId, branchId, opts), { credentials: "include", cache: "no-store" });
+      if (!res.ok) throw new Error(res.status === 403 ? "not allowed for this branch" : `server answered ${res.status}`);
+      html = await res.text();
+    } catch (e) {
+      slot.release();
+      return { status: "FAILED", message: `KOT not printed: could not load the ticket (${e instanceof Error ? e.message : "network error"}). Use Reprint KOT.` };
+    }
   }
 
   const win = slot.frame.contentWindow;
@@ -108,8 +133,9 @@ export async function printKotInFrame(
   doc.close();
   slot.frame.setAttribute(FRAME_ATTR, "loaded");
 
-  // Let the ticket lay out (fonts) before the dialog snapshots it.
-  await new Promise((r) => setTimeout(r, 150));
+  // One frame for layout before the dialog snapshots the ticket. The page
+  // uses system fonts only, so there is nothing to download first.
+  await nextFrame();
   try {
     win.addEventListener(
       "afterprint",
