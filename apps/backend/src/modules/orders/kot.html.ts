@@ -99,7 +99,7 @@ export function buildKotHtml({
 <html>
 <head>
 <meta charset="utf-8">
-<title>KOT ${esc(order.orderNumber)}</title>
+<title>KOT ${esc(order.orderNumber || order.table?.label || '')}</title>
 <style>
   * { box-sizing: border-box; }
   html { margin: 0; }
@@ -131,7 +131,7 @@ export function buildKotHtml({
     <hr class="rule">
     <p class="muted">
       ${esc(dateStr)}<br>
-      Order: #${esc(order.orderNumber)} · ${esc(order.type.replace('_', ' '))}
+      Order: ${order.orderNumber ? `#${esc(order.orderNumber)} · ` : ''}${esc(order.type.replace('_', ' '))}
       ${order.table ? `<br><strong>Table: ${esc(order.table.label)}</strong>` : ''}
       ${order.customer ? `<br>Guest: ${esc(order.customer.name)}` : ''}
     </p>

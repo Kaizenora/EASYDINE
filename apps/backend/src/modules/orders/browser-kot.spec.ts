@@ -154,6 +154,26 @@ describe('GET /orders/:id/kot (printed via the browser dialog)', () => {
     expect(out).toEqual({ id: 'ord-1', printStatus: 'BROWSER' });
   });
 
+  it('POST /orders with kotPage=1 returns the new tickets as a KOT page', async () => {
+    const { ctl, ordersService } = controller();
+    ordersService.createOrder = jest.fn().mockResolvedValue({ id: 'ord-1', kots: [{ id: 'k1' }] });
+    const ctlAny: any = ctl;
+    ctlAny.kotPrint = { ticketLines: jest.fn().mockResolvedValue({ tickets: [{ number: 'K1', station: null }], orderItemIds: new Set() }) };
+    const out: any = await ctl.createOrder(user, 'b-1', {}, '1', '58mm', 'Asia/Kolkata');
+    expect(out.kotHtml).toContain('Kitchen order');
+    expect(out.kotHtml).toContain('size: 58mm');
+    expect(ctlAny.kotPrint.ticketLines).toHaveBeenCalledWith('b-1', 'ord-1', ['k1']);
+  });
+
+  it('POST /orders without kotPage (or with no tickets) returns the order unchanged', async () => {
+    const { ctl, ordersService } = controller();
+    ordersService.createOrder = jest.fn().mockResolvedValue({ id: 'ord-1', kots: [{ id: 'k1' }] });
+    expect(await ctl.createOrder(user, 'b-1', {})).toEqual({ id: 'ord-1', kots: [{ id: 'k1' }] });
+    ordersService.createOrder = jest.fn().mockResolvedValue({ id: 'ord-2', kots: [] });
+    expect(await ctl.createOrder(user, 'b-1', {}, '1')).toEqual({ id: 'ord-2', kots: [] });
+    expect(ordersService.getReceiptData).not.toHaveBeenCalled();
+  });
+
   it('first print carries no REPRINT stamp', () => {
     const html = buildKotHtml({ branchName: 'B', order: { orderNumber: '1', type: 'TAKEAWAY', createdAt: new Date(), table: null, customer: null, items: [] } });
     expect(html).not.toContain('REPRINT');

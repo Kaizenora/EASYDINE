@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -21,6 +22,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { BranchAccessService } from '../../common/services/branch-access.service';
 import { ReferralsService } from '../referrals/referrals.service';
+import { OrdersService } from '../orders/orders.service';
 import { CustomersService } from './customers.service';
 
 @ApiTags('customers')
@@ -30,7 +32,23 @@ export class CustomersController {
     private readonly customersService: CustomersService,
     private readonly branchAccess: BranchAccessService,
     private readonly referrals: ReferralsService,
+    private readonly orders: OrdersService,
   ) {}
+
+  /**
+   * Fills the Customers list from past orders (guest name + phone from QR,
+   * POS and online orders that were never linked to a customer). Idempotent.
+   */
+  @Auth('customers.manage')
+  @Post('backfill-from-orders')
+  async backfillFromOrders(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+  ) {
+    if (typeof branchId !== 'string' || !branchId) throw new BadRequestException('branchId is required');
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    return this.orders.backfillCustomersFromOrders(branchId);
+  }
 
   @Auth('customers.manage')
   @Get()

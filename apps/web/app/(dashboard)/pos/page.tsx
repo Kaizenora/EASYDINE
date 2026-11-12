@@ -28,7 +28,8 @@ import {
 import { useFloors, type RestaurantTable } from "@/hooks/use-tables";
 import { ApiError } from "@/lib/api";
 import { reserveKotPrintFrame } from "@/lib/kot-print-dialog";
-import { getActivePrintScope, printSentKot, type LocalPrintEvent } from "@/lib/local-print";
+import { cartKotHtml, getActivePrintScope, kotUsesDialog, printKotHtmlNow, printSentKot, type LocalPrintEvent } from "@/lib/local-print";
+import { tableLabel } from "@easydine/types";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +42,7 @@ export default function PosPage() {
 }
 
 function PosPageInner() {
-  const { branchId, isLoading: branchLoading } = useBranch();
+  const { branchId, branches, isLoading: branchLoading } = useBranch();
   const { note, clear: clearNote, toast } = useNoteToast();
   const floorsQuery = useFloors(branchId);
   const floors = floorsQuery.data;
@@ -184,6 +185,31 @@ function PosPageInner() {
     // after the order request; released when the helper prints instead.
     const slot = reserveKotPrintFrame();
     const scope = { ...getActivePrintScope(), branchId };
+    // Dialog first: on a PC that prints through the browser dialog, a dine-in
+    // send (or another round on an open bill) prints the ticket built from the
+    // cart in this click, while the order is saved alongside. A brand-new
+    // takeaway/delivery order still waits for the server, because its ticket
+    // needs the order number the server assigns.
+    const sentTable = tables.find((t) => t.id === sentTableId);
+    const printFirst =
+      kotUsesDialog(scope) &&
+      !(orderType !== "DINE_IN" && scheduledFor) &&
+      (!!existingOrder || (orderType === "DINE_IN" && !!sentTable));
+    const kotHtml = printFirst
+      ? cartKotHtml({
+          branchName: branches.find((b) => b.id === branchId)?.name ?? "",
+          orderNumber: existingOrder?.orderNumber ?? null,
+          type: existingOrder?.type ?? orderType,
+          tableLabel: sentTable ? tableLabel(sentTable.number, sentTable.name) : null,
+          lines: lines.map((l) => ({
+            name: l.name,
+            quantity: l.quantity,
+            modifiers: l.modifierLabel ? l.modifierLabel.split(", ").filter(Boolean) : [],
+          })),
+        })
+      : null;
+    const notSentMessage = (err: unknown, what: string) =>
+      `${what} NOT sent${err instanceof ApiError && err.message ? `: ${err.message}` : ""}. Tell the kitchen to ignore the ticket that was just printed.`;
     const items = lines.map((l) => ({
       menuItemId: l.menuItemId,
       quantity: l.quantity,
@@ -206,14 +232,19 @@ function PosPageInner() {
             setActiveCustomer(existingOrder.customer);
             setActiveOrder(order);
             toast.success(`Added to order #${order.orderNumber} — sent to kitchen`);
-            void printSentKot(order.id, scope, slot, order.newKotIds).then(reportKot);
+            if (!kotHtml) void printSentKot(order.id, scope, slot, order.newKotIds).then(reportKot);
           },
           onError: (err) => {
+            if (kotHtml) {
+              toast.error(notSentMessage(err, "Items"));
+              return;
+            }
             slot.release();
             toast.error(err instanceof ApiError ? err.message : "Could not add items");
           },
         },
       );
+      if (kotHtml) void printKotHtmlNow(slot, existingOrder.id, kotHtml, "Sent to kitchen.").then(reportKot);
       return;
     }
 
@@ -234,14 +265,20 @@ function PosPageInner() {
           setActiveOrder(order);
           setCartOpen(true);
           toast.success(`Order #${order.orderNumber} sent to kitchen`);
-          void printSentKot(order.id, scope, slot, (order.kots ?? []).map((k) => k.id)).then(reportKot);
+          if (!kotHtml)
+            void printSentKot(order.id, scope, slot, (order.kots ?? []).map((k) => k.id), order.kotHtml || undefined).then(reportKot);
         },
         onError: (err) => {
+          if (kotHtml) {
+            toast.error(notSentMessage(err, "Order"));
+            return;
+          }
           slot.release();
           toast.error(err instanceof ApiError ? err.message : "Could not create order");
         },
       },
     );
+    if (kotHtml) void printKotHtmlNow(slot, null, kotHtml, "Sent to kitchen.").then(reportKot);
   };
 
   const viewExistingOrder = () => {

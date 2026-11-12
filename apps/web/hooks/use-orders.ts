@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveAwareInterval } from "@/hooks/use-live-interval";
 import type { Customer } from "@/hooks/use-customers";
 import { api } from "@/lib/api";
-import { acceptOrderWithKot, getActivePrintScope, type AcceptTarget } from "@/lib/local-print";
+import { acceptOrderWithKot, createOrderKotQuery, getActivePrintScope, type AcceptTarget } from "@/lib/local-print";
 import { toast } from "@/lib/toast";
 
 export interface CreatedOrder {
@@ -48,7 +48,8 @@ export interface CheckoutResult extends CreatedOrder {
 export function useCreateOrder(branchId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (dto: CreateOrderDto) => api.post<CreatedOrder>(`/orders?branchId=${branchId}`, dto),
+    mutationFn: (dto: CreateOrderDto) =>
+      api.post<CreatedOrder & { kotHtml?: string }>(`/orders?branchId=${branchId}${createOrderKotQuery(branchId)}`, dto),
     onSuccess: () => {
       // Without refreshing the per-table open-bill cache, going Table 1 -> 2 ->
       // 1 showed Table 1 as having no order and the next send opened a duplicate.

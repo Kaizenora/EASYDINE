@@ -272,9 +272,29 @@ export class OrdersController {
     @CurrentUser() user: SessionUser,
     @Query('branchId') branchId: string,
     @Body() body: unknown,
+    @Query('kotPage') kotPage?: string,
+    @Query('kotPaper') kotPaper?: string,
+    @Query('tz') tz?: string,
   ) {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
-    return this.ordersService.createOrder(branchId, user.id, body as never);
+    const order = await this.ordersService.createOrder(branchId, user.id, body as never);
+    // kotPage=1 (POS on a PC that prints through the browser dialog): the
+    // tickets this order created come back as a ready KOT page, so the print
+    // dialog opens right after the save instead of after a second request.
+    const kotIds = ((order as { kots?: { id: string }[] }).kots ?? []).map((k) => k.id);
+    if (kotPage === '1' && kotIds.length > 0) {
+      try {
+        const kotHtml = await this.renderKotPage(branchId, (order as { id: string }).id, {
+          tz,
+          paper: kotPaper,
+          kotIds,
+        });
+        return { ...order, kotHtml };
+      } catch {
+        // The order is saved either way; the client loads the page itself.
+      }
+    }
+    return order;
   }
 
   @Auth('orders.edit')

@@ -11,12 +11,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBranch } from "@/hooks/use-branch";
-import { useCustomers, useDeleteCustomer, type Customer } from "@/hooks/use-customers";
+import { useBackfillCustomersFromOrders, useCustomers, useDeleteCustomer, type Customer } from "@/hooks/use-customers";
 import { ApiError } from "@/lib/api";
 import { QueryError } from "@/components/ui/query-error";
 
 export default function CustomersPage() {
   const { branchId } = useBranch();
+  // Guests from past orders (name + phone) are added to the list on open.
+  useBackfillCustomersFromOrders(branchId);
   const [search, setSearch] = useState("");
   const { data: customers, isLoading, error, refetch, isFetching } = useCustomers(branchId, search || undefined);
   const deleteCustomer = useDeleteCustomer(branchId);

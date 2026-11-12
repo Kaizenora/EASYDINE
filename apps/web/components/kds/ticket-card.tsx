@@ -1,6 +1,8 @@
 "use client";
 
-import { getActivePrintScope, reprintKot } from "@/lib/local-print";
+import { getActivePrintScope, prefetchKotPage, reprintKot } from "@/lib/local-print";
+import { kotPageVersion } from "@/lib/printer-routing";
+import { ApiError } from "@/lib/api";
 import { CloudOff, Flame, Globe, Printer, RotateCcw, Star, Timer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +14,7 @@ import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import {
   NEXT_STATUS,
+  kotStepRank,
   useRejectKot,
   useSetKotPriority,
   useUpdateKotStatus,
@@ -69,12 +72,20 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   // reachable and mapped, otherwise the browser dialog). Never the server/LAN
   // printer and never the order's other tickets.
   const [printing, setPrinting] = useState(false);
+  const ticketVersion = kotPageVersion(ticket.items as { id?: string; quantity?: number; status?: string }[]);
+  const ticketReprint = ticket.printedCount > 0;
+  // This ticket's page is loaded in the background, so the print dialog
+  // opens the moment the printer icon is pressed.
+  useEffect(() => {
+    if (branchId) prefetchKotPage(ticket.orderId, { ...getActivePrintScope(), branchId }, ticketVersion, { kotIds: [ticket.id], reprint: ticketReprint });
+  }, [branchId, ticket.orderId, ticket.id, ticketVersion, ticketReprint]);
   const printThisTicket = () => {
     if (!branchId || printing) return;
     setPrinting(true);
     void reprintKot(ticket.orderId, { ...getActivePrintScope(), branchId }, {
       kotIds: [ticket.id],
-      reprint: ticket.printedCount > 0,
+      reprint: ticketReprint,
+      version: ticketVersion,
     })
       .then((e) => {
         if (e.status === "FAILED" || e.status === "UNKNOWN") toast.error(e.message);
@@ -89,6 +100,26 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<KotStatusDto | null>(null);
+  // Forward steps apply at once (shown immediately, confirmed by the server
+  // in the background); only a step back asks first.
+  const applyStatus = (target: KotStatusDto) => {
+    updateStatus.mutate(
+      { id: ticket.id, status: target },
+      {
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiError && err.message
+              ? `Ticket #${ticket.order.orderNumber}: ${err.message}`
+              : `Could not update ticket #${ticket.order.orderNumber}`,
+          ),
+      },
+    );
+  };
+  const requestStatus = (target: KotStatusDto) => {
+    if (target === ticket.status) return;
+    if (kotStepRank(target) > kotStepRank(ticket.status)) applyStatus(target);
+    else setConfirmStatus(target);
+  };
   const reject = useRejectKot(branchId);
   const { data: me } = useCurrentUser();
   // Rejecting before cooking starts is for anyone on the kitchen screen; food
@@ -200,7 +231,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             disabled={updateStatus.isPending}
             onClick={() => {
               if (ticket.status !== "NEW" && ticket.status !== "ACCEPTED") {
-                setConfirmStatus("ACCEPTED");
+                requestStatus("ACCEPTED");
               }
             }}
             className={cn(
@@ -219,7 +250,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             disabled={updateStatus.isPending}
             onClick={() => {
               if (ticket.status !== "PREPARING") {
-                setConfirmStatus("PREPARING");
+                requestStatus("PREPARING");
               }
             }}
             className={cn(
@@ -238,7 +269,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             disabled={updateStatus.isPending}
             onClick={() => {
               if (ticket.status !== "READY") {
-                setConfirmStatus("READY");
+                requestStatus("READY");
               }
             }}
             className={cn(
@@ -261,7 +292,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               variant="outline"
               size="sm"
               disabled={updateStatus.isPending}
-              onClick={() => setConfirmStatus("ACCEPTED")}
+              onClick={() => requestStatus("ACCEPTED")}
               className="h-10 px-3 text-xs gap-1 font-medium text-muted-foreground hover:text-foreground"
               title="Move back to Ordered"
             >
@@ -276,7 +307,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               variant="outline"
               size="sm"
               disabled={updateStatus.isPending}
-              onClick={() => setConfirmStatus("PREPARING")}
+              onClick={() => requestStatus("PREPARING")}
               className="h-10 px-3 text-xs gap-1 font-medium text-muted-foreground hover:text-foreground"
               title="Move back to Preparing"
             >
@@ -291,12 +322,10 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               disabled={updateStatus.isPending}
               onClick={() => {
                 const target = (ticket.status === "NEW" || ticket.status === "ACCEPTED") ? "PREPARING" : "READY";
-                setConfirmStatus(target);
+                requestStatus(target);
               }}
             >
-              {updateStatus.isPending
-                ? "Updating…"
-                : (ticket.status === "NEW" || ticket.status === "ACCEPTED")
+              {(ticket.status === "NEW" || ticket.status === "ACCEPTED")
                   ? "Start Preparing →"
                   : "Mark Ready to Serve →"}
             </Button>
@@ -304,9 +333,9 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             <Button
               className="h-10 flex-1 bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
               disabled={updateStatus.isPending}
-              onClick={() => setConfirmStatus("SERVED")}
+              onClick={() => requestStatus("SERVED")}
             >
-              {updateStatus.isPending ? "Updating…" : "✓ Served & Delivered"}
+              ✓ Served & Delivered
             </Button>
           )}
         </div>
@@ -328,19 +357,9 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               <Button
                 onClick={() => {
                   if (confirmStatus) {
-                    updateStatus.mutate(
-                      { id: ticket.id, status: confirmStatus },
-                      {
-                        onSuccess: () => {
-                          toast.success(`Ticket #${ticket.order.orderNumber} updated to ${STATUS_NAMES[confirmStatus] || confirmStatus}`);
-                          setConfirmStatus(null);
-                        },
-                        onError: () => {
-                          toast.error("Could not update ticket status");
-                          setConfirmStatus(null);
-                        },
-                      }
-                    );
+                    // Closed at once; the board already shows the new step.
+                    applyStatus(confirmStatus);
+                    setConfirmStatus(null);
                   }
                 }}
               >

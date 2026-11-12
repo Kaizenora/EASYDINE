@@ -106,6 +106,24 @@ export function useUpdateKotStatus(branchId: string | null) {
         return null;
       }
     },
+    // Optimistic: the board shows the new step the moment it is tapped; the
+    // server answer only confirms it (or rolls it back on a refusal).
+    onMutate: async ({ id, status }) => {
+      const key = ["kds", "tickets", branchId];
+      await queryClient.cancelQueries({ queryKey: key });
+      const before = queryClient.getQueriesData<KotTicket[]>({ queryKey: key });
+      queryClient.setQueriesData<KotTicket[]>({ queryKey: key }, (list) =>
+        list
+          ? status === "SERVED"
+            ? list.filter((t) => t.id !== id)
+            : list.map((t) => (t.id === id ? { ...t, status } : t))
+          : list,
+      );
+      return { before };
+    },
+    onError: (_e, _v, ctx) => {
+      for (const [k, data] of ctx?.before ?? []) queryClient.setQueryData(k, data);
+    },
     // Also on error: a 409 means the ticket moved on another screen, and the
     // board must show where it really is rather than the stale step.
     onSettled: () => {
@@ -113,6 +131,11 @@ export function useUpdateKotStatus(branchId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
+}
+
+/** Kitchen step order; moving forward needs no confirmation, moving back does. */
+export function kotStepRank(status: KotStatusDto | string): number {
+  return status === "NEW" || status === "ACCEPTED" ? 0 : status === "PREPARING" ? 1 : status === "READY" ? 2 : status === "SERVED" ? 3 : -1;
 }
 
 export const NEXT_STATUS = KOT_NEXT_STATUS;

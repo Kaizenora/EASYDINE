@@ -237,6 +237,53 @@ export class OrdersService {
   }
 
   /**
+   * Copies guest details from past orders into the Customers list: every
+   * order of this branch with a phone but no linked customer gets one (found
+   * by phone, or created with the order's name) and is linked to it. Only a
+   * phone identifies a guest, so name-only orders are left alone (they would
+   * otherwise each become a separate "Priya"). Safe to run again: linked
+   * orders are skipped. Newest orders first, `limit` per call.
+   */
+  async backfillCustomersFromOrders(branchId: string, limit = 300) {
+    requireBranch(branchId);
+    const orders = await this.prisma.order.findMany({
+      where: { branchId, customerId: null, deliveryPhone: { not: null }, status: { not: 'CANCELLED' } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, guestName: true, deliveryPhone: true },
+    });
+    let linked = 0;
+    let skipped = 0;
+    for (const o of orders) {
+      if (!normalizePhone(o.deliveryPhone)) {
+        skipped++;
+        continue;
+      }
+      try {
+        const customerId = await this.resolveOrCreateCustomer(branchId, {
+          name: o.guestName,
+          phone: o.deliveryPhone,
+        });
+        if (!customerId) {
+          skipped++;
+          continue;
+        }
+        await this.prisma.order.updateMany({
+          where: { id: o.id, branchId, customerId: null },
+          data: { customerId },
+        });
+        linked++;
+      } catch (err) {
+        skipped++;
+        this.logger.warn(
+          `Customer backfill skipped order ${o.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return { scanned: orders.length, linked, skipped };
+  }
+
+  /**
    * Gives a saved customer the name the cashier typed, but only when it has
    * no real name yet (empty, "Guest"/"Walk-in" or the "Customer …"
    * placeholder). A real name is never overwritten from the bill.

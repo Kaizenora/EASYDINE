@@ -17,6 +17,7 @@ import {
 } from "./local-printer-bridge.ts";
 import { billQueryString, buildSampleReceiptHtml, getCashierPaperSize, registerBillPrintRouter, type BillQuery } from "./print.ts";
 import { kotPageUrl, printKotInFrame, reserveKotPrintFrame, type KotPrintSlot } from "./kot-print-dialog.ts";
+import { buildKotHtml } from "./kot-html.ts";
 import {
   acceptKotQuery,
   browserKotDecision,
@@ -266,39 +267,55 @@ const KOT_PAGE_TTL_MS = 5 * 60_000;
 const kotPageCache = new Map<string, { html: string; version: string; at: number }>();
 const kotPageLoads = new Map<string, Promise<string | null>>();
 
-function loadKotPage(orderId: string, branchId: string, version: string): Promise<string | null> {
-  const running = kotPageLoads.get(orderId);
+/** Which KOT page: the whole order (Accept) or some tickets (KDS reprint). */
+export interface KotPageSpec {
+  kotIds?: string[];
+  reprint?: boolean;
+}
+
+function kotPageKey(orderId: string, page: KotPageSpec): string {
+  return `${orderId}|${page.kotIds?.join(",") ?? ""}|${page.reprint ? 1 : 0}`;
+}
+
+function loadKotPage(orderId: string, branchId: string, version: string, page: KotPageSpec = {}): Promise<string | null> {
+  const key = kotPageKey(orderId, page);
+  const running = kotPageLoads.get(key);
   if (running) return running;
-  const p = fetch(kotPageUrl(orderId, branchId, { paper: getCashierPaperSize(), timeZone: deviceTimeZone() }), {
-    credentials: "include",
-    cache: "no-store",
-  })
+  const url = kotPageUrl(orderId, branchId, {
+    paper: getCashierPaperSize(),
+    timeZone: deviceTimeZone(),
+    kotIds: page.kotIds,
+    reprint: page.reprint,
+  });
+  const p = fetch(url, { credentials: "include", cache: "no-store" })
     .then(async (res) => (res.ok ? await res.text() : null))
     .catch(() => null)
     .then((html) => {
-      if (html) kotPageCache.set(orderId, { html, version, at: Date.now() });
+      if (html) kotPageCache.set(key, { html, version, at: Date.now() });
       return html;
     })
-    .finally(() => kotPageLoads.delete(orderId));
-  kotPageLoads.set(orderId, p);
+    .finally(() => kotPageLoads.delete(key));
+  kotPageLoads.set(key, p);
   return p;
 }
 
 /**
- * Loads a waiting order's KOT page in the background. Only for PCs without a
- * Print Helper route (those print directly, without any dialog).
+ * Loads a KOT page in the background so its print dialog opens at once on
+ * the click. Only for PCs without a Print Helper route (those print
+ * directly, without any dialog). Reading the page marks nothing as printed.
  */
-export function prefetchKotPage(orderId: string, scope: PrintScope, version = ""): void {
+export function prefetchKotPage(orderId: string, scope: PrintScope, version = "", page: KotPageSpec = {}): void {
   if (!scope.branchId || typeof window === "undefined" || hasLocalKitchenRoute(scope)) return;
-  const hit = kotPageCache.get(orderId);
+  const hit = kotPageCache.get(kotPageKey(orderId, page));
   if (hit && hit.version === version && Date.now() - hit.at < KOT_PAGE_TTL_MS) return;
-  void loadKotPage(orderId, scope.branchId, version);
+  void loadKotPage(orderId, scope.branchId, version, page);
 }
 
 /** The prefetched page, used once. */
-function takeKotPage(orderId: string, version: string | undefined): string | null {
-  const hit = kotPageCache.get(orderId);
-  kotPageCache.delete(orderId);
+function takeKotPage(orderId: string, version: string | undefined, page: KotPageSpec = {}): string | null {
+  const key = kotPageKey(orderId, page);
+  const hit = kotPageCache.get(key);
+  kotPageCache.delete(key);
   if (!hit || Date.now() - hit.at >= KOT_PAGE_TTL_MS) return null;
   if (version !== undefined && hit.version !== version) return null;
   return hit.html;
@@ -594,7 +611,7 @@ async function openKotDialog(
 export async function reprintKot(
   orderId: string,
   scope: PrintScope,
-  opts: { kotIds?: string[]; reprint?: boolean } = {},
+  opts: { kotIds?: string[]; reprint?: boolean; version?: string } = {},
 ): Promise<LocalPrintEvent> {
   const branchId = scope.branchId;
   if (!branchId) {
@@ -614,7 +631,9 @@ export async function reprintKot(
       publish(local);
       return local;
     }
-    return openKotDialog(slot, orderId, branchId, reprint, opts.kotIds, note);
+    // A page loaded in the background (KDS) opens the dialog at once.
+    const ready = takeKotPage(orderId, opts.version, { kotIds: opts.kotIds, reprint });
+    return openKotDialog(slot, orderId, branchId, reprint, opts.kotIds, note, ready ?? undefined);
   });
   if (!r) slot.release();
   return r ?? busy;
@@ -632,6 +651,8 @@ export async function printSentKot(
   scope: PrintScope,
   slot: KotPrintSlot,
   kotIds?: string[],
+  /** The KOT page the server sent back with the order, if any. */
+  html?: string,
 ): Promise<LocalPrintEvent | null> {
   const branchId = scope.branchId;
   if (!branchId || (kotIds && kotIds.length === 0)) {
@@ -645,7 +666,73 @@ export async function printSentKot(
     publish(e);
     return e;
   }
-  return openKotDialog(slot, orderId, branchId, false, kotIds, note ? `Sent to kitchen. ${note}` : "Sent to kitchen.");
+  return openKotDialog(slot, orderId, branchId, false, kotIds, note ? `Sent to kitchen. ${note}` : "Sent to kitchen.", html);
+}
+
+// --- Send to kitchen, dialog first (POS) -------------------------------------------
+
+/** True when a KOT from this PC goes through the browser print dialog (no Print Helper route). */
+export function kotUsesDialog(scope: PrintScope): boolean {
+  return !!scope.branchId && !hasLocalKitchenRoute(scope);
+}
+
+/**
+ * Extra query for POST /orders on a dialog PC: the server sends the new
+ * tickets back as a ready KOT page (older servers ignore it).
+ */
+export function createOrderKotQuery(branchId: string | null): string {
+  if (!kotUsesDialog({ ...getActivePrintScope(), branchId })) return "";
+  const q = new URLSearchParams({ kotPage: "1", kotPaper: getCashierPaperSize() });
+  const tz = deviceTimeZone();
+  if (tz) q.set("tz", tz);
+  return `&${q.toString()}`;
+}
+
+/**
+ * The kitchen ticket built in the browser from what is being sent (the same
+ * template as the server's KOT page), so the dialog can open in the click,
+ * before the server has answered.
+ */
+export function cartKotHtml(input: {
+  branchName: string;
+  orderNumber?: string | null;
+  type: string;
+  tableLabel?: string | null;
+  lines: { name: string; quantity: number; modifiers: string[]; note?: string | null }[];
+}): string {
+  return buildKotHtml({
+    branchName: input.branchName,
+    order: {
+      orderNumber: input.orderNumber ?? "",
+      type: input.type,
+      createdAt: new Date(),
+      table: input.tableLabel ? { label: input.tableLabel } : null,
+      customer: null,
+      items: input.lines.map((l) => ({
+        nameSnapshot: l.name,
+        quantity: l.quantity,
+        kitchenNote: l.note ?? null,
+        modifiers: l.modifiers.map((m) => ({ nameSnapshot: m })),
+      })),
+    },
+    paper: getCashierPaperSize(),
+    timeZone: deviceTimeZone(),
+  });
+}
+
+/** Opens the print dialog for a ticket already in hand. Never "printed": only requested. */
+export async function printKotHtmlNow(slot: KotPrintSlot, orderId: string | null, html: string, prefix: string): Promise<LocalPrintEvent> {
+  const d = await printKotInFrame(slot, orderId ?? "", "", { html });
+  const e: LocalPrintEvent = {
+    orderId,
+    what: "KOT",
+    status: d.status === "REQUESTED" ? "REQUESTED" : "FAILED",
+    message: `${prefix} ${d.message}`,
+    canReprint: true,
+    at: Date.now(),
+  };
+  publish(e);
+  return e;
 }
 
 export function isAccepting(orderId: string): boolean {

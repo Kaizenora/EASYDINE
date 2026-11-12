@@ -968,7 +968,9 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             ) : (
               <p className="py-16 text-xs text-neutral-400">
                 {takeawayQr.isError
-                  ? "Could not load the takeaway QR. Please try again."
+                  ? takeawayQr.error instanceof ApiError && takeawayQr.error.status === 404
+                    ? "Could not load the takeaway QR: the server does not have this feature yet (its latest update is not deployed). Please try again after the backend update."
+                    : `Could not load the takeaway QR${takeawayQr.error instanceof Error && takeawayQr.error.message ? ` (${takeawayQr.error.message})` : ""}. Please try again.`
                   : "Loading takeaway QR..."}
               </p>
             )}

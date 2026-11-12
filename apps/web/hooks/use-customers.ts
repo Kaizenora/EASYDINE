@@ -39,6 +39,28 @@ export interface CustomerDetail extends Customer {
   giftCards: { id: string; code: string; balance: string; initialValue: string }[];
 }
 
+/**
+ * Copies guest name + phone from past orders that were never linked to a
+ * customer into the list (server side, idempotent). Run when the Customers
+ * page opens; the list refreshes after it.
+ */
+export function useBackfillCustomersFromOrders(branchId: string | null) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ["customers", "backfill", branchId],
+    queryFn: async () => {
+      const r = await api.post<{ scanned: number; linked: number; skipped: number }>(
+        `/customers/backfill-from-orders?branchId=${branchId}`,
+      );
+      if (r.linked > 0) await queryClient.invalidateQueries({ queryKey: ["customers", branchId] });
+      return r;
+    },
+    enabled: !!branchId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
 export function useCustomers(branchId: string | null, search?: string) {
   return useQuery({
     queryKey: ["customers", branchId, search],
