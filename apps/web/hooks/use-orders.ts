@@ -12,6 +12,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveAwareInterval } from "@/hooks/use-live-interval";
 import type { Customer } from "@/hooks/use-customers";
 import { api } from "@/lib/api";
+import { acceptOrderWithKot, getActivePrintScope } from "@/lib/local-print";
+import { toast } from "@/lib/toast";
 
 export interface CreatedOrder {
   id: string;
@@ -260,7 +262,20 @@ export function useManagedOrders(
 export function useAcceptOrder(branchId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (orderId: string) => api.post(`/orders/${orderId}/accept?branchId=${branchId}`),
+    // Accept once, then one KOT on this PC's saved Kitchen printer (or the
+    // branch printer, as before). Print problems never undo the acceptance;
+    // they are shown as an error with the honest status.
+    mutationFn: async (orderId: string) => {
+      const r = await acceptOrderWithKot(orderId, { ...getActivePrintScope(), branchId });
+      if (!r.accepted) {
+        if (r.reason === "busy") return r;
+        throw new Error(r.message);
+      }
+      // "REQUESTED" (print dialog opened) is not an error; failures are.
+      if (r.kot && r.kot.status !== "QUEUED" && r.kot.status !== "REQUESTED") toast.error(r.kot.message);
+      else if (r.serverMessage?.kind === "error") toast.error(r.serverMessage.text);
+      return r;
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["kds", "tickets", branchId] });

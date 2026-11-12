@@ -279,7 +279,7 @@ export function OrderDetailDialog({
               disabled={accept.isPending}
               onClick={() => {
                 setAcceptConfirmOpen(false);
-                run(() => accept.mutateAsync(order!.id), "✅ Order accepted & KOT sent to kitchen!");
+                run(() => accept.mutateAsync(order!.id), "Order accepted. KOT requested — check the kitchen printer.");
               }}
             >
               <Check className="mr-1.5 h-4 w-4" /> Confirm & Send KOT

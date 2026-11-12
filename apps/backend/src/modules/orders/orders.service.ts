@@ -23,7 +23,9 @@ import {
 } from '@easydine/types';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { KotPrintService } from './kot-print.service';
+import { type DeviceKotOptions, KotPrintService } from './kot-print.service';
+import { spoolerTargetFor } from './server-printers';
+import { PrinterNotFoundError } from './escpos-usb';
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { MarketingService } from '../marketing/marketing.service';
@@ -832,7 +834,31 @@ export class OrdersService {
     });
   }
 
-  async acceptOrder(branchId: string, orderId: string, userId: string) {
+  /**
+   * `kot.via` decides where the kitchen tickets go once the order is accepted:
+   *  - 'server' (default): the branch printer configured on the server, as before.
+   *  - 'device': the cashier PC prints them on its own saved Kitchen printer;
+   *    the tickets are claimed here (so a retry/second tab cannot get them
+   *    again) and handed back in `deviceKot`.
+   *  - 'spooler': the cashier PC is this server PC; print on the Windows
+   *    printer the cashier chose there (`kot.printer`, exact installed name).
+   *  - 'browser': hosted setup; the cashier PC opens the KOT page in its own
+   *    print dialog after this returns. The server never tries a printer, and
+   *    nothing is marked printed (a browser cannot confirm paper).
+   *  - 'none': the cashier PC's saved printer is missing; accept anyway, print
+   *    nowhere else (never silently another printer) and let staff reprint.
+   * Printing never undoes the acceptance.
+   */
+  async acceptOrder(
+    branchId: string,
+    orderId: string,
+    userId: string,
+    kot: {
+      via?: 'server' | 'device' | 'spooler' | 'browser' | 'none';
+      device?: DeviceKotOptions;
+      printer?: string;
+    } = {},
+  ) {
     const order = await this.prisma.order.findFirst({
       where: branchId ? { id: orderId, branchId } : { id: orderId },
       include: { items: true },
@@ -894,6 +920,55 @@ export class OrdersService {
       );
     }
 
+    if (kot.via === 'browser') {
+      const tickets = await this.prisma.kot.count({
+        where: { orderId, status: { not: 'CANCELLED' } },
+      });
+      const orderDetails = await this.getOrder(branchId, orderId);
+      return {
+        ...orderDetails,
+        printStatus: tickets > 0 ? ('BROWSER' as const) : ('NO_TICKETS' as const),
+      };
+    }
+    if (kot.via === 'none') {
+      const orderDetails = await this.getOrder(branchId, orderId);
+      return { ...orderDetails, printStatus: 'SKIPPED' as const };
+    }
+    if (kot.via === 'spooler') {
+      return this.printAcceptedKotOnChosenPrinter(
+        branchId,
+        effectiveBranchId,
+        orderId,
+        kot,
+      );
+    }
+    if (kot.via === 'device') {
+      try {
+        const deviceKot = await this.kotPrint.printOrder(
+          effectiveBranchId,
+          orderId,
+          false,
+          true,
+          { ...kot.device, track: true },
+        );
+        const orderDetails = await this.getOrder(branchId, orderId);
+        return { ...orderDetails, printStatus: 'DEVICE' as const, deviceKot };
+      } catch (err: any) {
+        const code = err?.response?.code;
+        const orderDetails = await this.getOrder(branchId, orderId);
+        return {
+          ...orderDetails,
+          printStatus:
+            code === 'NO_TICKETS'
+              ? ('NO_TICKETS' as const)
+              : code === 'ALREADY_PRINTED'
+                ? ('ALREADY_PRINTED' as const)
+                : ('FAILED' as const),
+          printError: err instanceof Error ? err.message.slice(0, 200) : undefined,
+        };
+      }
+    }
+
     let printStatus: 'SENT' | 'FAILED' | 'UNKNOWN' | 'NO_PRINTER' = 'NO_PRINTER';
     try {
       const result = await this.kotPrint.printOrder(effectiveBranchId, orderId, false);
@@ -924,6 +999,46 @@ export class OrdersService {
 
     const orderDetails = await this.getOrder(branchId, orderId);
     return { ...orderDetails, printStatus };
+  }
+
+  /**
+   * Accepted order → kitchen tickets on the Windows printer the cashier chose
+   * on this server PC. A missing printer is reported (never replaced); a
+   * spooler error never undoes the acceptance.
+   */
+  private async printAcceptedKotOnChosenPrinter(
+    branchId: string,
+    effectiveBranchId: string,
+    orderId: string,
+    kot: { device?: DeviceKotOptions; printer?: string },
+  ) {
+    let printStatus:
+      | 'SENT'
+      | 'FAILED'
+      | 'UNKNOWN'
+      | 'NO_TICKETS'
+      | 'PRINTER_MISSING' = 'SENT';
+    let printError: string | undefined;
+    try {
+      const target = await spoolerTargetFor(kot.printer);
+      await this.kotPrint.printOrder(
+        effectiveBranchId,
+        orderId,
+        false,
+        false,
+        { ...kot.device, format: 'escpos' },
+        target,
+      );
+    } catch (err: any) {
+      const code = err?.response?.code;
+      printError = (err?.message ?? 'Printing failed').slice(0, 200);
+      if (err instanceof PrinterNotFoundError) printStatus = 'PRINTER_MISSING';
+      else if (code === 'NO_TICKETS') printStatus = 'NO_TICKETS';
+      else if (/timeout|timed out|etimedout/i.test(printError ?? '')) printStatus = 'UNKNOWN';
+      else printStatus = 'FAILED';
+    }
+    const orderDetails = await this.getOrder(branchId, orderId);
+    return { ...orderDetails, printStatus, printError };
   }
 
   // Declining an incoming order. The order is kept (acceptance REJECTED,
