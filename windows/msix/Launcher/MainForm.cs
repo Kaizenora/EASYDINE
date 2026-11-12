@@ -199,6 +199,11 @@ internal sealed class MainForm : Form
         settings.IsZoomControlEnabled = true;
         settings.IsSwipeNavigationEnabled = false;
 
+        // Local print bridge: lets the EasyDine page (only from the configured
+        // server) list this PC's installed printers and print to the one the
+        // cashier saved, without a dialog. See LocalPrintBridge.cs.
+        LocalPrintBridge.Attach(_webView.CoreWebView2, () => _config.ServerUrl, Handle);
+
         // Keep everything in one window instead of spawning stray popups —
         // this must still feel like a normal desktop app, not a browser.
         _webView.CoreWebView2.NewWindowRequested += (_, args) =>

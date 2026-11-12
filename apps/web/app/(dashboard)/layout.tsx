@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { useCurrentUser } from "@/hooks/use-auth";
 import { BranchProvider, useBranch } from "@/hooks/use-branch";
+import { LocalPrinterScope } from "@/components/settings/local-printer-scope";
 import { useRealtime } from "@/hooks/use-realtime";
 import { NativeBridge } from "@/components/native/native-bridge";
 import { BtPrinterDialog } from "@/components/native/bt-printer-dialog";
@@ -66,6 +67,7 @@ export default function DashboardGroupLayout({ children }: { children: React.Rea
       <RealtimeBridge />
       <NativeBridge />
       <BtPrinterDialog />
+      <LocalPrinterScope />
       <AppShell user={data.user}>{children}</AppShell>
     </BranchProvider>
   );

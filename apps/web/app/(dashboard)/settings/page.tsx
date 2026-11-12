@@ -14,6 +14,7 @@ import { KioskCard } from "@/components/settings/kiosk-card";
 import { MobileAppCard } from "@/components/settings/mobile-app-card";
 import { PrinterDiagnosticsCard } from "@/components/settings/printer-diagnostics-card";
 import { BluetoothPrinterCard } from "@/components/settings/bluetooth-printer-card";
+import { LocalPrintersCard } from "@/components/settings/local-printers-card";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -74,6 +75,7 @@ export default function SettingsPage() {
 
       <NotificationSettingsCard />
 
+      <LocalPrintersCard />
       <BluetoothPrinterCard />
       <PrinterDiagnosticsCard />
       <MobileAppCard />

@@ -57,7 +57,15 @@ import {
 } from './escpos-usb';
 import { listWindowsPrinters } from './escpos-windows-spooler';
 import { listComPorts } from './escpos-com-port';
-import { KotPrintService } from './kot-print.service';
+import { KotPrintService, safeTimeZone } from './kot-print.service';
+import { serverWindowsPrinters, spoolerTargetFor } from './server-printers';
+import {
+  deviceKotResultSchema,
+  parseDeviceKotOptions,
+  parseKotVia,
+  parsePaper,
+  type DeviceKotResultBody,
+} from './device-print-params';
 import { upiForBill } from './upi';
 import {
   sendToBranchPrinter,
@@ -271,15 +279,34 @@ export class OrdersController {
     return this.ordersService.addItems(branchId, id, items);
   }
 
+  // kotVia=device: the cashier PC prints the tickets on its own saved Kitchen
+  // printer (kotFormat=escpos|html, kotPaper=58mm|80mm|A4, tz=IANA zone).
+  // kotVia=none: accept without printing anywhere (that PC's saved printer is
+  // missing). Default: the branch printer on the server, as before.
   @Auth('orders.accept')
   @Post(':id/accept')
   async accept(
     @CurrentUser() user: SessionUser,
     @Query('branchId') branchId: string,
     @Param('id') id: string,
+    @Query('kotVia') kotVia?: string,
+    @Query('kotFormat') kotFormat?: string,
+    @Query('kotPaper') kotPaper?: string,
+    @Query('tz') tz?: string,
+    @Query('kotPrinter') kotPrinter?: string,
   ) {
+    // Without a branch the order lookup would not be scoped to this tenant.
+    if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
-    return this.ordersService.acceptOrder(branchId, id, user.id);
+    return this.ordersService.acceptOrder(branchId, id, user.id, {
+      via: parseKotVia(kotVia),
+      device: parseDeviceKotOptions({
+        format: kotFormat,
+        paper: kotPaper,
+        tz,
+      }),
+      printer: kotPrinter,
+    });
   }
 
   @Auth('orders.accept')
@@ -557,6 +584,11 @@ export class OrdersController {
     res.type('html').send(html);
   }
 
+  // Kitchen ticket page (no prices), printed through the cashier PC's own
+  // browser print dialog. Read-only: opening or printing it marks nothing as
+  // printed, because a browser cannot confirm paper. tz = the cashier PC's
+  // time zone (the server may run in UTC), paper = 58mm | 80mm | A4,
+  // reprint=1 stamps the copy as a REPRINT.
   @Auth('orders.create')
   @Get(':id/kot')
   async kot(
@@ -564,13 +596,26 @@ export class OrdersController {
     @Query('branchId') branchId: string,
     @Param('id') id: string,
     @Res() res: Response,
+    @Query('tz') tz?: string,
+    @Query('paper') paper?: string,
+    @Query('reprint') reprint?: string,
   ) {
+    if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
     const order = await this.ordersService.getReceiptData(branchId, id);
+    const kotOrder = toKotOrder(order);
     const html = buildKotHtml({
       branchName: order.branch.name,
-      order: toKotOrder(order),
+      // Cancelled lines never go to the kitchen.
+      order: {
+        ...kotOrder,
+        items: kotOrder.items.filter((_, i) => order.items[i]?.status !== 'CANCELLED'),
+      },
+      paper: parsePaper(paper) ?? '80mm',
+      timeZone: safeTimeZone(tz),
+      copyLabel: reprint === '1' || reprint === 'true' ? 'REPRINT' : undefined,
     });
+    res.setHeader('Cache-Control', 'no-store');
     res.type('html').send(html);
   }
 
@@ -644,6 +689,8 @@ export class OrdersController {
     @Query('branchId') branchId?: string,
     @Query('kind') kind?: string,
     @Query('via') via?: string,
+    @Query('width') width?: string,
+    @Query('printer') printer?: string,
   ) {
     let profile = resolveProfile();
     let target: BranchPrinterTarget = {
@@ -656,12 +703,24 @@ export class OrdersController {
       profile = await this.ordersService.printerProfile(branchId);
       target = await this.ordersService.printerTarget(branchId);
     }
+    // A cashier PC testing its own printer uses its own paper width.
+    if ((via === 'device' || via === 'spooler') && (width === '58' || width === '80')) {
+      profile = resolveProfile({
+        paperWidthMm: Number(width),
+        codepage: profile.codepage,
+      });
+    }
     const buffer =
       kind === 'kot'
         ? buildKotTestSlip(profile).buffer
         : buildTestSlip(profile);
     if (via === 'device') {
       return { ok: true, profile, escpos: [buffer.toString('base64')] };
+    }
+    if (via === 'spooler') {
+      // A printer chosen on this server PC; must be installed, never a fallback.
+      await this.deliver(await this.chosenPrinter(printer), buffer);
+      return { ok: true, profile };
     }
     await this.deliver(target, buffer);
     return { ok: true, profile };
@@ -750,6 +809,9 @@ export class OrdersController {
     // via=device: hand the print data to the phone/tablet instead of printing
     // on the server's own printer (Bluetooth printers, phones, tablets).
     if (via === 'device') return this.deviceJob(job);
+    if (via === 'spooler') {
+      return this.sendJob(job, await this.chosenPrinter(query.printer));
+    }
     const billTarget = await this.ordersService.billPrinterTarget(order.branch.id);
     if (!billTarget) {
       throw new BadRequestException('Bill printer not set');
@@ -769,14 +831,71 @@ export class OrdersController {
     @Param('id') id: string,
     @Query('reprint') reprint?: string,
     @Query('via') via?: string,
+    @Query('format') format?: string,
+    @Query('paper') paper?: string,
+    @Query('tz') tz?: string,
+    @Query('track') track?: string,
+    @Query('printer') printer?: string,
   ) {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    if (via === 'spooler') {
+      // KOT on the Windows printer chosen on this server PC (exact name only).
+      const target = await this.chosenPrinter(printer);
+      return this.kotPrint.printOrder(
+        branchId,
+        id,
+        reprint === 'true',
+        false,
+        { ...parseDeviceKotOptions({ paper, tz }), format: 'escpos' },
+        target,
+      );
+    }
     return this.kotPrint.printOrder(
       branchId,
       id,
       reprint === 'true',
       via === 'device',
+      via === 'device'
+        ? {
+            ...parseDeviceKotOptions({ format, paper, tz }),
+            track: track === 'true',
+          }
+        : {},
     );
+  }
+
+  // Printers installed in Windows on the PC that runs this server. Shown in
+  // Settings only when the browser is open on that same PC, so the cashier can
+  // pick the Bill / Kitchen printer without installing anything.
+  @Auth('bills.print')
+  @Get('print/local/printers')
+  async localPrinters(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    if (branchId) await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const { supported, printers } = await serverWindowsPrinters(true);
+    return { supported, printers: printers.map((name) => ({ name })) };
+  }
+
+  // The cashier PC reports what its local print bridge did with tickets it
+  // was handed (QUEUED / FAILED / UNKNOWN). Records only; never re-sends.
+  @Auth('orders.create')
+  @Post(':id/print/kot/device-result')
+  async printKotDeviceResult(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(deviceKotResultSchema)) body: DeviceKotResultBody,
+  ) {
+    if (!branchId) throw new BadRequestException('branchId is required');
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    return this.kotPrint.recordDeviceResult(branchId, id, {
+      results: body.results,
+      reprint: body.reprint,
+      printerName: body.printerName,
+      deviceId: body.deviceId ?? null,
+    });
   }
 
   // Kept for older clients; same behaviour as POST :id/print/kot.
@@ -797,6 +916,20 @@ export class OrdersController {
     } catch (err) {
       if (err instanceof PrinterNotFoundError) {
         throw new ServiceUnavailableException(err.message);
+      }
+      throw err;
+    }
+  }
+
+  private async chosenPrinter(name: string | undefined) {
+    try {
+      return await spoolerTargetFor(name);
+    } catch (err) {
+      if (err instanceof PrinterNotFoundError) {
+        throw new ServiceUnavailableException({
+          code: 'PRINTER_MISSING',
+          message: err.message,
+        });
       }
       throw err;
     }

@@ -45,6 +45,9 @@ import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatCurrency, formatOrderNumber } from "@/lib/format";
 import { tableLabel, type PaymentMethodDto } from "@easydine/types";
 import { openReceiptPrint } from "@/lib/print";
+import { acceptOrderWithKot, reprintKot as reprintKotRouted } from "@/lib/local-print";
+import { usePrintScope } from "@/components/settings/local-printer-scope";
+import { StatusNote, useStatusNote } from "@/components/ui/status-note";
 
 interface MasterDetailOrdersProps {
   branchId: string | null;
@@ -228,28 +231,64 @@ export function MasterDetailOrders({
     return currentList[0] || null;
   }, [selectedOrderId, currentList]);
 
-  // Mutations for Accept & Reject
+  // Accept & KOT: accept exactly once, then one KOT on this PC's saved
+  // Kitchen printer (EasyDine Windows app) or the existing branch printer.
+  // The outcome is shown inline and honestly (queued / failed / unknown);
+  // a failed print never undoes the acceptance — Reprint KOT is explicit.
+  const printScope = usePrintScope();
+  const [reprinting, setReprinting] = useState(false);
+  const { note: printNote, show: showPrintNote, clear: clearPrintNote } = useStatusNote(20_000);
+  const refreshAfterAccept = () => {
+    queryClient.invalidateQueries({ queryKey: ["orders"] });
+    queryClient.invalidateQueries({ queryKey: ["floors"] });
+    queryClient.invalidateQueries({ queryKey: ["kds"] });
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    if (onRefresh) onRefresh();
+  };
+  // Explicit only (never on refresh/reconnect). Called straight from a click
+  // so the print frame is reserved inside the user's action.
+  const reprintKot = (orderId: string) => {
+    setReprinting(true);
+    void reprintKotRouted(orderId, printScope)
+      .then((e) =>
+        showPrintNote(
+          e.status === "QUEUED" ? "success" : e.status === "REQUESTED" ? "info" : "error",
+          e.message,
+          e.status === "QUEUED" ? undefined : { label: "Reprint KOT", onClick: () => reprintKot(orderId) },
+        ),
+      )
+      .finally(() => setReprinting(false));
+  };
   const acceptOrder = useMutation({
-    mutationFn: (id: string) =>
-      api.post<{ printStatus?: "NO_PRINTER" | "SENT" | "PRINTED" | "FAILED" | "UNKNOWN"; printError?: string }>(`/orders/${id}/accept`),
-    onSuccess: (data) => {
+    mutationFn: (id: string) => acceptOrderWithKot(id, printScope).then((r) => ({ id, r })),
+    onSuccess: ({ id, r }) => {
+      if (!r.accepted) {
+        if (r.reason === "busy") return;
+        showPrintNote("error", r.message, r.reason === "already" ? { label: "Reprint KOT", onClick: () => reprintKot(id) } : undefined);
+        refreshAfterAccept();
+        return;
+      }
       vibrateSuccess();
       playSuccessChime();
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["floors"] });
-      queryClient.invalidateQueries({ queryKey: ["kds"] });
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      if (data?.printStatus === "SENT" || data?.printStatus === "PRINTED") {
-        toast.success("Order accepted · KOT sent to the printer");
-      } else if (data?.printStatus === "FAILED") {
-        toast.warning(`Order accepted · Printer offline (${data.printError || "KOT visible on kitchen display"})`);
-      } else {
-        toast.success("Order accepted · KOT sent to kitchen display");
+      refreshAfterAccept();
+      if (r.kot) {
+        const ok = r.kot.status === "QUEUED";
+        const requested = r.kot.status === "REQUESTED";
+        showPrintNote(
+          ok ? "success" : requested ? "info" : "error",
+          ok ? `Order accepted. ${r.kot.message}` : r.kot.message,
+          ok ? undefined : { label: "Reprint KOT", onClick: () => reprintKot(id) },
+        );
+      } else if (r.serverMessage) {
+        showPrintNote(
+          r.serverMessage.kind === "ok" ? "success" : "error",
+          r.serverMessage.text,
+          r.serverMessage.kind === "ok" ? undefined : { label: "Reprint KOT", onClick: () => reprintKot(id) },
+        );
       }
-      if (onRefresh) onRefresh();
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Could not accept order");
+      showPrintNote("error", err instanceof ApiError ? err.message : "Could not accept order");
     },
   });
 
@@ -320,6 +359,8 @@ export function MasterDetailOrders({
 
   return (
     <div className="flex flex-col gap-4">
+      <StatusNote note={printNote} onClear={clearPrintNote} />
+
       {/* Top Bar: Title & Status */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -554,6 +595,19 @@ export function MasterDetailOrders({
                     </span>
                   </div>
 
+                  <div className="flex items-center gap-2">
+                  {selectedOrder.acceptance === "ACCEPTED" && (selectedOrder.kots?.length ?? 0) > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-lg border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700"
+                      disabled={reprinting}
+                      onClick={() => reprintKot(selectedOrder.id)}
+                    >
+                      <Printer className="mr-1 h-3.5 w-3.5 text-amber-400" />
+                      {reprinting ? "Opening…" : "Reprint KOT"}
+                    </Button>
+                  )}
                   {firstKot && firstKot.status !== "SERVED" && (
                     <Button
                       size="sm"
@@ -587,6 +641,7 @@ export function MasterDetailOrders({
                         : "Mark: Served / Handed Over"}
                     </Button>
                   )}
+                  </div>
                 </div>
                 <p className="text-[11px] text-neutral-400">
                   Kitchen screens advance status live (or click above to update). Customers see this progress instantly on their mobile phones.
@@ -757,11 +812,16 @@ export function MasterDetailOrders({
                   disabled={
                     acceptOrder.isPending || rejectOrder.isPending || selectedOrder.acceptance === "ACCEPTED"
                   }
-                  onClick={() => acceptOrder.mutate(selectedOrder.id)}
+                  onClick={() => {
+                    // Ignore extra clicks while the first accept is running.
+                    if (!acceptOrder.isPending) acceptOrder.mutate(selectedOrder.id);
+                  }}
                 >
                   <Check className="mr-2 h-5 w-5 stroke-[3]" />
                   {selectedOrder.acceptance === "ACCEPTED"
-                    ? "KOT Sent to Kitchen (Accepted)"
+                    ? "Accepted"
+                    : acceptOrder.isPending
+                    ? "Accepting…"
                     : "Accept & print KOT"}
                 </Button>
               </div>

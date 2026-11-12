@@ -30,14 +30,54 @@ interface KotOrder {
   }[];
 }
 
+export type KotPaper = '58mm' | '80mm' | 'A4';
+
+/** Page CSS for the ticket's paper. 80 mm is the long-standing default. */
+function kotPageCss(paper: KotPaper): string {
+  if (paper === '58mm') {
+    return `body { width: 54mm; padding: 2mm; }
+  table { font-size: 14px; }
+  @page { size: 58mm auto; margin: 0; }
+  @media print { html, body { width: 54mm; } .no-print { display: none; } }`;
+  }
+  if (paper === 'A4') {
+    return `body { width: 100%; max-width: 170mm; margin: 0 auto; padding: 10mm; }
+  h1 { font-size: 22px; }
+  table { font-size: 20px; }
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print { html, body { width: 100%; max-width: 170mm; } .no-print { display: none; } }`;
+  }
+  return `@page { size: 80mm auto; margin: 0; }
+  @media print { html, body { width: 80mm; } .no-print { display: none; } }`;
+}
+
+function safeLocaleString(d: Date, timeZone?: string): string {
+  try {
+    return d.toLocaleString(undefined, timeZone ? { timeZone } : undefined);
+  } catch {
+    return d.toLocaleString();
+  }
+}
+
 export function buildKotHtml({
   branchName,
   order,
+  ticket,
+  paper = '80mm',
+  timeZone,
+  copyLabel,
 }: {
   branchName: string;
   order: KotOrder;
+  /** Ticket number / station, and the REPRINT copy number (0 = first print). */
+  ticket?: { number: string; station: string | null; reprint: number };
+  paper?: KotPaper;
+  /** IANA zone of the device that prints it (server zone when omitted). */
+  timeZone?: string;
+  /** e.g. "REPRINT": stamped on copies printed again on request. */
+  copyLabel?: string;
 }): string {
-  const dateStr = new Date(order.createdAt).toLocaleString();
+  const dateStr = safeLocaleString(new Date(order.createdAt), timeZone);
 
   const itemRows = order.items
     .map((item) => {
@@ -75,11 +115,8 @@ export function buildKotHtml({
   .qty { font-weight: 700; white-space: nowrap; padding-right: 8px; width: 1%; }
   .sub { font-size: 13px; color: #444; padding-left: 4px; }
   .note { font-size: 13px; font-weight: 600; color: #111; padding-left: 4px; }
-  @page { size: 80mm auto; margin: 0; }
-  @media print {
-    html, body { width: 80mm; }
-    .no-print { display: none; }
-  }
+  .reprint { font-size: 16px; font-weight: 700; text-align: center; margin: 2px 0; }
+  ${kotPageCss(paper)}
 </style>
 </head>
 <body>
@@ -88,7 +125,9 @@ export function buildKotHtml({
   </script>
   <div class="kot">
     <h1>Kitchen order</h1>
+    ${ticket?.reprint ? `<p class="reprint">*** REPRINT #${ticket.reprint} ***</p>` : copyLabel ? `<p class="reprint">*** ${esc(copyLabel)} ***</p>` : ''}
     <p class="center muted">${esc(branchName)}</p>
+    ${ticket ? `<p class="center muted">Ticket ${esc(ticket.number)}${ticket.station ? ` - ${esc(ticket.station)}` : ''}</p>` : ''}
     <hr class="rule">
     <p class="muted">
       ${esc(dateStr)}<br>
