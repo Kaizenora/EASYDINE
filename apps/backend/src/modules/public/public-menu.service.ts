@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { CartItemDto } from '@easydine/types';
+import { normalizePhone, type CartItemDto } from '@easydine/types';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
@@ -88,8 +88,12 @@ export class PublicMenuService {
     }
     const branchId = table.floor.branchId;
 
-    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(0, 10) : undefined;
-    if (guestName || cleanPhone) {
+    // Same normalisation as checkout (+91 / 0 prefixes stripped), never a
+    // blind first-10-digits cut that would save a wrong number.
+    const cleanPhone = normalizePhone(phone) ?? undefined;
+    // Only a phone identifies a guest. A name alone is saved with the order
+    // (and at payment); creating it here as well made a duplicate customer.
+    if (cleanPhone) {
       await this.ordersService.resolveOrCreateCustomer(branchId, {
         name: guestName,
         phone: cleanPhone,
@@ -205,7 +209,7 @@ export class PublicMenuService {
       if (!createdById) throw new NotFoundException('This branch has no staff to receive the order');
 
       const cleanGuestName = guestName?.trim() || 'Takeaway Guest';
-      const cleanGuestPhone = guestPhone ? guestPhone.replace(/\D/g, '').slice(0, 10) : undefined;
+      const cleanGuestPhone = normalizePhone(guestPhone) ?? undefined;
 
       // Resolve or create customer from guest details so they appear in
       // the Customers section even before the cashier marks the order paid.
@@ -263,11 +267,12 @@ export class PublicMenuService {
     if (openOrder) {
       // Update phone and link customer if not done yet
       const updateData: any = {};
-      if (guestPhone && !openOrder.deliveryPhone) updateData.deliveryPhone = guestPhone;
+      const addPhone = normalizePhone(guestPhone);
+      if (addPhone && !openOrder.deliveryPhone) updateData.deliveryPhone = addPhone;
       if (!openOrder.customerId) {
         const existingCustomerId = await this.ordersService.resolveOrCreateCustomer(
           branchId,
-          { name: guestName, phone: guestPhone },
+          { name: guestName, phone: addPhone },
         );
         if (existingCustomerId) updateData.customerId = existingCustomerId;
       }
@@ -295,7 +300,7 @@ export class PublicMenuService {
     }
 
     const cleanGuestName = guestName?.trim() || 'Guest';
-    const cleanGuestPhone = guestPhone ? guestPhone.replace(/\D/g, '').slice(0, 10) : undefined;
+    const cleanGuestPhone = normalizePhone(guestPhone) ?? undefined;
 
     // Resolve or create customer from guest name/phone so they appear in
     // the Customers section immediately when order is placed.

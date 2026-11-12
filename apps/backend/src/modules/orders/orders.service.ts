@@ -191,6 +191,74 @@ export class OrdersService {
   }
 
   /**
+   * Who paid, for the Customers list and loyalty. Picked on the bill > phone
+   * typed on the bill (found or created) > the order's own customer (QR /
+   * cart) > name or phone the order carried. A true walk-in stays anonymous.
+   */
+  async resolvePayingCustomer(
+    branchId: string,
+    order: { customerId: string | null; guestName: string | null; deliveryPhone: string | null },
+    dto: { customerId?: string; customerName?: string; customerPhone?: string },
+  ): Promise<string | null> {
+    let effectiveCustomerId: string | null = order.customerId;
+    // A customer the cashier picked on the bill wins over the one the order
+    // carried (e.g. from the QR scan): that is who paid.
+    if (dto.customerId && dto.customerId !== effectiveCustomerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { id: dto.customerId, branchId },
+      });
+      if (!customer) throw new BadRequestException('Customer not found');
+      effectiveCustomerId = customer.id;
+    }
+    const typedName = dto.customerName?.trim() || null;
+    const typedPhone = normalizePhone(dto.customerPhone);
+    if (!dto.customerId && typedPhone) {
+      // The cashier typed a phone on the bill: that is who paid. It is saved
+      // (found by phone or created) and the order is linked to it, even when
+      // the order already carried another customer (e.g. from the QR).
+      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
+        name: typedName || order.guestName,
+        phone: typedPhone,
+      });
+    } else if (!dto.customerId && typedName && effectiveCustomerId) {
+      // A name typed for a customer we already have: fill it in when the
+      // saved one has none (or only a placeholder); never rename a real name.
+      await this.fillCustomerName(branchId, effectiveCustomerId, typedName);
+    }
+    if (!effectiveCustomerId) {
+      // What the cashier typed at payment wins over what the order carried;
+      // with neither, nothing is created (a true walk-in stays anonymous).
+      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
+        name: typedName || order.guestName,
+        phone: typedPhone || order.deliveryPhone,
+      });
+    }
+    return effectiveCustomerId;
+  }
+
+  /**
+   * Gives a saved customer the name the cashier typed, but only when it has
+   * no real name yet (empty, "Guest"/"Walk-in" or the "Customer …"
+   * placeholder). A real name is never overwritten from the bill.
+   */
+  private async fillCustomerName(branchId: string, customerId: string, name: string) {
+    const clean = name.trim();
+    if (!clean || ['guest', 'walk-in', 'walk-in guest', 'takeaway guest'].includes(clean.toLowerCase())) return;
+    const c = await this.prisma.customer.findFirst({
+      where: { id: customerId, branchId },
+      select: { name: true },
+    });
+    if (!c) return;
+    const current = c.name?.trim() ?? '';
+    const placeholder =
+      !current ||
+      ['guest', 'walk-in', 'walk-in guest', 'takeaway guest'].includes(current.toLowerCase()) ||
+      current.startsWith('Customer ');
+    if (!placeholder) return;
+    await this.prisma.customer.update({ where: { id: customerId }, data: { name: clean } });
+  }
+
+  /**
    * Finds or creates the customer for a name/phone the cashier or guest typed.
    *  - An explicit customerId (same branch) always wins.
    *  - A phone identifies a person: matched per branch on its NORMALIZED digits
@@ -1931,26 +1999,11 @@ export class OrdersService {
     // was opened — walk-ins don't need a name up front, staff can add one
     // once the guest is ready to pay. Falls back to whatever was already on
     // the order (e.g. attached via QR order or set at cart time).
-    let effectiveCustomerId = order.customerId;
-    if (!effectiveCustomerId && dto.customerId) {
-      const customer = await this.prisma.customer.findFirst({
-        where: { id: dto.customerId, branchId },
-      });
-      if (!customer) throw new BadRequestException('Customer not found');
-      effectiveCustomerId = customer.id;
-    }
-    if (!effectiveCustomerId) {
-      // What the cashier typed at payment wins over what the order carried;
-      // with neither, nothing is created (a true walk-in stays anonymous).
-      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
-        name: dto.customerName || order.guestName,
-        phone: dto.customerPhone || order.deliveryPhone,
-      });
-    }
-    // If we now have a customer but the order doesn't have one linked yet,
-    // link it immediately (outside the tx) so the Customers section updates
-    // even if the payment transaction later fails.
-    if (effectiveCustomerId && !order.customerId) {
+    const effectiveCustomerId = await this.resolvePayingCustomer(branchId, order, dto);
+    // If we now have a customer the order isn't linked to yet, link it
+    // immediately (outside the tx) so the Customers section updates even if
+    // the payment transaction later fails.
+    if (effectiveCustomerId && effectiveCustomerId !== order.customerId) {
       await this.prisma.order.update({
         where: { id: orderId },
         data: { customerId: effectiveCustomerId },
@@ -2090,11 +2143,11 @@ export class OrdersService {
         // The bill's figures are fixed by the first payment, whether or not
         // it settles the bill.
         const lockedFigures = locked
-          ? (effectiveCustomerId && !order.customerId
+          ? (effectiveCustomerId && effectiveCustomerId !== order.customerId
               ? { customerId: effectiveCustomerId }
               : {})
           : {
-              ...(effectiveCustomerId && !order.customerId
+              ...(effectiveCustomerId && effectiveCustomerId !== order.customerId
                 ? { customerId: effectiveCustomerId }
                 : {}),
               discountAmount: bill.discountAmount,
