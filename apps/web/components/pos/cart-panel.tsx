@@ -34,6 +34,8 @@ export function CartPanel({
   onIncrement,
   onDecrement,
   onRemove,
+  onNoteChange,
+  onSplit,
   onSubmit,
   isSubmitting,
   existingOrderNumber,
@@ -57,6 +59,9 @@ export function CartPanel({
   onIncrement: (key: string) => void;
   onDecrement: (key: string) => void;
   onRemove: (key: string) => void;
+  /** Kitchen preference per line, and splitting one portion off with its own. */
+  onNoteChange?: (key: string, note: string) => void;
+  onSplit?: (key: string) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
   existingOrderNumber?: string;
@@ -216,6 +221,25 @@ export function CartPanel({
                   <p className="text-sm font-medium text-foreground">{line.name}</p>
                   {line.modifierLabel && (
                     <p className="text-xs text-muted-foreground">{line.modifierLabel}</p>
+                  )}
+                  {onNoteChange && (
+                    <Input
+                      value={line.note ?? ""}
+                      onChange={(e) => onNoteChange(line.key, e.target.value)}
+                      placeholder="Preference (e.g. spicy)"
+                      aria-label={`Kitchen preference for ${line.name}`}
+                      maxLength={120}
+                      className="mt-1 h-7 text-xs"
+                    />
+                  )}
+                  {onSplit && line.quantity > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => onSplit(line.key)}
+                      className="mt-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      + Different preference for 1
+                    </button>
                   )}
                   <p className="mt-1 text-sm font-medium tabular-nums text-foreground">
                     {formatCurrency(line.unitPrice * line.quantity)}

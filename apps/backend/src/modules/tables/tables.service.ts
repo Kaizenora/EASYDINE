@@ -464,6 +464,7 @@ export class TablesService {
       tableNumber: String(table.number),
       tableName: table.name || `Table ${table.number}`,
       billNumber,
+      orderId: order?.id ?? null,
       orderNumber: order?.orderNumber ?? null,
       customerName,
       paymentMethod: method,

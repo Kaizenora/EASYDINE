@@ -503,6 +503,24 @@ export default function LuxuryCustomerMenu({
     );
   };
 
+  // Same dish, different preference: one portion of a line becomes its own
+  // line (e.g. 2× Paneer Mutter -> 1× "spicy" + 1× "buttery").
+  const splitCartLine = (cartLineId: string) => {
+    setCart((prev) => {
+      const idx = prev.findIndex((l) => l.id === cartLineId);
+      if (idx === -1 || prev[idx].quantity < 2) return prev;
+      const line = prev[idx];
+      const next = [...prev];
+      next[idx] = { ...line, quantity: line.quantity - 1 };
+      next.splice(idx + 1, 0, { ...line, id: `${line.id}-pref-${Date.now()}`, quantity: 1, cookingNote: "" });
+      return next;
+    });
+  };
+
+  const setCartLineNote = (cartLineId: string, note: string) => {
+    setCart((prev) => prev.map((l) => (l.id === cartLineId ? { ...l, cookingNote: note.slice(0, 120) } : l)));
+  };
+
   const addSimpleItem = (item: PublicMenuItem, catName: string) => {
     const lineId = `line-${item.id}-default`;
     const price = parseFloat(item.price);
@@ -1759,8 +1777,23 @@ export default function LuxuryCustomerMenu({
                       {line.modifierLabel && (
                         <p className="text-[11px] text-amber-300 font-medium">{line.modifierLabel}</p>
                       )}
-                      {line.cookingNote && (
-                        <p className="text-[10px] text-neutral-400">Note: &ldquo;{line.cookingNote}&rdquo;</p>
+                      <input
+                        type="text"
+                        value={line.cookingNote}
+                        onChange={(e) => setCartLineNote(line.id, e.target.value)}
+                        placeholder="Preference (e.g. spicy, less oil)"
+                        aria-label={`Preference for ${line.name}`}
+                        maxLength={120}
+                        className="mt-1 w-44 rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-200 placeholder:text-neutral-600 focus:border-amber-500/60 focus:outline-none"
+                      />
+                      {line.quantity > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => splitCartLine(line.id)}
+                          className="mt-1 block text-[10px] font-bold text-amber-400 hover:underline"
+                        >
+                          + Different preference for 1
+                        </button>
                       )}
                       <p className="mt-1 text-xs font-bold text-white">₹{line.unitPrice * line.quantity}</p>
                     </div>

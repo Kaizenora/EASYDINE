@@ -266,6 +266,9 @@ export function toAcceptTarget(t: string | AcceptTarget): AcceptTarget {
 const KOT_PAGE_TTL_MS = 5 * 60_000;
 const kotPageCache = new Map<string, { html: string; version: string; at: number }>();
 const kotPageLoads = new Map<string, Promise<string | null>>();
+/** Pages that could not be loaded (e.g. no permission): not retried for a minute. */
+const kotPageMisses = new Map<string, number>();
+const KOT_PAGE_MISS_MS = 60_000;
 
 /** Which KOT page: the whole order (Accept) or some tickets (KDS reprint). */
 export interface KotPageSpec {
@@ -291,7 +294,12 @@ function loadKotPage(orderId: string, branchId: string, version: string, page: K
     .then(async (res) => (res.ok ? await res.text() : null))
     .catch(() => null)
     .then((html) => {
-      if (html) kotPageCache.set(key, { html, version, at: Date.now() });
+      if (html) {
+        kotPageCache.set(key, { html, version, at: Date.now() });
+        kotPageMisses.delete(key);
+      } else {
+        kotPageMisses.set(key, Date.now());
+      }
       return html;
     })
     .finally(() => kotPageLoads.delete(key));
@@ -306,8 +314,11 @@ function loadKotPage(orderId: string, branchId: string, version: string, page: K
  */
 export function prefetchKotPage(orderId: string, scope: PrintScope, version = "", page: KotPageSpec = {}): void {
   if (!scope.branchId || typeof window === "undefined" || hasLocalKitchenRoute(scope)) return;
-  const hit = kotPageCache.get(kotPageKey(orderId, page));
+  const key = kotPageKey(orderId, page);
+  const hit = kotPageCache.get(key);
   if (hit && hit.version === version && Date.now() - hit.at < KOT_PAGE_TTL_MS) return;
+  const missed = kotPageMisses.get(key);
+  if (missed && Date.now() - missed < KOT_PAGE_MISS_MS) return;
   void loadKotPage(orderId, scope.branchId, version, page);
 }
 

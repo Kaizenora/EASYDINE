@@ -8,7 +8,7 @@ import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { publishDisplay } from "@/lib/customer-display";
 import { BranchNotice } from "@/components/layout/branch-notice";
 import { CartPanel, type DeliveryDetails, type PosOrderType } from "@/components/pos/cart-panel";
-import { cartLineKey, portionText, type CartLine, type Portion } from "@/components/pos/cart-line";
+import { cartLineKey, portionText, setCartLineNote, splitCartLine, type CartLine, type Portion } from "@/components/pos/cart-line";
 import { clearDraft, switchTableDraft, type Drafts } from "@/lib/pos-drafts";
 import { CheckoutPanel } from "@/components/pos/checkout-panel";
 import { KitchenProgressWidget } from "@/components/pos/kitchen-progress-widget";
@@ -205,6 +205,7 @@ function PosPageInner() {
             name: l.name,
             quantity: l.quantity,
             modifiers: l.modifierLabel ? l.modifierLabel.split(", ").filter(Boolean) : [],
+            note: l.note?.trim() || null,
           })),
         })
       : null;
@@ -214,6 +215,7 @@ function PosPageInner() {
       menuItemId: l.menuItemId,
       quantity: l.quantity,
       modifierIds: l.modifierIds,
+      ...(l.note?.trim() ? { kitchenNote: l.note.trim() } : {}),
       ...(l.portion
         ? {
             portion: l.portion.kind,
@@ -406,6 +408,8 @@ function PosPageInner() {
                 onIncrement={(key) => updateQuantity(key, 1)}
                 onDecrement={(key) => updateQuantity(key, -1)}
                 onRemove={removeLine}
+                onNoteChange={(key, note) => setLines((prev) => setCartLineNote(prev, key, note))}
+                onSplit={(key) => setLines((prev) => splitCartLine(prev, key))}
                 onSubmit={handleSubmit}
                 isSubmitting={createOrder.isPending || addOrderItems.isPending}
                 existingOrderNumber={existingOrder?.orderNumber}

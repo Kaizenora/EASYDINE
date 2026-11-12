@@ -47,7 +47,8 @@ export interface CustomerDetail extends Customer {
 export function useBackfillCustomersFromOrders(branchId: string | null) {
   const queryClient = useQueryClient();
   return useQuery({
-    queryKey: ["customers", "backfill", branchId],
+    // Own key: the many invalidate(["customers"]) calls must not re-run it.
+    queryKey: ["customer-backfill", branchId],
     queryFn: async () => {
       const r = await api.post<{ scanned: number; linked: number; skipped: number }>(
         `/customers/backfill-from-orders?branchId=${branchId}`,

@@ -40,6 +40,9 @@ import { api, ApiError } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import { getCashierPaperSize, openReceiptPrint } from "@/lib/print";
+import { printKotInFrame, reserveKotPrintFrame } from "@/lib/kot-print-dialog";
+import { settleReceiptHtml } from "@/lib/settle-receipt";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +68,8 @@ interface ModernTableGridProps {
 }
 
 interface SettleReceipt {
+  /** Set by servers that return it: then the full receipt page is printed. */
+  orderId?: string | null;
   billNumber: string;
   tableNumber: string;
   tableName: string;
@@ -131,6 +136,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     mutationFn: ({ tableId, method }: { tableId: string; method: "CASH" | "UPI" | "CARD" }) =>
       api.post<{
         success: boolean;
+        orderId?: string | null;
         billNumber?: string;
         orderNumber?: string;
         subtotal?: string;
@@ -155,6 +161,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           return;
         }
         const receipt: SettleReceipt = {
+          orderId: res.orderId ?? null,
           billNumber: res.billNumber,
           tableNumber: res.tableNumber || String(selectedTable.number),
           tableName: res.tableName || selectedTable.name || `Table ${selectedTable.number}`,
@@ -931,8 +938,26 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               <Button
                 className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
                 onClick={() => {
-                  window.print();
-                  toast.success("Receipt dispatched to printer.");
+                  // Bill-size print, never the whole page (window.print() printed
+                  // the dashboard on A4). With the order id: the full receipt
+                  // through the normal bill route (Print Helper or dialog).
+                  if (receiptData.orderId && branchId) {
+                    openReceiptPrint(receiptData.orderId, branchId);
+                    return;
+                  }
+                  const slot = reserveKotPrintFrame();
+                  void printKotInFrame(slot, "", "", {
+                    html: settleReceiptHtml(
+                      {
+                        ...receiptData,
+                        tableName: receiptData.tableName,
+                        restaurantName: settingsData?.restaurant?.name ?? undefined,
+                      },
+                      getCashierPaperSize(),
+                    ),
+                  }).then((r) => {
+                    if (r.status === "FAILED") toast.error("Could not open the print dialog for the bill.");
+                  });
                 }}
               >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
