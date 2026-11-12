@@ -1,5 +1,6 @@
 ﻿import {
   BadRequestException,
+  NotFoundException,
   Body,
   Controller,
   ForbiddenException,
@@ -88,6 +89,17 @@ function branchPrinterProfile(branch: {
     codepage: branch.printerCodepage,
     columns: branch.printerColumns,
   });
+}
+
+/** "a,b,c" -> ids (at most 20, plain cuid-like tokens), or undefined when absent. */
+export function parseKotIds(raw: string | undefined): string[] | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const ids = String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^[A-Za-z0-9_-]{1,64}$/.test(s));
+  if (ids.length === 0 || ids.length > 20) throw new BadRequestException('kotIds is invalid');
+  return ids;
 }
 
 function toKotOrder(order: ReceiptData): EscposKotOrder {
@@ -599,18 +611,32 @@ export class OrdersController {
     @Query('tz') tz?: string,
     @Query('paper') paper?: string,
     @Query('reprint') reprint?: string,
+    @Query('kotIds') kotIdsRaw?: string,
   ) {
     if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
     const order = await this.ordersService.getReceiptData(branchId, id);
     const kotOrder = toKotOrder(order);
+    // kotIds: only those kitchen tickets (the round just sent, or the one
+    // ticket a KDS screen reprints), never the rest of the order.
+    const kotIds = parseKotIds(kotIdsRaw);
+    const only = kotIds ? await this.kotPrint.ticketLines(branchId, id, kotIds) : null;
+    if (only && only.tickets.length === 0) throw new NotFoundException('KOT not found');
     const html = buildKotHtml({
       branchName: order.branch.name,
       // Cancelled lines never go to the kitchen.
       order: {
         ...kotOrder,
-        items: kotOrder.items.filter((_, i) => order.items[i]?.status !== 'CANCELLED'),
+        items: kotOrder.items.filter(
+          (_, i) =>
+            order.items[i]?.status !== 'CANCELLED' &&
+            (!only || only.orderItemIds.has(order.items[i]!.id)),
+        ),
       },
+      ticket:
+        only && only.tickets.length === 1
+          ? { number: only.tickets[0]!.number, station: only.tickets[0]!.station, reprint: 0 }
+          : undefined,
       paper: parsePaper(paper) ?? '80mm',
       timeZone: safeTimeZone(tz),
       copyLabel: reprint === '1' || reprint === 'true' ? 'REPRINT' : undefined,
@@ -836,8 +862,10 @@ export class OrdersController {
     @Query('tz') tz?: string,
     @Query('track') track?: string,
     @Query('printer') printer?: string,
+    @Query('kotIds') kotIdsRaw?: string,
   ) {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const kotIds = parseKotIds(kotIdsRaw);
     if (via === 'spooler') {
       // KOT on the Windows printer chosen on this server PC (exact name only).
       const target = await this.chosenPrinter(printer);
@@ -848,6 +876,7 @@ export class OrdersController {
         false,
         { ...parseDeviceKotOptions({ paper, tz }), format: 'escpos' },
         target,
+        kotIds,
       );
     }
     return this.kotPrint.printOrder(
@@ -861,6 +890,8 @@ export class OrdersController {
             track: track === 'true',
           }
         : {},
+      undefined,
+      kotIds,
     );
   }
 

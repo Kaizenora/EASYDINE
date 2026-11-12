@@ -62,6 +62,18 @@ const KOT_FORWARD_STATUSES = [
   'SERVED',
 ] as const;
 
+/**
+ * Every order lookup is scoped by the caller's (already access-checked)
+ * branch. Prisma silently drops `branchId: undefined` from a filter, which
+ * would turn "this branch's order" into "any order", so an absent branch is
+ * a hard error here as a second line of defence behind BranchAccessService.
+ */
+export function requireBranch(branchId: unknown): asserts branchId is string {
+  if (typeof branchId !== 'string' || branchId === '') {
+    throw new BadRequestException('branchId is required');
+  }
+}
+
 @Injectable()
 export class OrdersService {
   async getBranchForReceipt(branchId: string) {
@@ -96,6 +108,7 @@ export class OrdersService {
   }
 
   async getOrder(branchId: string, id: string) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id, branchId },
       include: {
@@ -127,6 +140,7 @@ export class OrdersService {
   }
 
   async getReceiptData(branchId: string, id: string) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id, branchId },
       include: {
@@ -650,6 +664,7 @@ export class OrdersService {
     items: CartItemDto[],
     options: { enforceModifierLimits?: boolean; websiteOnly?: boolean } = {},
   ) {
+    requireBranch(branchId);
     const menuItemIds = [...new Set(items.map((i) => i.menuItemId))];
     const modifierIds = [...new Set(items.flatMap((i) => i.modifierIds ?? []))];
 
@@ -715,6 +730,7 @@ export class OrdersService {
       ),
     );
 
+    let newKotIds: string[] = [];
     const updated = await this.prisma.$transaction(async (tx) => {
       const newItems = await Promise.all(
         lineInputs.map((line) =>
@@ -758,13 +774,15 @@ export class OrdersService {
         },
       });
 
-      await this.generateKots(tx, orderId, branchId, newItems);
+      newKotIds = await this.generateKots(tx, orderId, branchId, newItems);
 
       return result;
     }, { timeout: 30000, maxWait: 15000 });
 
     this.realtime.emitToBranch(branchId, 'order.updated', { id: orderId });
-    return this.getOrder(branchId, updated.id);
+    // newKotIds: the kitchen tickets this round created, so the cashier PC
+    // prints exactly those (not earlier rounds) in the same click.
+    return { ...(await this.getOrder(branchId, updated.id)), newKotIds };
   }
 
   // Realistic floor rule: once the kitchen has actually started cooking (or
@@ -782,6 +800,7 @@ export class OrdersService {
       type?: string;
     },
   ) {
+    requireBranch(branchId);
     const tab = filters.tab ?? 'active';
     const statusWhere: Prisma.OrderWhereInput =
       tab === 'all'
@@ -859,12 +878,15 @@ export class OrdersService {
       printer?: string;
     } = {},
   ) {
+    requireBranch(branchId);
+    // Always scoped to the caller's branch: knowing an order id is not
+    // authorization to accept it.
     const order = await this.prisma.order.findFirst({
-      where: branchId ? { id: orderId, branchId } : { id: orderId },
+      where: { id: orderId, branchId },
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Order not found');
-    const effectiveBranchId = branchId || order.branchId;
+    const effectiveBranchId = branchId;
     if (order.status !== 'OPEN' || order.acceptance !== 'PENDING') {
       throw new ConflictException(
         order.acceptance === 'ACCEPTED'
@@ -1242,6 +1264,7 @@ export class OrdersService {
       declineIncoming?: boolean;
     },
   ) {
+    requireBranch(branchId);
     const reason = options.reason?.trim() || undefined;
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
@@ -1390,6 +1413,7 @@ export class OrdersService {
   }
 
   private async editableOrder(branchId: string, orderId: string) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       include: { items: true, payments: { select: { id: true } } },
@@ -1424,6 +1448,7 @@ export class OrdersService {
     userId: string,
     dto: UpdateOrderDto,
   ) {
+    requireBranch(branchId);
     const order = await this.editableOrder(branchId, orderId);
 
     if (dto.customerId) {
@@ -1751,6 +1776,7 @@ export class OrdersService {
   // and the payment summary show. Read-only: nothing is saved, no status
   // changes, so it can be run any number of times.
   async previewBill(branchId: string, orderId: string, adj: BillPreviewDto) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       include: { items: true, payments: true, customer: true },
@@ -1824,6 +1850,7 @@ export class OrdersService {
     orderId: string,
     adj: BillPreviewDto,
   ) {
+    requireBranch(branchId);
     const [order, view] = await Promise.all([
       this.getReceiptData(branchId, orderId),
       this.previewBill(branchId, orderId, adj),
@@ -1848,6 +1875,7 @@ export class OrdersService {
   }
 
   async recordBillPrinted(branchId: string, orderId: string, userId: string) {
+    requireBranch(branchId);
     await this.audit.record({
       userId,
       action: 'order.bill_printed',
@@ -1864,6 +1892,7 @@ export class OrdersService {
     dto: CheckoutDto,
     mayExceedDiscountCap = false,
   ) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       include: { items: true, customer: true, payments: true },
@@ -2290,6 +2319,7 @@ export class OrdersService {
     userId: string,
     dto: RefundDto,
   ) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
     });
@@ -2416,6 +2446,7 @@ export class OrdersService {
     targetOrderId: string,
     sourceOrderId: string,
   ) {
+    requireBranch(branchId);
     if (targetOrderId === sourceOrderId) {
       throw new BadRequestException('Cannot merge an order into itself');
     }
@@ -2699,7 +2730,7 @@ export class OrdersService {
     orderId: string,
     branchId: string,
     orderItems: { id: string; menuItemId: string }[],
-  ) {
+  ): Promise<string[]> {
     const stationLookup = await tx.menuItem.findMany({
       where: { id: { in: orderItems.map((i) => i.menuItemId) } },
       select: { id: true, stationId: true },
@@ -2720,6 +2751,7 @@ export class OrdersService {
     // a second time for a later round, and ticket numbers must stay unique
     // per order for kitchen staff to tell rounds apart.
     let ticketSeq = (await tx.kot.count({ where: { orderId } })) + 1;
+    const created: string[] = [];
     for (const [stationId, items] of itemsByStation) {
       const kot = await tx.kot.create({
         data: {
@@ -2729,11 +2761,13 @@ export class OrdersService {
           items: { create: items.map((item) => ({ orderItemId: item.id })) },
         },
       });
+      created.push(kot.id);
       this.realtime.emitToBranch(branchId, 'kot.created', {
         id: kot.id,
         stationId,
       });
     }
+    return created;
   }
 
   // Moves a kitchen ticket one step forward (NEW -> ACCEPTED -> PREPARING ->

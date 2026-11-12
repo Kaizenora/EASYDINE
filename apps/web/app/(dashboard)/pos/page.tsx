@@ -27,6 +27,8 @@ import {
 } from "@/hooks/use-orders";
 import { useFloors, type RestaurantTable } from "@/hooks/use-tables";
 import { ApiError } from "@/lib/api";
+import { reserveKotPrintFrame } from "@/lib/kot-print-dialog";
+import { getActivePrintScope, printSentKot, type LocalPrintEvent } from "@/lib/local-print";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -168,9 +170,20 @@ function PosPageInner() {
 
   const removeLine = (key: string) => setLines((prev) => prev.filter((l) => l.key !== key));
 
+  // The first KOT goes out in the same click as "Send to kitchen" (KOT
+  // routing rule in lib/local-print.ts). Problems are shown, never retried.
+  const reportKot = (e: LocalPrintEvent | null) => {
+    if (!e) return;
+    if (e.status === "FAILED" || e.status === "UNKNOWN") toast.error(e.message);
+  };
+
   const handleSubmit = () => {
     if (checkingTable) return;
     const sentTableId = tableId;
+    // Reserved synchronously inside the click so the print dialog may open
+    // after the order request; released when the helper prints instead.
+    const slot = reserveKotPrintFrame();
+    const scope = { ...getActivePrintScope(), branchId };
     const items = lines.map((l) => ({
       menuItemId: l.menuItemId,
       quantity: l.quantity,
@@ -193,8 +206,12 @@ function PosPageInner() {
             setActiveCustomer(existingOrder.customer);
             setActiveOrder(order);
             toast.success(`Added to order #${order.orderNumber} — sent to kitchen`);
+            void printSentKot(order.id, scope, slot, order.newKotIds).then(reportKot);
           },
-          onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not add items"),
+          onError: (err) => {
+            slot.release();
+            toast.error(err instanceof ApiError ? err.message : "Could not add items");
+          },
         },
       );
       return;
@@ -217,8 +234,12 @@ function PosPageInner() {
           setActiveOrder(order);
           setCartOpen(true);
           toast.success(`Order #${order.orderNumber} sent to kitchen`);
+          void printSentKot(order.id, scope, slot, (order.kots ?? []).map((k) => k.id)).then(reportKot);
         },
-        onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not create order"),
+        onError: (err) => {
+          slot.release();
+          toast.error(err instanceof ApiError ? err.message : "Could not create order");
+        },
       },
     );
   };

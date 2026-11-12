@@ -18,6 +18,10 @@ import { toast } from "@/lib/toast";
 export interface CreatedOrder {
   id: string;
   orderNumber: string;
+  /** Kitchen tickets of the order (id only is enough for printing). */
+  kots?: { id: string }[];
+  /** addItems only: the tickets this round created. */
+  newKotIds?: string[];
   subtotal: string;
   taxAmount: string;
   discountAmount: string;
@@ -234,7 +238,7 @@ export function useAllOrders(branchId: string | null) {
   const pollMs = useLiveAwareInterval(2000, 10_000);
   return useQuery({
     queryKey: ["orders", "manage", branchId, "all"],
-    queryFn: ({ signal }) => api.get<ManagedOrder[]>('/orders/manage?tab=all', { signal }),
+    queryFn: ({ signal }) => api.get<ManagedOrder[]>(`/orders/manage?${new URLSearchParams({ branchId: branchId ?? "", tab: "all" }).toString()}`, { signal }),
     enabled: !!branchId,
     refetchInterval: pollMs,
   });

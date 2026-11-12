@@ -59,10 +59,16 @@ export function reserveKotPrintFrame(): KotPrintSlot {
   };
 }
 
-export function kotPageUrl(orderId: string, branchId: string, opts: { reprint?: boolean; paper?: KotPaper; timeZone?: string }): string {
+export function kotPageUrl(
+  orderId: string,
+  branchId: string,
+  opts: { reprint?: boolean; paper?: KotPaper; timeZone?: string; kotIds?: string[] },
+): string {
   const q = new URLSearchParams({ branchId, paper: opts.paper ?? "80mm" });
   if (opts.timeZone) q.set("tz", opts.timeZone);
   if (opts.reprint) q.set("reprint", "1");
+  // Only these tickets (the round just sent / one KDS ticket).
+  if (opts.kotIds?.length) q.set("kotIds", opts.kotIds.join(","));
   q.set("t", String(Date.now())); // never a cached copy
   return `/api/v1/orders/${encodeURIComponent(orderId)}/kot?${q.toString()}`;
 }
@@ -78,7 +84,7 @@ export async function printKotInFrame(
   slot: KotPrintSlot,
   orderId: string,
   branchId: string,
-  opts: { reprint?: boolean; paper?: KotPaper; timeZone?: string; fetchImpl?: typeof fetch } = {},
+  opts: { reprint?: boolean; paper?: KotPaper; timeZone?: string; kotIds?: string[]; fetchImpl?: typeof fetch } = {},
 ): Promise<KotDialogResult> {
   const doFetch = opts.fetchImpl ?? fetch;
   let html: string;

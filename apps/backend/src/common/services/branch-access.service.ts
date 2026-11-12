@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 // Phase 1 tenancy check: a branch belongs to exactly one restaurant, and a
@@ -11,7 +11,18 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class BranchAccessService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async assertAccess(restaurantId: string, branchId: string): Promise<void> {
+  async assertAccess(restaurantId: string, branchId: unknown): Promise<void> {
+    // A missing branchId used to slip through: Prisma drops `id: undefined`
+    // from the filter, so ANY branch of the restaurant matched, and the
+    // caller then queried orders with no branch filter at all (other
+    // restaurants' data). Only a non-empty string is a branch reference;
+    // ?branchId=a&branchId=b arrives as an array and is rejected too.
+    if (typeof branchId !== 'string' || branchId.trim() === '') {
+      throw new BadRequestException('branchId is required');
+    }
+    if (typeof restaurantId !== 'string' || restaurantId === '') {
+      throw new ForbiddenException('Branch not found or not accessible');
+    }
     const branch = await this.prisma.branch.findFirst({
       where: { id: branchId, restaurantId },
       select: { id: true },

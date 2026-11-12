@@ -91,12 +91,33 @@ export async function routeFor(role: PrinterRole, scope: PrintScope): Promise<Ro
     // Saved on the server PC: usable only from a browser on that PC.
     if (!onServerPc()) return resolveRoute(role, false, mappings, null);
     const list = await listServerPrinters(scope.branchId).catch(() => null);
-    if (list && !list.supported) return resolveRoute(role, false, mappings, null);
-    return resolveRoute(role, true, mappings, list ? list.printers : null);
+    // Unreachable or unsupported: treated as "no helper" (browser dialog).
+    if (!list || !list.supported) return resolveRoute(role, false, mappings, null);
+    return resolveRoute(role, true, mappings, list.printers);
   }
   const bridge = await detectBridge();
   const installed = bridge ? await listInstalledPrinters().catch(() => null) : null;
-  return resolveRoute(role, bridge, mappings, installed);
+  // A helper that answers the ping but cannot list printers is not reachable
+  // enough to print on: use the browser dialog instead.
+  return resolveRoute(role, bridge && installed !== null, mappings, installed);
+}
+
+/**
+ * The single KOT routing rule. Direct print only when this PC's Print Helper
+ * (or the server-PC spooler) is reachable right now AND the saved Kitchen
+ * printer is installed there; in every other case the browser print dialog.
+ * Decided before anything is dispatched, so the fallback never duplicates.
+ */
+export async function kitchenRoute(scope: PrintScope): Promise<{ route: Route; note?: string }> {
+  if (!hasLocalKitchenRoute(scope)) return { route: { kind: "default", reason: "no-bridge" } };
+  const route = await routeFor("kitchen", scope);
+  if (route.kind === "missing") {
+    return {
+      route: { kind: "default", reason: "not-configured" },
+      note: `The saved Kitchen printer "${route.printerName}" is not installed on this PC, so the print dialog was used.`,
+    };
+  }
+  return { route };
 }
 
 // --- outcome feed (inline status in the orders screen; never "printed") -------
@@ -235,10 +256,9 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
   // saved Kitchen printer may take the KOT: if the helper turns out to be
   // stopped, the dialog is the fallback. The frame is filled only after the
   // server confirms the acceptance, and discarded otherwise.
-  const mayPrintLocally = hasLocalKitchenRoute(scope);
   let slot: KotPrintSlot | null = reserveKotPrintFrame();
   const r = await flights.run(key, async (): Promise<AcceptOutcome> => {
-    const route: Route = mayPrintLocally ? await routeFor("kitchen", scope) : { kind: "default", reason: "no-bridge" };
+    const { route, note } = await kitchenRoute(scope);
     const viaBrowser = route.kind === "default";
     let res: AcceptResponse;
     try {
@@ -285,7 +305,14 @@ export async function acceptOrderWithKot(orderId: string, scope: PrintScope): Pr
                 },
         };
       }
-      const kot = await openKotDialog(slot ?? reserveKotPrintFrame(), orderId, branchId, false);
+      const kot = await openKotDialog(
+        slot ?? reserveKotPrintFrame(),
+        orderId,
+        branchId,
+        false,
+        undefined,
+        note ? `Order accepted. ${note}` : "Order accepted.",
+      );
       slot = null;
       return { accepted: true, kot };
     }
@@ -371,14 +398,21 @@ function hasLocalKitchenRoute(scope: PrintScope): boolean {
   return k.transport === "server" ? onServerPc() : hasBridgeHost();
 }
 
-async function openKotDialog(slot: KotPrintSlot, orderId: string, branchId: string, reprint: boolean): Promise<LocalPrintEvent> {
+async function openKotDialog(
+  slot: KotPrintSlot,
+  orderId: string,
+  branchId: string,
+  reprint: boolean,
+  kotIds?: string[],
+  prefix?: string,
+): Promise<LocalPrintEvent> {
   const paper = getCashierPaperSize();
-  const d = await printKotInFrame(slot, orderId, branchId, { reprint, paper, timeZone: deviceTimeZone() });
+  const d = await printKotInFrame(slot, orderId, branchId, { reprint, paper, timeZone: deviceTimeZone(), kotIds });
   const e: LocalPrintEvent = {
     orderId,
     what: "KOT",
     status: d.status === "REQUESTED" ? "REQUESTED" : "FAILED",
-    message: d.status === "REQUESTED" && !reprint ? `Order accepted. ${d.message}` : d.message,
+    message: d.status === "REQUESTED" && prefix ? `${prefix} ${d.message}` : d.message,
     canReprint: true,
     at: Date.now(),
   };
@@ -391,22 +425,61 @@ async function openKotDialog(slot: KotPrintSlot, orderId: string, branchId: stri
  * otherwise opens the print dialog (frame reserved synchronously here, so call
  * it straight from the click). Copies are stamped REPRINT. Never automatic.
  */
-export async function reprintKot(orderId: string, scope: PrintScope): Promise<LocalPrintEvent> {
+export async function reprintKot(
+  orderId: string,
+  scope: PrintScope,
+  opts: { kotIds?: string[]; reprint?: boolean } = {},
+): Promise<LocalPrintEvent> {
   const branchId = scope.branchId;
   if (!branchId) {
     return { orderId, what: "KOT", status: "FAILED", message: "Choose a branch first.", canReprint: true, at: Date.now() };
   }
-  const key = `reprint-dialog:${orderId}`;
+  const reprint = opts.reprint ?? true;
+  const key = `reprint-dialog:${orderId}:${opts.kotIds?.join(",") ?? "all"}`;
   const busy: LocalPrintEvent = { orderId, what: "KOT", status: "REQUESTED", message: "The KOT print dialog is already opening…", canReprint: false, at: Date.now() };
   if (flights.isRunning(key)) return busy;
-  if (hasLocalKitchenRoute(scope)) {
-    const local = await reprintKotLocal(orderId, scope, true);
-    if (local) return local;
-  }
+  // Reserved inside the click; discarded when the helper takes the job.
   const slot = reserveKotPrintFrame();
-  const r = await flights.run(key, () => openKotDialog(slot, orderId, branchId, true));
+  const r = await flights.run(key, async () => {
+    const { route, note } = await kitchenRoute(scope);
+    if (route.kind === "local") {
+      slot.release();
+      const local = await kotToLocalPrinter(orderId, branchId, route.mapping, reprint, opts.kotIds);
+      publish(local);
+      return local;
+    }
+    return openKotDialog(slot, orderId, branchId, reprint, opts.kotIds, note);
+  });
   if (!r) slot.release();
   return r ?? busy;
+}
+
+/**
+ * First KOT of a staff "Send to kitchen" (new order or another round), in the
+ * same click: `slot` must be reserved synchronously in that click, before the
+ * order request. `kotIds` = the tickets this send created (empty = nothing for
+ * the kitchen yet, e.g. a scheduled order). Same routing as Accept & KOT;
+ * never retried or resent - the cashier gets Reprint KOT instead.
+ */
+export async function printSentKot(
+  orderId: string,
+  scope: PrintScope,
+  slot: KotPrintSlot,
+  kotIds?: string[],
+): Promise<LocalPrintEvent | null> {
+  const branchId = scope.branchId;
+  if (!branchId || (kotIds && kotIds.length === 0)) {
+    slot.release();
+    return null;
+  }
+  const { route, note } = await kitchenRoute(scope);
+  if (route.kind === "local") {
+    slot.release();
+    const e = await kotToLocalPrinter(orderId, branchId, route.mapping, false, kotIds);
+    publish(e);
+    return e;
+  }
+  return openKotDialog(slot, orderId, branchId, false, kotIds, note ? `Sent to kitchen. ${note}` : "Sent to kitchen.");
 }
 
 export function isAccepting(orderId: string): boolean {
@@ -420,7 +493,7 @@ export function isAccepting(orderId: string): boolean {
  * are stamped REPRINT). Returns null when this PC has no Kitchen printer saved
  * (caller uses the existing server/dialog path).
  */
-export async function reprintKotLocal(orderId: string, scope: PrintScope, reprint = true): Promise<LocalPrintEvent | null> {
+export async function reprintKotLocal(orderId: string, scope: PrintScope, reprint = true, kotIds?: string[]): Promise<LocalPrintEvent | null> {
   const branchId = scope.branchId;
   if (!branchId) return null;
   const route = await routeFor("kitchen", scope);
@@ -438,13 +511,29 @@ export async function reprintKotLocal(orderId: string, scope: PrintScope, reprin
       publish(e);
       return e;
     }
-    const m = route.mapping;
+    const e = await kotToLocalPrinter(orderId, branchId, route.mapping, reprint, kotIds);
+    publish(e);
+    return e;
+  });
+  return r ?? { orderId, what: "KOT", status: "UNKNOWN", message: "A reprint is already being sent…", canReprint: false, at: Date.now() };
+}
+
+/** One dispatch to this PC's Kitchen printer (helper or server-PC spooler). Never retried. */
+async function kotToLocalPrinter(
+  orderId: string,
+  branchId: string,
+  m: PrinterMapping,
+  reprint: boolean,
+  kotIds?: string[],
+): Promise<LocalPrintEvent> {
+  {
     if (m.transport === "server") {
       const sq = new URLSearchParams({ branchId, reprint: String(reprint), via: "spooler", printer: m.printerName, paper: m.paper });
+      if (kotIds?.length) sq.set("kotIds", kotIds.join(","));
       const stz = deviceTimeZone();
       if (stz) sq.set("tz", stz);
       const r = await serverPrint(`/orders/${orderId}/print/kot?${sq.toString()}`);
-      const e: LocalPrintEvent = {
+      return {
         orderId,
         what: "KOT",
         status: r.status,
@@ -454,8 +543,6 @@ export async function reprintKotLocal(orderId: string, scope: PrintScope, reprin
         canReprint: true,
         at: Date.now(),
       };
-      publish(e);
-      return e;
     }
     const q = new URLSearchParams({
       branchId,
@@ -467,26 +554,23 @@ export async function reprintKotLocal(orderId: string, scope: PrintScope, reprin
     });
     const tz = deviceTimeZone();
     if (tz) q.set("tz", tz);
+    if (kotIds?.length) q.set("kotIds", kotIds.join(","));
     let tickets: DeviceTickets;
     try {
       tickets = await api.post<DeviceTickets>(`/orders/${orderId}/print/kot?${q.toString()}`);
     } catch (err) {
-      const e: LocalPrintEvent = {
+      // The server refused before anything reached a printer.
+      return {
         orderId,
         what: "KOT",
         status: "FAILED",
-        message: err instanceof Error ? `KOT was NOT reprinted: ${err.message}` : "KOT was NOT reprinted.",
+        message: err instanceof Error ? `KOT was NOT printed: ${err.message}` : "KOT was NOT printed.",
         canReprint: true,
         at: Date.now(),
       };
-      publish(e);
-      return e;
     }
-    const e = await printClaimedKot(orderId, branchId, m, tickets, reprint);
-    publish(e);
-    return e;
-  });
-  return r ?? { orderId, what: "KOT", status: "UNKNOWN", message: "A reprint is already being sent…", canReprint: false, at: Date.now() };
+    return printClaimedKot(orderId, branchId, m, tickets, reprint);
+  }
 }
 
 // --- Bills ---------------------------------------------------------------------

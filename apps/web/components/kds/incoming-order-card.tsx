@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { useAcceptIncoming, useDeclineIncoming, type IncomingOrder } from "@/hooks/use-kds";
-import { ApiError } from "@/lib/api";
 
 const DECLINE_REASONS = ["Closing soon", "Out of stock", "Too busy", "Outside delivery area"];
 
@@ -76,8 +75,13 @@ export function IncomingOrderCard({ order, branchId }: { order: IncomingOrder; b
           disabled={accept.isPending}
           onClick={() =>
             accept.mutate(order.id, {
+              onSuccess: (r) => {
+                if (!r.accepted) return;
+                if (r.kot && (r.kot.status === "FAILED" || r.kot.status === "UNKNOWN" || r.kot.status === "SKIPPED")) toast.error(r.kot.message);
+                else if (r.serverMessage?.kind === "error") toast.error(r.serverMessage.text);
+              },
               onError: (err) =>
-                toast.error(err instanceof ApiError ? err.message : "Could not accept the order. Try again."),
+                toast.error(err instanceof Error ? err.message : "Could not accept the order. Try again."),
             })
           }
         >

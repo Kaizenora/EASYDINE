@@ -181,7 +181,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   // Acknowledge waiter call / bill request
   const resolveRequest = useMutation({
     mutationFn: (tableId: string) =>
-      api.post(`/tables/${tableId}/status`, { status: "OCCUPIED" }),
+      api.post(`/tables/${tableId}/status?branchId=${branchId || ""}`, { status: "OCCUPIED" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });

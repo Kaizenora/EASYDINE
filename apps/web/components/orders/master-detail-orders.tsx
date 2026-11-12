@@ -294,7 +294,7 @@ export function MasterDetailOrders({
 
   const rejectOrder = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.post(`/orders/${id}/reject`, { reason }),
+      api.post(`/orders/${id}/reject?branchId=${branchId ?? ""}`, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors"] });
@@ -694,16 +694,16 @@ export function MasterDetailOrders({
                         Collect UPI / Card
                       </Button>
                     </div>
+                    {/* The bill lives in the header; this card's print action is always Reprint KOT. */}
                     <Button
                       type="button"
                       variant="outline"
                       className="h-10 w-full rounded-xl border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
-                      onClick={() => {
-                        if (branchId) openReceiptPrint(selectedOrder.id, branchId);
-                      }}
+                      disabled={reprinting || (selectedOrder.kots?.length ?? 0) === 0}
+                      onClick={() => reprintKot(selectedOrder.id)}
                     >
                       <Printer className="mr-2 h-4 w-4 text-amber-400" />
-                      Print Bill (Customer Check)
+                      {reprinting ? "Opening…" : "Reprint KOT"}
                     </Button>
                     <p className="text-[11px] text-neutral-400">
                       Settle payment when customer pays at the counter. Order will be marked PAID and moved to History.
@@ -720,12 +720,11 @@ export function MasterDetailOrders({
                       variant="outline"
                       size="sm"
                       className="h-8 rounded-lg border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
-                      onClick={() => {
-                        if (branchId) openReceiptPrint(selectedOrder.id, branchId);
-                      }}
+                      disabled={reprinting || (selectedOrder.kots?.length ?? 0) === 0}
+                      onClick={() => reprintKot(selectedOrder.id)}
                     >
                       <Printer className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
-                      Reprint Receipt
+                      {reprinting ? "Opening…" : "Reprint KOT"}
                     </Button>
                   </div>
                 )}

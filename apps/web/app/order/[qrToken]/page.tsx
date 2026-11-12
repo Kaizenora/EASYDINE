@@ -158,6 +158,9 @@ interface PublicMenuResponse {
   tableName: string;
   tableNumber?: string;
   isTakeaway?: boolean;
+  /** Staff marked this table Out of service: show the notice only. */
+  outOfService?: boolean;
+  message?: string;
   categories: PublicMenuCategory[];
 }
 
@@ -269,7 +272,7 @@ export default function LuxuryCustomerMenu({
     queryKey: ["public-status", qrToken, isTakeaway ? activeOrderId : null],
     queryFn: () => api.get<PublicStatus>(statusUrl),
     refetchInterval: 1500,
-    enabled: !!data,
+    enabled: !!data && !data.outOfService,
     gcTime: 0,
     staleTime: 0,
   });
@@ -639,6 +642,18 @@ export default function LuxuryCustomerMenu({
         >
           Retry
         </button>}
+      </div>
+    );
+  }
+
+  // Out-of-service table: the notice only. No menu, cart or ordering.
+  if (data?.outOfService) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
+        <UtensilsCrossed className="h-12 w-12 text-[#E5A93C]" />
+        <p className="max-w-xs text-base font-semibold" data-testid="table-out-of-service">
+          {data.message || "This table is out of service. Please move to another table. Thank you."}
+        </p>
       </div>
     );
   }

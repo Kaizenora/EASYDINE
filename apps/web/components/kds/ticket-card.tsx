@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiError } from "@/lib/api";
+import { getActivePrintScope, reprintKot } from "@/lib/local-print";
 import { CloudOff, Flame, Globe, Printer, RotateCcw, Star, Timer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,7 +13,6 @@ import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import {
   NEXT_STATUS,
   useRejectKot,
-  useReprintKot,
   useSetKotPriority,
   useUpdateKotStatus,
   type KotTicket,
@@ -66,7 +65,23 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const elapsed = useElapsedMinutes(ticket.createdAt);
   const updateStatus = useUpdateKotStatus(branchId);
   const setPriority = useSetKotPriority(branchId);
-  const reprint = useReprintKot(branchId);
+  // This ticket only, through the KOT routing rule (helper direct print when
+  // reachable and mapped, otherwise the browser dialog). Never the server/LAN
+  // printer and never the order's other tickets.
+  const [printing, setPrinting] = useState(false);
+  const printThisTicket = () => {
+    if (!branchId || printing) return;
+    setPrinting(true);
+    void reprintKot(ticket.orderId, { ...getActivePrintScope(), branchId }, {
+      kotIds: [ticket.id],
+      reprint: ticket.printedCount > 0,
+    })
+      .then((e) => {
+        if (e.status === "FAILED" || e.status === "UNKNOWN") toast.error(e.message);
+        else if (e.status === "QUEUED") toast.success(e.message);
+      })
+      .finally(() => setPrinting(false));
+  };
   const { note, clear: clearNote, toast } = useNoteToast();
   const nextStatus = NEXT_STATUS[ticket.status];
   const isLate = elapsed >= 15;
@@ -366,22 +381,8 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           className="h-9 w-9 shrink-0"
           title={ticket.printedCount > 0 ? "Reprint ticket (marked REPRINT)" : "Print ticket"}
           aria-label={ticket.printedCount > 0 ? "Reprint ticket" : "Print ticket"}
-          disabled={reprint.isPending}
-          onClick={() =>
-            reprint.mutate(
-              { id: ticket.id, reprint: ticket.printedCount > 0 },
-              {
-                onSuccess: () =>
-                  toast.success(
-                    ticket.printedCount > 0 ? "Reprint sent to the kitchen printer" : "Ticket sent to the kitchen printer",
-                  ),
-                onError: (err) =>
-                  toast.error(
-                    err instanceof ApiError ? err.message : "Could not reach the server - printing needs the connection",
-                  ),
-              },
-            )
-          }
+          disabled={printing}
+          onClick={printThisTicket}
         >
           <Printer className="h-4 w-4" />
         </Button>

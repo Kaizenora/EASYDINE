@@ -82,3 +82,9 @@ test("print() blocked by the browser: reported as failed, Reprint offered", asyn
   assert.match(r.message, /Reprint KOT/);
   assert.equal(calls.released, 1);
 });
+
+test("kotIds limits the KOT page to those tickets (POS send / one KDS ticket)", () => {
+  const u = new URL(kotPageUrl("o", "b", { kotIds: ["k1", "k2"] }), "http://x");
+  assert.equal(u.searchParams.get("kotIds"), "k1,k2");
+  assert.equal(new URL(kotPageUrl("o", "b", { kotIds: [] }), "http://x").searchParams.get("kotIds"), null);
+});

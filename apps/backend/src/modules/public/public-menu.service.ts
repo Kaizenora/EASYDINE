@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { CartItemDto } from '@easydine/types';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,6 +7,10 @@ import { OrdersService } from '../orders/orders.service';
 
 /** Branch.takeawayToken is randomBytes(16).toString('hex'). */
 const TAKEAWAY_TOKEN_RE = /^[0-9a-f]{32}$/;
+
+/** Shown to a guest who scans the QR of a table staff marked Out of service. */
+export const OUT_OF_SERVICE_MESSAGE =
+  'This table is out of service. Please move to another table. Thank you.';
 
 @Injectable()
 export class PublicMenuService {
@@ -50,6 +54,19 @@ export class PublicMenuService {
 
   async getMenuByQrToken(qrToken: string) {
     const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
+    // Out-of-service table: the guest gets the notice only, never the menu.
+    if (!isTakeaway && table?.status === 'OUT_OF_SERVICE') {
+      return {
+        restaurantName: (branch as any).restaurant?.name ?? branch.name,
+        branchName: branch.name,
+        tableName: table.name ?? `Table ${table.number}`,
+        tableNumber: table.number,
+        isTakeaway: false,
+        outOfService: true,
+        message: OUT_OF_SERVICE_MESSAGE,
+        categories: [],
+      };
+    }
     const categories = await this.menuCategoriesForBranch(branch.id);
     return {
       restaurantName: (branch as any).restaurant?.name ?? branch.name,
@@ -65,6 +82,10 @@ export class PublicMenuService {
   async checkIn(qrToken: string, guestName?: string, phone?: string) {
     const { isTakeaway, table } = await this.resolveTarget(qrToken);
     if (isTakeaway || !table) return { ok: true };
+    // Never flip an out-of-service table to OCCUPIED from a guest scan.
+    if (table.status === 'OUT_OF_SERVICE') {
+      return { ok: false, outOfService: true, message: OUT_OF_SERVICE_MESSAGE };
+    }
     const branchId = table.floor.branchId;
 
     const cleanPhone = phone ? phone.replace(/\D/g, '').slice(0, 10) : undefined;
@@ -211,6 +232,11 @@ export class PublicMenuService {
 
     if (!table) {
       throw new NotFoundException('Table not found');
+    }
+    // Out of service: no new guest orders for this table. Orders that already
+    // exist are left alone (staff still see and settle them).
+    if (table.status === 'OUT_OF_SERVICE') {
+      throw new ConflictException(OUT_OF_SERVICE_MESSAGE);
     }
 
     // Dine-in Table Order
