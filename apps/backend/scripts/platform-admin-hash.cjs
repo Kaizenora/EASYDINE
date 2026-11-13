@@ -38,6 +38,9 @@ function ask(prompt) {
     process.exit(1);
   }
   const hash = await bcrypt.hash(a, 12);
-  console.log('\nPLATFORM_ADMIN_PASSWORD_HASH=' + hash);
+  // The hash alone on its own line (60 characters) so a narrow terminal
+  // does not wrap it and a copy does not pick up a line break.
+  console.log('\nValue for PLATFORM_ADMIN_PASSWORD_HASH (copy the next line only):\n');
+  console.log(hash);
   console.log('\nSet it (and PLATFORM_ADMIN_EMAIL) in the backend environment, then redeploy.');
 })();

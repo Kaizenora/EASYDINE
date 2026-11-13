@@ -5,7 +5,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PlatformAdminGuard } from './platform-admin.controller';
-import { PLATFORM_ADMIN_AUDIENCE, PLATFORM_ADMIN_COOKIE, PlatformAdminService, platformAdminConfig } from './platform-admin.service';
+import { PLATFORM_ADMIN_AUDIENCE, PLATFORM_ADMIN_COOKIE, PlatformAdminService, platformAdminConfig, platformAdminConfigProblem } from './platform-admin.service';
 import { clearSessionCache } from './session-cache';
 import { PublicMenuService } from '../modules/public/public-menu.service';
 
@@ -29,6 +29,23 @@ function provision() {
 const jwt = new JwtService({ secret: 'unit-test-only', signOptions: { expiresIn: '1h' } });
 
 describe('platform admin configuration', () => {
+  it('repairs paste damage (wrapped line, quotes, NAME= prefix) but nothing else', () => {
+    const wrapped = ADMIN_HASH.slice(0, 30) + '\n  ' + ADMIN_HASH.slice(30);
+    for (const v of [wrapped, `"${ADMIN_HASH}"`, `'${ADMIN_HASH}'`, `PLATFORM_ADMIN_PASSWORD_HASH=${ADMIN_HASH}`, ` ${ADMIN_HASH}\r\n`]) {
+      expect(platformAdminConfig({ PLATFORM_ADMIN_EMAIL: ADMIN_EMAIL, PLATFORM_ADMIN_PASSWORD_HASH: v })?.passwordHash).toBe(ADMIN_HASH);
+    }
+    expect(platformAdminConfig({ PLATFORM_ADMIN_EMAIL: ADMIN_EMAIL, PLATFORM_ADMIN_PASSWORD_HASH: ADMIN_HASH.slice(0, 59) })).toBeNull();
+  });
+
+  it('explains a bad setup without printing the secret', () => {
+    expect(platformAdminConfigProblem({})).toBeNull();
+    expect(platformAdminConfigProblem({ PLATFORM_ADMIN_EMAIL: ADMIN_EMAIL, PLATFORM_ADMIN_PASSWORD_HASH: ADMIN_HASH })).toBeNull();
+    const msg = platformAdminConfigProblem({ PLATFORM_ADMIN_EMAIL: ADMIN_EMAIL, PLATFORM_ADMIN_PASSWORD_HASH: ADMIN_HASH.slice(0, 50) })!;
+    expect(msg).toContain('length 50, expected 60');
+    expect(msg).not.toContain(ADMIN_HASH.slice(7, 50));
+    expect(platformAdminConfigProblem({ PLATFORM_ADMIN_EMAIL: 'nope', PLATFORM_ADMIN_PASSWORD_HASH: ADMIN_HASH })).toContain('no @');
+  });
+
   it('closed until both env values are set and the hash is a real bcrypt hash', () => {
     expect(platformAdminConfig({})).toBeNull();
     expect(platformAdminConfig({ PLATFORM_ADMIN_EMAIL: ADMIN_EMAIL })).toBeNull();

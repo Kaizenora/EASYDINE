@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuditService } from '../audit/audit.service';
@@ -26,15 +26,58 @@ export interface PlatformAdminConfig {
   passwordHash: string;
 }
 
+/**
+ * Undoes common paste damage without weakening the check: a bcrypt hash
+ * never contains whitespace or quotes, so a line break from a wrapped
+ * terminal, surrounding quotes, or the "NAME=" prefix pasted along with the
+ * value are removed. Anything else that is not a bcrypt hash stays refused.
+ */
+export function normalizeAdminHash(raw: string | undefined): string {
+  let v = (raw ?? '').replace(/\s+/g, '');
+  v = v.replace(/^PLATFORM_ADMIN_PASSWORD_HASH=/, '');
+  v = v.replace(/^["'`]+|["'`]+$/g, '');
+  return v;
+}
+
 export function platformAdminConfig(env: NodeJS.ProcessEnv = process.env): PlatformAdminConfig | null {
   const email = (env.PLATFORM_ADMIN_EMAIL ?? '').trim().toLowerCase();
-  const passwordHash = (env.PLATFORM_ADMIN_PASSWORD_HASH ?? '').trim();
+  const passwordHash = normalizeAdminHash(env.PLATFORM_ADMIN_PASSWORD_HASH);
   if (!email || !email.includes('@') || !BCRYPT_HASH.test(passwordHash)) return null;
   return { email, passwordHash };
 }
 
+/**
+ * Why the admin is not active, without revealing the secret: only lengths,
+ * the hash prefix shape and character classes. Null when it is set up (or
+ * deliberately not configured at all).
+ */
+export function platformAdminConfigProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  const rawEmail = env.PLATFORM_ADMIN_EMAIL ?? '';
+  const rawHash = env.PLATFORM_ADMIN_PASSWORD_HASH ?? '';
+  if (!rawEmail && !rawHash) return null;
+  if (platformAdminConfig(env)) return null;
+  const problems: string[] = [];
+  if (!rawEmail.trim()) problems.push('PLATFORM_ADMIN_EMAIL is empty');
+  else if (!rawEmail.includes('@')) problems.push('PLATFORM_ADMIN_EMAIL has no @');
+  const h = normalizeAdminHash(rawHash);
+  if (!rawHash) problems.push('PLATFORM_ADMIN_PASSWORD_HASH is empty');
+  else if (!BCRYPT_HASH.test(h)) {
+    const badChars = h.replace(/[./A-Za-z0-9$]/g, '').length;
+    problems.push(
+      `PLATFORM_ADMIN_PASSWORD_HASH is not a bcrypt hash (length ${h.length}, expected 60; ` +
+        `starts like $2b$12$: ${/^\$2[aby]\$\d{2}\$/.test(h) ? 'yes' : 'no'}; unexpected characters: ${badChars})`,
+    );
+  }
+  return problems.join('; ');
+}
+
 @Injectable()
-export class PlatformAdminService {
+export class PlatformAdminService implements OnModuleInit {
+  onModuleInit() {
+    const problem = platformAdminConfigProblem();
+    if (problem) new Logger('PlatformAdmin').warn(`Platform admin is not active: ${problem}`);
+  }
+
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
