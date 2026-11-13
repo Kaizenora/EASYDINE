@@ -31,6 +31,9 @@ import { reserveKotPrintFrame } from "@/lib/kot-print-dialog";
 import { cartKotHtml, getActivePrintScope, kotUsesDialog, printKotHtmlNow, printSentKot, type LocalPrintEvent } from "@/lib/local-print";
 import { tableLabel } from "@easydine/types";
 import { formatCurrency } from "@/lib/format";
+import { useOrderQueue } from "@/hooks/use-order-queue";
+import { PendingOrdersBar } from "@/components/pos/pending-orders-bar";
+import { classifyFailure, enqueue, newRequestId, removeEntry, updateEntry } from "@/lib/order-queue";
 import { cn } from "@/lib/utils";
 
 export default function PosPage() {
@@ -100,6 +103,9 @@ function PosPageInner() {
   }, [lines, activeOrder]);
 
   const createOrder = useCreateOrder(branchId);
+  // New orders are stored on this device before they are sent (see
+  // lib/order-queue.ts): a timeout or lost connection never loses or doubles one.
+  const orderQueue = useOrderQueue(branchId);
   const addOrderItems = useAddOrderItems(branchId);
   const openBillsQuery = useOpenOrdersForTable(
     branchId,
@@ -255,18 +261,47 @@ function PosPageInner() {
       return;
     }
 
+    // An earlier order for this table that the server has not confirmed yet
+    // is locked: sending another could double it. It syncs on its own.
+    const q = orderQueue;
+    if (
+      orderType === "DINE_IN" &&
+      q.entries.some((e) => e.status !== "confirmed" && e.dto.tableId === sentTableId)
+    ) {
+      slot.release();
+      toast.error("An earlier order for this table is still waiting to be confirmed. It is sent automatically; check Pending orders above.");
+      return;
+    }
+    const requestId = newRequestId();
+    const orderDto = {
+      type: orderType,
+      tableId: orderType === "DINE_IN" ? tableId : undefined,
+      ...(orderType === "DELIVERY" ? { delivery } : {}),
+      ...(orderType !== "DINE_IN" && scheduledFor
+        ? { scheduledFor: new Date(scheduledFor).toISOString() }
+        : {}),
+      items,
+      requestId,
+    };
+    // Persist the exact order + id BEFORE sending (refresh-proof).
+    const queued =
+      q.scope &&
+      enqueue(q.storage, {
+        requestId,
+        scope: q.scope,
+        dto: orderDto,
+        localTotal: lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0),
+        label: orderType === "DINE_IN" && sentTable ? `Table ${tableLabel(sentTable.number, sentTable.name)}` : orderType === "DELIVERY" ? "Delivery" : "Takeaway",
+        createdAt: Date.now(),
+        status: "syncing",
+        attempts: 1,
+        kotPrinted: !!kotHtml,
+      });
     createOrder.mutate(
-      {
-        type: orderType,
-        tableId: orderType === "DINE_IN" ? tableId : undefined,
-        ...(orderType === "DELIVERY" ? { delivery } : {}),
-        ...(orderType !== "DINE_IN" && scheduledFor
-          ? { scheduledFor: new Date(scheduledFor).toISOString() }
-          : {}),
-        items,
-      },
+      orderDto as Parameters<typeof createOrder.mutate>[0],
       {
         onSuccess: (order) => {
+          if (q.scope) removeEntry(q.storage, q.scope, requestId);
           setDrafts((d) => clearDraft(d, sentTableId));
           setActiveCustomer(null);
           setActiveOrder(order);
@@ -276,6 +311,25 @@ function PosPageInner() {
             void printSentKot(order.id, scope, slot, (order.kots ?? []).map((k) => k.id), order.kotHtml || undefined).then(reportKot);
         },
         onError: (err) => {
+          const kind = classifyFailure(err instanceof ApiError ? err.status : undefined);
+          if (kind === "uncertain" && queued && q.scope) {
+            // Maybe saved, maybe not: kept on this device with the SAME id and
+            // sent again automatically; the server returns it once, never twice.
+            updateEntry(q.storage, q.scope, requestId, { status: "pending", lastError: err instanceof Error ? err.message : undefined });
+            setDrafts((d) => clearDraft(d, sentTableId));
+            setLines([]);
+            if (!kotHtml) slot.release();
+            toast.warning(
+              kotHtml
+                ? "No confirmation from the server. The order is saved on this device and will be sent automatically (no duplicate). The kitchen ticket that printed is valid."
+                : "No confirmation from the server. The order is saved on this device and will be sent automatically (no duplicate). Its KOT prints with Reprint KOT once confirmed.",
+            );
+            return;
+          }
+          if (q.scope) {
+            if (kind === "auth") updateEntry(q.storage, q.scope, requestId, { status: "needs-attention", lastError: "Sign in again to send this order." });
+            else removeEntry(q.storage, q.scope, requestId); // a real refusal: nothing was saved
+          }
           if (kotHtml) {
             toast.error(notSentMessage(err, "Order"));
             return;
@@ -325,6 +379,12 @@ function PosPageInner() {
     <div className="flex h-[calc(100dvh-10rem)] flex-col gap-4 lg:h-[calc(100dvh-8rem)]">
       <StatusNote note={note} onClear={clearNote} />
       <TableRequestsBar branchId={branchId} />
+      <PendingOrdersBar
+        entries={orderQueue.entries}
+        onRetry={() => void orderQueue.flush()}
+        onDiscard={orderQueue.discard}
+        onDismiss={orderQueue.dismiss}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <KitchenProgressWidget branchId={branchId} />

@@ -388,22 +388,37 @@ export default function LuxuryCustomerMenu({
     onError: () => toast.error("Could not send request. Please call floor staff."),
   });
 
+  // Pending submission: the exact order + its request id are kept for this
+  // table in this tab (sessionStorage) BEFORE sending, so a timeout, lost
+  // connection or refresh resends the SAME order, which the server returns
+  // once instead of creating a second one. Expires after 15 minutes (the
+  // guest may have left, the table may be closed).
+  const pendingKey = `qr-pending-order:${qrToken}`;
+  type PendingOrder = { requestId: string; payload: Record<string, unknown>; at: number };
+  const readPending = (): PendingOrder | null => {
+    try {
+      const p = JSON.parse(sessionStorage.getItem(pendingKey) ?? "null") as PendingOrder | null;
+      return p && typeof p.requestId === "string" && Date.now() - p.at < 15 * 60_000 ? p : null;
+    } catch {
+      return null;
+    }
+  };
+  const clearPending = () => {
+    try {
+      sessionStorage.removeItem(pendingKey);
+    } catch {
+      /* ignore */
+    }
+  };
+  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
+
   // Place Order Mutation
   const placeOrder = useMutation({
-    mutationFn: () =>
-      api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, {
-        requestId: currentRequestId,
-        guestName: guestName || "Guest",
-        guestPhone: guestPhone || undefined,
-        notes: cart.map((c) => c.cookingNote).filter(Boolean).join("; ") || undefined,
-        items: cart.map((c) => ({
-          menuItemId: c.menuItemId,
-          quantity: c.quantity,
-          modifierIds: c.modifierIds ?? [],
-          kitchenNote: c.cookingNote || undefined,
-        })),
-      }),
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post<{ orderNumber: string }>(`/public/menu/${qrToken}/order`, payload),
     onSuccess: (res: any) => {
+      clearPending();
+      setPendingOrder(null);
       setCurrentRequestId("req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
       vibrateSuccess();
       playSuccessChime();
@@ -463,9 +478,64 @@ export default function LuxuryCustomerMenu({
       queryClient.invalidateQueries({ queryKey: ["public-status", qrToken] });
       toast.success(`Order #${orderNum} placed! Waiting for cashier approval.`);
     },
-    onError: (err) =>
-      toast.error(err instanceof ApiError ? err.message : "Could not place order. Please try again."),
+    onError: (err) => {
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 0 || status === 408 || status === 429 || status >= 500) {
+        // Maybe it arrived, maybe not: keep it and resend the same order.
+        setPendingOrder(readPending());
+        setShowConfirmOrderModal(false);
+        toast.warning("No confirmation yet. We'll keep sending your order. It will not be placed twice.");
+        return;
+      }
+      clearPending();
+      setPendingOrder(null);
+      toast.error(err instanceof ApiError ? err.message : "Could not place order. Please try again.");
+    },
   });
+
+  const submitOrder = () => {
+    const payload = {
+      requestId: currentRequestId,
+      guestName: guestName || "Guest",
+      guestPhone: guestPhone || undefined,
+      notes: cart.map((c) => c.cookingNote).filter(Boolean).join("; ") || undefined,
+      items: cart.map((c) => ({
+        menuItemId: c.menuItemId,
+        quantity: c.quantity,
+        modifierIds: c.modifierIds ?? [],
+        kitchenNote: c.cookingNote || undefined,
+      })),
+    };
+    try {
+      sessionStorage.setItem(pendingKey, JSON.stringify({ requestId: currentRequestId, payload, at: Date.now() }));
+    } catch {
+      /* storage blocked: still send, just not refresh-proof */
+    }
+    placeOrder.mutate(payload);
+  };
+
+  // A pending order (refresh, reconnect): resend it with its own id.
+  useEffect(() => {
+    const p = readPending();
+    if (!p) {
+      clearPending();
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingOrder(p);
+    const resend = () => {
+      const cur = readPending();
+      if (cur && !placeOrder.isPending) placeOrder.mutate(cur.payload);
+    };
+    resend();
+    window.addEventListener("online", resend);
+    const t = setInterval(resend, 15_000);
+    return () => {
+      window.removeEventListener("online", resend);
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrToken]);
 
   // Check-in action with Name & Contact
   const confirmCheckIn = () => {
@@ -1247,6 +1317,11 @@ export default function LuxuryCustomerMenu({
           ⚠ You are offline — ordering is paused. Check your Wi-Fi.
         </div>
       )}
+      {pendingOrder && (
+        <div className="fixed inset-x-0 top-0 z-40 bg-amber-500 px-4 py-2 text-center text-xs font-bold text-black" role="status">
+          Sending your order… It will not be placed twice. Please keep this page open.
+        </div>
+      )}
 
       {/* Top Header (Image 3 match) */}
       <header className="sticky top-0 z-30 border-b border-neutral-800 bg-[#0C0C0E]/95 px-4 py-3 backdrop-blur-md">
@@ -1919,7 +1994,7 @@ export default function LuxuryCustomerMenu({
               <button
                 type="button"
                 disabled={placeOrder.isPending}
-                onClick={() => placeOrder.mutate()}
+                onClick={() => submitOrder()}
                 className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 py-3 text-xs font-black text-black hover:brightness-105 disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {placeOrder.isPending ? "Sending..." : "Confirm and Send"}

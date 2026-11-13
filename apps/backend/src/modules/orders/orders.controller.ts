@@ -254,6 +254,25 @@ export class OrdersController {
     });
   }
 
+  /**
+   * Reconciliation for the offline order queue: was the order with this
+   * client request id already saved in this branch? 404 = not saved (yet).
+   * Scoped to the caller's own branch like every order lookup.
+   */
+  @Auth('orders.create')
+  @Get('by-request')
+  async findByRequestId(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+    @Query('requestId') requestId: string,
+  ) {
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    if (typeof requestId !== 'string' || !requestId) throw new BadRequestException('requestId is required');
+    const order = await this.ordersService.findByRequestId(branchId, requestId);
+    if (!order) throw new NotFoundException('No order with this request id');
+    return order;
+  }
+
   @Auth('orders.create')
   @Get(':id')
   async getOrder(

@@ -28,8 +28,8 @@ const rows: Record<string, any[]> = {
     { id: B_BRANCH, restaurantId: B_RESTAURANT, name: 'B main' },
   ],
   order: [
-    { id: A_ORDER, branchId: A_BRANCH, orderNumber: 'A-1', status: 'OPEN', acceptance: 'PENDING', items: [], payments: [], kots: [] },
-    { id: B_ORDER, branchId: B_BRANCH, orderNumber: 'B-1', status: 'OPEN', acceptance: 'PENDING', items: [], payments: [], kots: [] },
+    { id: A_ORDER, branchId: A_BRANCH, orderNumber: 'A-1', status: 'OPEN', acceptance: 'PENDING', items: [], payments: [], kots: [], clientRequestId: 'req_A_12345678' },
+    { id: B_ORDER, branchId: B_BRANCH, orderNumber: 'B-1', status: 'OPEN', acceptance: 'PENDING', items: [], payments: [], kots: [], clientRequestId: 'req_B_12345678' },
   ],
   kot: [
     { id: 'kot-B', orderId: B_ORDER, status: 'NEW', printedCount: 0, order: { branchId: B_BRANCH }, items: [] },
@@ -222,5 +222,35 @@ describe('order-by-id routes: knowing an order id is not authorization', () => {
     const { controller } = build();
     const o = (await controller.getOrder(userA, A_BRANCH, A_ORDER)) as any;
     expect(o.id).toBe(A_ORDER);
+  });
+});
+
+
+describe('GET /orders/by-request (offline queue reconciliation) is tenant-scoped', () => {
+  it('finds my own order by its request id', async () => {
+    const { controller } = build();
+    const o: any = await controller.findByRequestId(userA, A_BRANCH, 'req_A_12345678');
+    expect(o.id).toBe(A_ORDER);
+  });
+
+  it('missing or empty branchId is 400', async () => {
+    const { controller } = build();
+    await expect(controller.findByRequestId(userA, undefined as any, 'req_A_12345678')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.findByRequestId(userA, '' as any, 'req_A_12345678')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("another restaurant's branch is 403", async () => {
+    const { controller } = build();
+    await expect(controller.findByRequestId(userA, B_BRANCH, 'req_B_12345678')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("another restaurant's request id through my own branch is 404, never their order", async () => {
+    const { controller } = build();
+    await expect(controller.findByRequestId(userA, A_BRANCH, 'req_B_12345678')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('a malformed request id is not looked up', async () => {
+    const { controller } = build();
+    await expect(controller.findByRequestId(userA, A_BRANCH, "x' OR 1=1")).rejects.toBeInstanceOf(NotFoundException);
   });
 });

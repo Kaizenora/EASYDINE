@@ -20,7 +20,9 @@ export class AppController {
     return {
       status: 'ok',
       commit: /^[0-9a-f]{7,40}$/i.test(sha) ? sha.slice(0, 12) : null,
-      features: ['kot-browser'],
+      // order-dedup: POST /orders honours body.requestId (one order per id) and
+      // GET /orders/by-request exists, so the web's offline queue may replay.
+      features: ['kot-browser', 'order-dedup'],
     };
   }
 }

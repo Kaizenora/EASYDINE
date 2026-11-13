@@ -400,7 +400,54 @@ export class OrdersService {
     return id;
   }
 
+  /**
+   * Creates an order exactly once per request id (dto.requestId, or
+   * options.clientRequestId). A retry with the same id returns the order the
+   * first attempt saved, including when two attempts race: the
+   * (branchId, clientRequestId) unique index decides, and the loser returns
+   * the winner's order instead of failing.
+   */
   async createOrder(
+    branchId: string,
+    userId: string,
+    dto: CreateOrderDto,
+    options: Parameters<OrdersService['createOrderOnce']>[3] = {},
+  ) {
+    const requestId =
+      options.clientRequestId ??
+      (dto as { requestId?: string }).requestId ??
+      ((dto as { clientRequestId?: string }).clientRequestId || undefined);
+    const opts = requestId ? { ...options, clientRequestId: requestId } : options;
+    try {
+      return await this.createOrderOnce(branchId, userId, dto, opts);
+    } catch (err) {
+      if (
+        requestId &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const existing = await this.prisma.order.findFirst({
+          where: { branchId, clientRequestId: requestId },
+          select: { id: true },
+        });
+        if (existing) return this.getOrder(branchId, existing.id);
+      }
+      throw err;
+    }
+  }
+
+  /** The order previously created with this request id in this branch, or null. */
+  async findByRequestId(branchId: string, requestId: string) {
+    requireBranch(branchId);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(requestId)) return null;
+    const o = await this.prisma.order.findFirst({
+      where: { branchId, clientRequestId: requestId },
+      select: { id: true },
+    });
+    return o ? this.getOrder(branchId, o.id) : null;
+  }
+
+  private async createOrderOnce(
     branchId: string,
     userId: string,
     dto: CreateOrderDto,
