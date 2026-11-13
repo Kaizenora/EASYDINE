@@ -14,7 +14,6 @@ import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import {
   NEXT_STATUS,
-  kotStepRank,
   useRejectKot,
   useSetKotPriority,
   useUpdateKotStatus,
@@ -100,8 +99,8 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<KotStatusDto | null>(null);
-  // Forward steps apply at once (shown immediately, confirmed by the server
-  // in the background); only a step back asks first.
+  // Applied after the confirmation: shown immediately (optimistic), confirmed
+  // by the server in the background, rolled back with a message if refused.
   const applyStatus = (target: KotStatusDto) => {
     updateStatus.mutate(
       { id: ticket.id, status: target },
@@ -115,10 +114,11 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
       },
     );
   };
+  // Every status change asks first (owner's choice); on Confirm the board
+  // moves at once and the server confirms in the background.
   const requestStatus = (target: KotStatusDto) => {
     if (target === ticket.status) return;
-    if (kotStepRank(target) > kotStepRank(ticket.status)) applyStatus(target);
-    else setConfirmStatus(target);
+    setConfirmStatus(target);
   };
   const reject = useRejectKot(branchId);
   const { data: me } = useCurrentUser();
