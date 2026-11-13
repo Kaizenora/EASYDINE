@@ -10,8 +10,6 @@
 // tax noise — different enough from a receipt that a shared template with
 // conditionals would be harder to read than two small, honest ones.
 
-import { BRAND_PRINT_LOGO_PNG } from "./brand-print-logo";
-
 function esc(value: string | number | null | undefined): string {
   return String(value ?? '').replace(
     /[&<>"']/g,
@@ -123,7 +121,6 @@ export function buildKotHtml({
   .note { font-size: 13px; font-weight: 600; color: #111; padding-left: 4px; }
   .reprint { font-size: 16px; font-weight: 700; text-align: center; margin: 2px 0; }
   .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
-  .powered-logo { display: block; width: 26mm; max-width: 60%; height: auto; margin: 6px auto 1px; image-rendering: pixelated; }
   ${kotPageCss(paper)}
 </style>
 </head>
@@ -148,7 +145,6 @@ export function buildKotHtml({
       <tbody>${itemRows}</tbody>
     </table>
     <hr class="rule">
-    <img class="powered-logo" src="${BRAND_PRINT_LOGO_PNG}" alt="EasyDine" />
     <p class="powered">Powered by EasyDine</p>
   </div>
 </body>

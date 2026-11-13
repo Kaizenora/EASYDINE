@@ -32,11 +32,13 @@ describe('KOT template: browser copy matches the server', () => {
   });
 });
 
-describe('KOT template: EasyDine footer logo', () => {
-  it('prints the small logo once on every paper size', () => {
+describe('KOT template: EasyDine footer', () => {
+  it('says "Powered by EasyDine" in text, with no logo image, on every paper size', () => {
     for (const paper of ['58mm', '80mm', 'A4'] as const) {
       const html = serverKot({ branchName: 'B', order: { orderNumber: '1', type: 'TAKEAWAY', createdAt: new Date(), table: null, customer: null, items: [] }, paper } as any);
-      expect(html.match(/class="powered-logo" src="data:image\/png;base64,/g)).toHaveLength(1);
+      expect(html).toContain('Powered by EasyDine</p>');
+      expect(html).not.toContain('data:image/png');
+      expect(html).not.toContain('powered-logo');
     }
   });
 });

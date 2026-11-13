@@ -386,8 +386,7 @@ describe('test slip', () => {
   });
 });
 
-describe('EasyDine footer logo (raster)', () => {
-  const GS_V0 = '1d7630001e003b00'; // GS v 0, normal, 30 bytes (240 dots) x 59 rows
+describe('EasyDine footer on printed bills and KOTs', () => {
   const kot = {
     orderNumber: '7',
     type: 'TAKEAWAY',
@@ -404,10 +403,10 @@ describe('EasyDine footer logo (raster)', () => {
     expect(lines.some((l) => l.includes('Powered by EasyDine'))).toBe(true);
   });
 
-  it.each([58, 80] as const)('prints the logo once on a %s mm KOT', (mm) => {
+  it.each([58, 80] as const)('a %s mm KOT prints only the text line, no logo', (mm) => {
     const job = buildKotEscPosJob({ branchName: 'Main', order: kot, profile: resolveProfile({ paperWidthMm: mm }) } as any);
     const { commands, text } = readJob(job.buffer);
-    expect(commands.filter((c) => c === GS_V0)).toHaveLength(1);
+    expect(commands.filter((c) => c.startsWith('1d7630'))).toHaveLength(0);
     expect(text).toContain('Powered by EasyDine');
   });
 });
