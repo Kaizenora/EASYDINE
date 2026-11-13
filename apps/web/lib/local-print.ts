@@ -10,10 +10,12 @@ import {
   BridgeError,
   detectBridge,
   hasBridgeHost,
+  helperKnownDown,
   listInstalledPrinters,
   prepareHtmlForLocalPrint,
   printHtmlLocal,
   printRawLocal,
+  watchHelper,
 } from "./local-printer-bridge.ts";
 import { billQueryString, buildSampleReceiptHtml, getCashierPaperSize, receiptTzParam, registerBillPrintRouter, type BillQuery } from "./print.ts";
 import { kotPageUrl, printKotInFrame, reserveKotPrintFrame, type KotPrintSlot } from "./kot-print-dialog.ts";
@@ -611,7 +613,11 @@ function browserKotQuery(): string {
 function hasLocalKitchenRoute(scope: PrintScope): boolean {
   const k = getMappings(scope).kitchen;
   if (!k) return false;
-  return k.transport === "server" ? onServerPc() : hasBridgeHost();
+  if (k.transport === "server") return onServerPc();
+  // A paired helper that did not answer its last check: use the dialog now
+  // (no 1.5 s wait); the background watch notices when it is back.
+  watchHelper();
+  return hasBridgeHost() && !helperKnownDown();
 }
 
 async function openKotDialog(
@@ -952,7 +958,9 @@ export function routeBillToLocalPrinter(
   const scope = activeScope;
   const saved = scope.branchId === branchId ? getMappings(scope).bill : undefined;
   if (!saved) return false;
-  if (saved.transport === "bridge" && !hasBridgeHost()) return false;
+  // Not paired, or the paired helper did not answer its last check: the
+  // print dialog opens at once (same click), no waiting for a timeout.
+  if (saved.transport === "bridge" && (!hasBridgeHost() || helperKnownDown())) return false;
   if (saved.transport === "server" && !onServerPc()) return false;
   void (async () => {
     const route = await routeFor("bill", scope);

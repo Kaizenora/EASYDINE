@@ -267,6 +267,38 @@ function request<T>(type: string, args: Record<string, unknown>, timeoutMs: numb
 
 let helloPromise: Promise<boolean> | null = null;
 
+// Last answer of the paired helper. Used only to skip waiting when it is known
+// to be down (stopped / window closed): then a KOT opens the print dialog at
+// once instead of after a 1.5 s probe. A helper that answered is still probed
+// again before every direct print, so "paired" alone never means "direct".
+const HELPER_DOWN_MEMORY_MS = 60_000;
+const HELPER_RECHECK_MS = 15_000;
+let lastHelperProbe: { ok: boolean; at: number } | null = null;
+let helperWatch: ReturnType<typeof setInterval> | null = null;
+
+/** The paired helper did not answer its last check (within the last minute). */
+export function helperKnownDown(now: number = Date.now()): boolean {
+  return !!lastHelperProbe && !lastHelperProbe.ok && now - lastHelperProbe.at < HELPER_DOWN_MEMORY_MS;
+}
+
+/** Tests only. */
+export function __setLastHelperProbeForTests(v: { ok: boolean; at: number } | null) {
+  lastHelperProbe = v;
+}
+
+/**
+ * Keeps lastHelperProbe fresh while this browser is paired (cheap loopback
+ * hello every 15 s), so a stopped helper is noticed before staff click.
+ */
+export function watchHelper(): void {
+  if (helperWatch || typeof window === "undefined") return;
+  const tick = () => {
+    if (bridgeKind() === "helper") void detectBridge();
+  };
+  tick();
+  helperWatch = setInterval(tick, HELPER_RECHECK_MS);
+}
+
 /**
  * True when a working print bridge answers right now. The WebView2 answer is
  * cached; the helper is asked every time (it can be stopped at any moment).
@@ -277,7 +309,11 @@ export function detectBridge(): Promise<boolean> {
   if (kind === "helper") {
     return request<{ version: number }>("hello", {}, HELLO_TIMEOUT_MS)
       .then((r) => typeof r?.version === "number" && r.version >= 1)
-      .catch(() => false);
+      .catch(() => false)
+      .then((ok) => {
+        lastHelperProbe = { ok, at: Date.now() };
+        return ok;
+      });
   }
   if (!helloPromise) {
     helloPromise = request<{ version: number }>("hello", {}, HELLO_TIMEOUT_MS)

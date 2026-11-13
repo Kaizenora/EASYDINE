@@ -157,3 +157,24 @@ test("helper is thermal only: driver/HTML pages are refused before any request",
   await assert.rejects(printHtmlLocal("Kitchen", ["<p>x</p>"], "A4", "KOT"), (e: unknown) => e instanceof BridgeError && e.code === "UNSUPPORTED");
   assert.equal(calls.length, 0);
 });
+
+test("helper stopped: remembered as down, so a KOT can open the dialog at once", async () => {
+  await paired();
+  bridge.__setLastHelperProbeForTests(null);
+  assert.equal(bridge.helperKnownDown(), false, "unknown is not 'down'");
+  stubFetch(() => {
+    throw new TypeError("Failed to fetch");
+  });
+  assert.equal(await detectBridge(), false);
+  assert.equal(bridge.helperKnownDown(), true);
+  // Forgotten after a minute: the next action checks again.
+  assert.equal(bridge.helperKnownDown(Date.now() + 61_000), false);
+});
+
+test("helper back: one good answer clears 'down' (direct printing again)", async () => {
+  await paired();
+  bridge.__setLastHelperProbeForTests({ ok: false, at: Date.now() });
+  stubFetch(() => respond(200, { ok: true, version: 1 }));
+  assert.equal(await detectBridge(), true);
+  assert.equal(bridge.helperKnownDown(), false);
+});
