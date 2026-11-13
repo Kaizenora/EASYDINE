@@ -264,6 +264,7 @@ export function buildReceiptEscPosJob({
       : 'Thank you! Visit again.',
     { align: 'center' },
   );
+  w.text('Powered by EasyDine', { align: 'center' });
   return {
     buffer: w.finish({ drawer: openDrawer }),
     unsupportedChars: [...w.unsupported],
@@ -348,6 +349,7 @@ export function buildKotEscPosJob({
   }
   w.rule('=');
   w.text(`${order.items.length} line(s), ${units} item(s)`);
+  w.text('Powered by EasyDine', { align: 'center' });
   return {
     buffer: w.finish(),
     unsupportedChars: [...w.unsupported],

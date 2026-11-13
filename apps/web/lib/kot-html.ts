@@ -120,6 +120,7 @@ export function buildKotHtml({
   .sub { font-size: 13px; color: #444; padding-left: 4px; }
   .note { font-size: 13px; font-weight: 600; color: #111; padding-left: 4px; }
   .reprint { font-size: 16px; font-weight: 700; text-align: center; margin: 2px 0; }
+  .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
   ${kotPageCss(paper)}
 </style>
 </head>
@@ -144,6 +145,7 @@ export function buildKotHtml({
       <tbody>${itemRows}</tbody>
     </table>
     <hr class="rule">
+    <p class="powered">Powered by EasyDine</p>
   </div>
 </body>
 </html>`;

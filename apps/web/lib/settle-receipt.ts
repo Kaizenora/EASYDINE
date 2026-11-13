@@ -56,5 +56,6 @@ ${row("TOTAL PAID", `₹${r.totalAmount}`, true)}
 </table>
 <hr>
 <p class="c m">Thank you for dining with us!</p>
+<p class="c" style="font-size:9px;color:#777;margin-top:4px">Powered by EasyDine</p>
 </body></html>`;
 }

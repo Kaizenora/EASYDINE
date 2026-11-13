@@ -1,5 +1,6 @@
 "use client";
 
+import { PoweredByEasyDine } from "@/components/order/powered-by";
 import {
   ArrowLeft,
   BellRing,
@@ -670,11 +671,12 @@ export default function LuxuryCustomerMenu({
   // Out-of-service table: the notice only. No menu, cart or ordering.
   if (data?.outOfService) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
+      <div className="relative flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0C0C0E] px-6 text-center text-white">
         <UtensilsCrossed className="h-12 w-12 text-[#E5A93C]" />
         <p className="max-w-xs text-base font-semibold" data-testid="table-out-of-service">
           {data.message || "This table is out of service. Please move to another table. Thank you."}
         </p>
+        <PoweredByEasyDine className="absolute bottom-6 left-0 right-0" />
       </div>
     );
   }
@@ -881,6 +883,7 @@ export default function LuxuryCustomerMenu({
         <p className="mt-6 text-center text-xs font-medium text-neutral-500">
           No signup needed · your order goes to this table
         </p>
+        <PoweredByEasyDine tone="light" className="mt-3" />
       </div>
     );
   }
@@ -1177,6 +1180,8 @@ export default function LuxuryCustomerMenu({
           </div>
         </div>
 
+        <PoweredByEasyDine className="mt-6 pb-6" />
+
         {/* Modals for Waiter & Bill */}
         {showWaiterModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -1464,6 +1469,7 @@ export default function LuxuryCustomerMenu({
             </div>
           </section>
         ))}
+        <PoweredByEasyDine className="mt-8" />
       </main>
 
       {/* Floating Category Menu Button (Image 3 match: [ ☰ Menu ]) */}

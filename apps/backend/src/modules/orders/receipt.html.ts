@@ -237,6 +237,7 @@ export function buildReceiptHtml({
   .vf { text-align: center; font-size: 11px; }
   .vf svg { display: block; margin: 4px auto; }
   .footer { text-align: center; margin-top: 6px; font-size: 11px; }
+  .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
 ${paperSize === '58mm' ? `
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 2mm; color: #111; width: 54mm; }
   h1 { font-size: 13px; text-align: center; margin: 0 0 2px; }
@@ -325,6 +326,7 @@ ${paperSize === '58mm' ? `
         ? 'Bill only &mdash; not a receipt. Payment pending.'
         : 'Thank you! Visit again.'
     }</p>
+    <p class="powered">Powered by EasyDine</p>
   </div>
 </body>
 </html>`;
