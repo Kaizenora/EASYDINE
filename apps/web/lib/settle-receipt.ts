@@ -1,4 +1,3 @@
-import { BRAND_PRINT_LOGO_PNG } from "./brand-print-logo.ts";
 // Bill slip for the Tables page "Settle bill" receipt when the server's full
 // receipt page cannot be used (an older backend that does not return the
 // order id). Sized for the cashier's bill paper (58 / 80 mm thermal or A4),
@@ -57,7 +56,6 @@ ${row("TOTAL PAID", `₹${r.totalAmount}`, true)}
 </table>
 <hr>
 <p class="c m">Thank you for dining with us!</p>
-<img src="${BRAND_PRINT_LOGO_PNG}" alt="EasyDine" style="display:block;width:26mm;max-width:60%;height:auto;margin:6px auto 1px;image-rendering:pixelated" />
-<p class="c" style="font-size:9px;color:#777;margin-top:0">Powered by EasyDine</p>
+<p class="c" style="font-size:9px;color:#777;margin-top:4px">Powered by EasyDine</p>
 </body></html>`;
 }

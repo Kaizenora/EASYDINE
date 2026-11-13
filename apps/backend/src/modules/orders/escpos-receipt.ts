@@ -26,7 +26,7 @@ import { BRAND_PRINT_LOGO_RASTER } from './brand-print-logo';
 
 const BRAND_LOGO_BITS = Buffer.from(BRAND_PRINT_LOGO_RASTER.base64, 'base64');
 
-/** Small EasyDine logo (1-bit raster) + one text line at the foot of a bill or KOT. */
+/** Small EasyDine logo (1-bit raster) + one text line at the foot of a KOT. Bills print the text only. */
 function printBrandFooter(w: EscposWriter): void {
   w.raster(BRAND_PRINT_LOGO_RASTER.widthBytes, BRAND_PRINT_LOGO_RASTER.height, BRAND_LOGO_BITS);
   w.text('Powered by EasyDine', { align: 'center' });
@@ -273,7 +273,7 @@ export function buildReceiptEscPosJob({
       : 'Thank you! Visit again.',
     { align: 'center' },
   );
-  printBrandFooter(w);
+  w.text('Powered by EasyDine', { align: 'center' });
   return {
     buffer: w.finish({ drawer: openDrawer }),
     unsupportedChars: [...w.unsupported],
