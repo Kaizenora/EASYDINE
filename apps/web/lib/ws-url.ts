@@ -20,3 +20,19 @@ export function resolveWsUrl(): string {
   }
   return "http://localhost:4001";
 }
+
+/**
+ * socket.io transport options. Vercel's rewrite proxy cannot carry a
+ * WebSocket, so on a *.vercel.app page (or when NEXT_PUBLIC_WS_POLLING_ONLY=1)
+ * every connection tried the upgrade, failed with a console error, and fell
+ * back to polling anyway. There it starts on polling and never tries the
+ * upgrade. A direct NEXT_PUBLIC_WS_URL (e.g. the Railway host) or a
+ * self-hosted install keeps WebSockets.
+ */
+export function wsTransportOptions(): { transports?: ("polling" | "websocket")[]; upgrade?: boolean } {
+  if (process.env.NEXT_PUBLIC_WS_URL) return {};
+  const pollingOnly =
+    process.env.NEXT_PUBLIC_WS_POLLING_ONLY === "1" ||
+    (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app"));
+  return pollingOnly ? { transports: ["polling"], upgrade: false } : {};
+}
