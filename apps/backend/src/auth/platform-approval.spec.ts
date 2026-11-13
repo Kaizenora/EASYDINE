@@ -129,6 +129,17 @@ describe('PlatformAdminService + guard', () => {
     expect(await svc.decide('r1', 'REJECTED')).toMatchObject({ status: 'REJECTED', changed: true });
     await expect(svc.decide('nope', 'APPROVED')).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('rejecting closes the restaurant\'s open live sockets; approving does not', async () => {
+    const { prisma, audit } = make([{ id: 'r1', name: 'New Cafe', approvalStatus: 'PENDING' }]);
+    prisma.branch = { findMany: jest.fn(async () => [{ id: 'b1' }, { id: 'b2' }]) };
+    const realtime = { disconnectBranches: jest.fn() };
+    const svc = new PlatformAdminService(jwt, prisma, audit as any, realtime as any);
+    await svc.decide('r1', 'APPROVED');
+    expect(realtime.disconnectBranches).not.toHaveBeenCalled();
+    await svc.decide('r1', 'REJECTED');
+    expect(realtime.disconnectBranches).toHaveBeenCalledWith(['b1', 'b2']);
+  });
 });
 
 describe('restaurant signup and login respect approval', () => {
@@ -163,13 +174,13 @@ describe('restaurant signup and login respect approval', () => {
     expect(r).toEqual({ pending: true, restaurantName: 'New Cafe' });
   });
 
-  it('the very first restaurant of a fresh install is approved and signed in', async () => {
+  it('even the very first restaurant of a fresh install is PENDING, with no token', async () => {
     const { svc, prisma } = authService();
     prisma.restaurant.findFirst.mockResolvedValue(null);
     prisma.user.findFirst.mockResolvedValue(null);
     const r = await svc.register(dto as any);
-    expect(r.pending).toBeFalsy();
-    expect(typeof r.token).toBe('string');
+    expect(r).toEqual({ pending: true, restaurantName: 'New Cafe' });
+    expect((r as any).token).toBeUndefined();
   });
 
   it("nobody can sign up with the platform admin's login ID", async () => {

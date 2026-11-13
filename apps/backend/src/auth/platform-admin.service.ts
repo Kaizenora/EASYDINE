@@ -1,9 +1,10 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit, Optional, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { APPROVAL_STATUSES, type ApprovalStatus } from './approval';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { clearSessionCache } from './session-cache';
 
 // One platform (non-tenant) admin who approves restaurant signups. It is not
@@ -82,6 +83,7 @@ export class PlatformAdminService implements OnModuleInit {
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Optional() private readonly realtime?: RealtimeGateway,
   ) {}
 
   isProvisioned(): boolean {
@@ -171,6 +173,10 @@ export class PlatformAdminService implements OnModuleInit {
       return { id: r.id, status: (now?.approvalStatus ?? status) as ApprovalStatus, changed: false };
     }
     clearSessionCache();
+    if (status !== 'APPROVED' && this.realtime) {
+      const branches = await this.prisma.branch.findMany({ where: { restaurantId: r.id }, select: { id: true } });
+      this.realtime.disconnectBranches(branches.map((b) => b.id));
+    }
     await this.audit.record({
       userId: null,
       action: status === 'APPROVED' ? 'platform.restaurant_approved' : 'platform.restaurant_rejected',

@@ -197,9 +197,9 @@ export class AuthService {
     if (platformAdminConfig()?.email === dto.email.trim().toLowerCase()) {
       throw new BadRequestException('An account with this email already exists');
     }
-    // The very first restaurant on a fresh install is the operator's own and
-    // is approved; every later self-signup waits for the platform admin.
-    const approvalStatus = (await this.hasAnyRestaurant()) ? 'PENDING' : 'APPROVED';
+    // Every self-signup, including the first on a fresh install, waits for
+    // the platform admin: no session and no access until it is approved.
+    const approvalStatus = 'PENDING' as const;
     const existing = await this.prisma.user.findFirst({
       where: { email: dto.email },
     });
@@ -227,7 +227,7 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    const owner = await this.prisma.$transaction(
+    await this.prisma.$transaction(
       async (tx) => {
         const restaurant = await tx.restaurant.create({
           data: { name: dto.restaurantName, approvalStatus },
@@ -293,10 +293,7 @@ export class AuthService {
       },
     );
 
-    if (approvalStatus !== 'APPROVED') {
-      return { pending: true, restaurantName: dto.restaurantName };
-    }
-    return this.issueSession(owner);
+    return { pending: true, restaurantName: dto.restaurantName };
   }
 
   async hasAnyRestaurant(): Promise<boolean> {
