@@ -22,6 +22,15 @@ import {
   resolveProfile,
   type PrinterProfile,
 } from './escpos/encoder';
+import { BRAND_PRINT_LOGO_RASTER } from './brand-print-logo';
+
+const BRAND_LOGO_BITS = Buffer.from(BRAND_PRINT_LOGO_RASTER.base64, 'base64');
+
+/** Small EasyDine logo (1-bit raster) + one text line at the foot of a bill or KOT. */
+function printBrandFooter(w: EscposWriter): void {
+  w.raster(BRAND_PRINT_LOGO_RASTER.widthBytes, BRAND_PRINT_LOGO_RASTER.height, BRAND_LOGO_BITS);
+  w.text('Powered by EasyDine', { align: 'center' });
+}
 
 export { resolveProfile, type PrinterProfile } from './escpos/encoder';
 
@@ -264,7 +273,7 @@ export function buildReceiptEscPosJob({
       : 'Thank you! Visit again.',
     { align: 'center' },
   );
-  w.text('Powered by EasyDine', { align: 'center' });
+  printBrandFooter(w);
   return {
     buffer: w.finish({ drawer: openDrawer }),
     unsupportedChars: [...w.unsupported],
@@ -349,7 +358,7 @@ export function buildKotEscPosJob({
   }
   w.rule('=');
   w.text(`${order.items.length} line(s), ${units} item(s)`);
-  w.text('Powered by EasyDine', { align: 'center' });
+  printBrandFooter(w);
   return {
     buffer: w.finish(),
     unsupportedChars: [...w.unsupported],

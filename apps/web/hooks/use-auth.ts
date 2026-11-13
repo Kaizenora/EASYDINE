@@ -18,12 +18,15 @@ export function useCurrentUser() {
 export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (dto: LoginDto) => api.post<{ user: SessionUser }>("/auth/login", dto),
+    mutationFn: (dto: LoginDto) =>
+      api.post<{ user?: SessionUser; platformAdmin?: boolean }>("/auth/login", dto),
     onSuccess: (data) => {
       // Anything cached before this login belongs to nobody (or to the previous
       // user): drop it so branches and the rest load fresh for this account.
       queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
-      queryClient.setQueryData(["auth", "me"], data);
+      // The platform admin has no restaurant session.
+      if (data.user) queryClient.setQueryData(["auth", "me"], data);
+      else queryClient.removeQueries({ queryKey: ["auth", "me"] });
     },
   });
 }
@@ -31,9 +34,11 @@ export function useLogin() {
 export function useRegister() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (dto: RegisterDto) => api.post<{ user: SessionUser }>("/auth/register", dto),
+    mutationFn: (dto: RegisterDto) =>
+      api.post<{ user?: SessionUser; pending?: boolean; restaurantName?: string }>("/auth/register", dto),
     onSuccess: (data) => {
-      queryClient.setQueryData(["auth", "me"], data);
+      // A signup waiting for approval gets no session.
+      if (data.user) queryClient.setQueryData(["auth", "me"], data);
     },
   });
 }

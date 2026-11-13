@@ -86,6 +86,14 @@ model Restaurant {
   maxManualDiscountPercent Decimal @default(100) @db.Decimal(5, 2)
   requireDiscountReason    Boolean @default(false)
 
+  // Platform approval (2026-11-13). New self-signups start PENDING and get no
+  // session or product access until the platform admin approves them.
+  // APPROVED | PENDING | REJECTED. The column default is APPROVED so every
+  // restaurant that existed before this change stays approved (backfill);
+  // AuthService.register sets PENDING explicitly for new signups.
+  approvalStatus    String    @default("APPROVED")
+  approvalDecidedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -100,6 +108,7 @@ model Restaurant {
   gatewayPayments           GatewayPayment[]
   gatewayRefunds            GatewayRefund[]
 
+  @@index([approvalStatus])
   @@map("restaurants")
 }
 

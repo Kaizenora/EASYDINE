@@ -69,3 +69,13 @@ describe('receipt HTML with VERI*FACTU', () => {
     ).not.toContain('QR tributario');
   });
 });
+
+describe('EasyDine footer logo (HTML)', () => {
+  it('a bill carries the small monochrome logo once, above the text line, with the restaurant still first', () => {
+    const html = buildReceiptHtml(base as any);
+    expect(html.match(/class="powered-logo" src="data:image\/png;base64,/g)).toHaveLength(1);
+    expect(html.indexOf('powered-logo" src')).toBeLessThan(html.indexOf('Powered by EasyDine</p>'));
+    expect(html.indexOf('Bar')).toBeLessThan(html.indexOf('powered-logo" src'));
+    expect(html).toContain('.powered-logo { display: block; width: 26mm; max-width: 60%;');
+  });
+});

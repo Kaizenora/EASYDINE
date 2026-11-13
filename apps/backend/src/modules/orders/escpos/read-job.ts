@@ -17,6 +17,11 @@ export function readJob(
       const len = op === 0x40 ? 2 : op === 0x70 ? 5 : 3;
       commands.push(buf.subarray(i, i + len).toString('hex'));
       i += len;
+    } else if (b === 0x1d && buf[i + 1] === 0x76 && buf[i + 2] === 0x30) {
+      // GS v 0 m xL xH yL yH + image bytes: keep the header, skip the dots.
+      const bytes = (buf[i + 4] | (buf[i + 5] << 8)) * (buf[i + 6] | (buf[i + 7] << 8));
+      commands.push(buf.subarray(i, i + 8).toString('hex'));
+      i += 8 + bytes;
     } else if (b === 0x1d) {
       commands.push(buf.subarray(i, i + 3).toString('hex'));
       i += 3;

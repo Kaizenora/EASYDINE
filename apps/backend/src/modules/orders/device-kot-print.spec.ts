@@ -1,4 +1,5 @@
 import { ConflictException } from '@nestjs/common';
+import { readJob } from './escpos/read-job';
 import { AWAITING_DEVICE_RESULT, KotPrintService, safeTimeZone } from './kot-print.service';
 import { OrdersService } from './orders.service';
 import {
@@ -93,8 +94,8 @@ describe('Device KOT printing (cashier PC local bridge)', () => {
     const r58 = await svc.printOrder('b-1', 'ord-1', false, true, { format: 'escpos', paper: '58mm' });
     prisma.kot.findMany.mockResolvedValue([kotFixture()]);
     const r80 = await svc.printOrder('b-1', 'ord-1', false, true, { format: 'escpos', paper: '80mm' });
-    const longest = (b64: string) =>
-      Math.max(...Buffer.from(b64, 'base64').toString('latin1').split('\n').map((l) => l.replace(/[\x00-\x1f]/g, '').length));
+    // Text lines only: readJob skips the raster logo's image bytes.
+    const longest = (b64: string) => Math.max(...readJob(Buffer.from(b64, 'base64')).lines.map((l) => l.length));
     expect(longest(r58.escpos![0])).toBeLessThan(longest(r80.escpos![0]));
   });
 

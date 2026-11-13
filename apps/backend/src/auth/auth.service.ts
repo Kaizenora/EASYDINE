@@ -1,3 +1,5 @@
+import { isApproved, notApprovedError } from './approval';
+import { platformAdminConfig } from './platform-admin.service';
 import { clearSessionCache } from './session-cache';
 import {
   ForbiddenException,
@@ -144,7 +146,17 @@ export class AuthService {
       await this.twoFactor.verifyLogin(user, dto.totp);
     }
 
+    await this.assertRestaurantApproved(user.restaurantId);
     return this.issueSession(user);
+  }
+
+  /** No session for a restaurant the platform admin has not approved. */
+  private async assertRestaurantApproved(restaurantId: string) {
+    const r = await this.prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { approvalStatus: true },
+    });
+    if (!isApproved(r?.approvalStatus)) throw notApprovedError(r?.approvalStatus);
   }
 
   /** Phone-number login: compare real digits, then the password, against every active match. */
@@ -163,7 +175,12 @@ export class AuthService {
     return null;
   }
 
-  async register(dto: RegisterDto) {
+  async register(
+    dto: RegisterDto,
+  ): Promise<
+    | { pending: true; restaurantName: string; token?: undefined; user?: undefined }
+    | { pending?: false; token: string; user: ReturnType<AuthService['toSessionUser']> }
+  > {
     // Sign-up is first-run setup. Once the server has a restaurant, anyone on
     // the network creating another would get an OWNER role - which carries the
     // instance-wide backup, update and sync permissions - so it stays closed
@@ -176,6 +193,13 @@ export class AuthService {
         'Sign-up is closed on this server. Ask the restaurant owner to create your account.',
       );
     }
+    // The platform admin's login ID can never belong to a restaurant account.
+    if (platformAdminConfig()?.email === dto.email.trim().toLowerCase()) {
+      throw new BadRequestException('An account with this email already exists');
+    }
+    // The very first restaurant on a fresh install is the operator's own and
+    // is approved; every later self-signup waits for the platform admin.
+    const approvalStatus = (await this.hasAnyRestaurant()) ? 'PENDING' : 'APPROVED';
     const existing = await this.prisma.user.findFirst({
       where: { email: dto.email },
     });
@@ -206,7 +230,7 @@ export class AuthService {
     const owner = await this.prisma.$transaction(
       async (tx) => {
         const restaurant = await tx.restaurant.create({
-          data: { name: dto.restaurantName },
+          data: { name: dto.restaurantName, approvalStatus },
         });
         const branch = await tx.branch.create({
           data: { restaurantId: restaurant.id, name: dto.branchName },
@@ -269,6 +293,9 @@ export class AuthService {
       },
     );
 
+    if (approvalStatus !== 'APPROVED') {
+      return { pending: true, restaurantName: dto.restaurantName };
+    }
     return this.issueSession(owner);
   }
 
@@ -300,6 +327,7 @@ export class AuthService {
       throw new UnauthorizedException('Incorrect PIN');
     }
 
+    await this.assertRestaurantApproved(user.restaurantId);
     return this.issueSession(user);
   }
 

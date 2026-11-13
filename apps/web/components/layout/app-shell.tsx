@@ -37,7 +37,8 @@ function RestaurantBrand() {
     (restaurant?.logoUrl &&
       restaurant.logoUrl !== "/logo.png" &&
       restaurant.logoUrl !== "/designer-logo.png" &&
-      restaurant.logoUrl !== "/custom-logo.png")
+      restaurant.logoUrl !== "/custom-logo.png" &&
+      !restaurant.logoUrl.startsWith("/brand/"))
   );
   const logoSrc = restaurant?.logoUrl;
 
@@ -54,7 +55,7 @@ function RestaurantBrand() {
           }}
         />
       ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 font-black text-black text-xs shadow-sm">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary font-black text-primary-foreground text-xs shadow-sm">
           {initials}
         </div>
       )}
@@ -62,7 +63,7 @@ function RestaurantBrand() {
         <span className="truncate text-sm font-bold tracking-tight text-sidebar-foreground">
           {brandName}
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-500">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">
           CASHIER POS
         </span>
       </div>

@@ -5,7 +5,7 @@ import { loginSchema, type LoginDto } from "@easydine/types";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AlertCircle } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
@@ -15,8 +15,18 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api";
+import { ApprovalNotice, approvalStateFromError } from "@/components/auth/approval-notice";
+import { useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const login = useLogin();
   // Set once the server says this account uses two-factor authentication.
@@ -24,6 +34,12 @@ export default function LoginPage() {
   // Shown inline under the form (a toast vanishes before it can be read).
   const [error, setError] = useState<string | null>(null);
   const prefersReducedMotion = useReducedMotion();
+  // A restaurant that is not approved (from a sign-in attempt, or redirected
+  // here from the dashboard) sees the approval notice, never the app.
+  const fromUrl = useSearchParams().get("account");
+  const [approval, setApproval] = useState<"pending" | "rejected" | null>(
+    fromUrl === "pending" || fromUrl === "rejected" ? fromUrl : null,
+  );
   const {
     register,
     handleSubmit,
@@ -34,6 +50,11 @@ export default function LoginPage() {
     setError(null);
     login.mutate(dto, {
       onSuccess: (data) => {
+        // The platform admin only ever gets the account requests dashboard.
+        if ((data as { platformAdmin?: boolean }).platformAdmin) {
+          router.push("/admin");
+          return;
+        }
         // A delivery rider has no back-office screens: open their deliveries.
         const user = (data as { user?: { roleName?: string; permissions?: string[] } }).user;
         const rider = user?.roleName === "DELIVERY_STAFF" && user.permissions?.includes("delivery.rider");
@@ -42,6 +63,11 @@ export default function LoginPage() {
       onError: (err) => {
         if (err instanceof ApiError && err.message === "TWO_FACTOR_REQUIRED") {
           setNeedsCode(true);
+          return;
+        }
+        const state = approvalStateFromError(err);
+        if (state) {
+          setApproval(state);
           return;
         }
         if (err instanceof ApiError && err.status >= 500) {
@@ -68,14 +94,18 @@ export default function LoginPage() {
         className="w-full max-w-sm"
       >
         <div className="mb-10 flex flex-col items-center gap-2 text-center">
-          <Link href="/">
-            <Logo size={44} />
+          <Link href="/" aria-label="EasyDine home">
+            <Logo size={40} />
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            EasyDine
-          </h1>
+          <h1 className="sr-only">Sign in to EasyDine</h1>
           <p className="text-sm text-muted-foreground">Sign in to manage your restaurant</p>
         </div>
+
+        {approval && (
+          <div className="mb-6">
+            <ApprovalNotice status={approval} />
+          </div>
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">

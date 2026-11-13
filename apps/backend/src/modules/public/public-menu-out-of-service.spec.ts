@@ -12,7 +12,7 @@ describe('PublicMenuService - out-of-service table', () => {
     status: 'OUT_OF_SERVICE',
     qrToken: 'qr-9',
     assignedWaiterId: null,
-    floor: { branchId: 'branch-1', branch: { id: 'branch-1', name: 'Main', restaurant: { name: 'Cafe' } } },
+    floor: { branchId: 'branch-1', branch: { id: 'branch-1', name: 'Main', restaurant: { name: 'Cafe', approvalStatus: 'APPROVED' } } },
   };
   let prisma: any;
   let orders: any;

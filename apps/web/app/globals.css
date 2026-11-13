@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *):not(.force-light, .force-light *));
 
 @theme inline {
   --color-background: var(--background);
@@ -52,83 +52,91 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  /* Clean, professional restaurant POS palette matching customer web app. */
-  --background: #F8F9FA;
-  --foreground: #111827;
-  --card: #FFFFFF;
-  --card-foreground: #111827;
-  --popover: #FFFFFF;
-  --popover-foreground: #111827;
-  --primary: #E23744;
-  --primary-hover: #CC2A37;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F3F4F6;
-  --secondary-foreground: #111827;
-  --muted: #F3F4F6;
-  --muted-foreground: #6B7280;
-  --accent: #FEE2E2;
-  --accent-foreground: #991B1B;
-  --destructive: #DC2626;
-  --success: #059669;
-  --warning: #D97706;
+:root,
+.force-light {
+  /* EasyDine brand palette (2026-11-13): deep teal, cream, charcoal.
+     Success / warning / error stay clearly distinct from the brand teal. */
+  --brand-teal: #0D5D50;
+  --brand-cream: #F7F3EA;
+  --brand-charcoal: #1D1C1A;
+  --background: #F7F3EA;
+  --foreground: #1D1C1A;
+  --card: #FFFDF8;
+  --card-foreground: #1D1C1A;
+  --popover: #FFFDF8;
+  --popover-foreground: #1D1C1A;
+  --primary: #0D5D50;
+  --primary-hover: #0A4A40;
+  --primary-foreground: #FBF8F1;
+  --secondary: #EFE9DC;
+  --secondary-foreground: #1D1C1A;
+  --muted: #EFE9DC;
+  --muted-foreground: #5F594F;
+  --accent: #DCEDE8;
+  --accent-foreground: #0A4A40;
+  --destructive: #C0362C;
+  --success: #2E8540;
+  --warning: #B45309;
   --info: #2563EB;
-  --border: #E5E7EB;
-  --input: #D1D5DB;
-  --ring: #E23744;
-  --chart-1: #E23744;
-  --chart-2: #059669;
-  --chart-3: #D97706;
+  --border: #E2D9C7;
+  --input: #CFC5B0;
+  --ring: #0D5D50;
+  --chart-1: #0D5D50;
+  --chart-2: #2E8540;
+  --chart-3: #B45309;
   --chart-4: #2563EB;
-  --chart-5: #6B7280;
+  --chart-5: #6B6458;
   --radius: 0.75rem;
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #111827;
-  --sidebar-primary: #E23744;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #FEE2E2;
-  --sidebar-accent-foreground: #991B1B;
-  --sidebar-border: #E5E7EB;
-  --sidebar-ring: #E23744;
+  --sidebar: #FFFDF8;
+  --sidebar-foreground: #1D1C1A;
+  --sidebar-primary: #0D5D50;
+  --sidebar-primary-foreground: #FBF8F1;
+  --sidebar-accent: #DCEDE8;
+  --sidebar-accent-foreground: #0A4A40;
+  --sidebar-border: #E2D9C7;
+  --sidebar-ring: #0D5D50;
 }
 
 .dark {
-  /* Obsidian & Crimson executive dark theme (matches Zomato/customer experience). */
-  --background: #0d0e12;
-  --foreground: #F4F4F6;
-  --card: #15161b;
-  --card-foreground: #F4F4F6;
-  --popover: #15161b;
-  --popover-foreground: #F4F4F6;
-  --primary: #E23744;
-  --primary-hover: #F04654;
-  --primary-foreground: #FFFFFF;
-  --secondary: #1e2026;
-  --secondary-foreground: #F4F4F6;
-  --muted: #1e2026;
-  --muted-foreground: #9ca3af;
-  --accent: #2a1518;
-  --accent-foreground: #fda4af;
-  --destructive: #EF4444;
-  --success: #10B981;
-  --warning: #F59E0B;
-  --info: #3B82F6;
-  --border: #262830;
-  --input: #323540;
-  --ring: #E23744;
-  --chart-1: #E23744;
-  --chart-2: #10B981;
-  --chart-3: #F59E0B;
-  --chart-4: #3B82F6;
-  --chart-5: #9CA3AF;
-  --sidebar: #131418;
-  --sidebar-foreground: #F4F4F6;
-  --sidebar-primary: #E23744;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #261619;
-  --sidebar-accent-foreground: #FDA4AF;
-  --sidebar-border: #23252c;
-  --sidebar-ring: #E23744;
+  /* Dark: charcoal surfaces, cream text, a lighter teal for contrast. */
+  --brand-teal: #4FB3A0;
+  --brand-cream: #F4EFE5;
+  --brand-charcoal: #161614;
+  --background: #161614;
+  --foreground: #F4EFE5;
+  --card: #1F1E1B;
+  --card-foreground: #F4EFE5;
+  --popover: #1F1E1B;
+  --popover-foreground: #F4EFE5;
+  --primary: #4FB3A0;
+  --primary-hover: #65C4B2;
+  --primary-foreground: #0B1F1B;
+  --secondary: #2A2925;
+  --secondary-foreground: #F4EFE5;
+  --muted: #2A2925;
+  --muted-foreground: #ABA497;
+  --accent: #173530;
+  --accent-foreground: #8FD6C7;
+  --destructive: #F05A50;
+  --success: #4CC36F;
+  --warning: #F2A33A;
+  --info: #60A5FA;
+  --border: #34322D;
+  --input: #403D37;
+  --ring: #4FB3A0;
+  --chart-1: #4FB3A0;
+  --chart-2: #4CC36F;
+  --chart-3: #F2A33A;
+  --chart-4: #60A5FA;
+  --chart-5: #ABA497;
+  --sidebar: #1A1917;
+  --sidebar-foreground: #F4EFE5;
+  --sidebar-primary: #4FB3A0;
+  --sidebar-primary-foreground: #0B1F1B;
+  --sidebar-accent: #173530;
+  --sidebar-accent-foreground: #8FD6C7;
+  --sidebar-border: #2F2D29;
+  --sidebar-ring: #4FB3A0;
 }
 
 /* Customer kiosk (/kiosk/*): always the light palette, whatever the device's
@@ -249,7 +257,8 @@
    (rounded-*, bg-*, shadow-*) on a component still win over it — unlayered
    rules would silently beat every utility class.
    --------------------------------------------------------------------------- */
-:root {
+:root,
+.force-light {
   /* Cards are a 1px border, not a shadow; shadows mean "floating". */
   --shadow-card: none;
   --shadow-card-hover: 0 1px 2px rgb(24 24 27 / 0.06);

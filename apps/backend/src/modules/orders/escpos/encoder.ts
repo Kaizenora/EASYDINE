@@ -262,6 +262,24 @@ export class EscposWriter {
     return this;
   }
 
+  /**
+   * Centred 1-bit raster image (GS v 0, normal density). `data` is
+   * widthBytes x height bytes, MSB = leftmost dot, 1 = black. Images wider
+   * than the paper are refused (nothing printed) rather than wrapped.
+   */
+  raster(widthBytes: number, height: number, data: Buffer): this {
+    const dots = this.profile.paperWidthMm === 58 ? 384 : 576;
+    if (widthBytes * 8 > dots || data.length !== widthBytes * height) return this;
+    this.chunks.push(
+      Buffer.from([ESC, 0x61, 1]),
+      Buffer.from([GS, 0x76, 0x30, 0x00, widthBytes & 0xff, widthBytes >> 8, height & 0xff, height >> 8]),
+      data,
+      Buffer.from('\n'),
+      CMD.alignLeft,
+    );
+    return this;
+  }
+
   rule(char = '-'): this {
     this.emit(char.repeat(this.profile.columns), {});
     return this;

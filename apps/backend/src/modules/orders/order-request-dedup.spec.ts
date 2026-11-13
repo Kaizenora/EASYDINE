@@ -61,7 +61,7 @@ describe('OrdersService.createOrder request-id dedup', () => {
 
 describe('QR guest order: the same request id never makes a second order', () => {
   it('a retry with the same requestId returns the first order without creating', async () => {
-    const table = { id: 't1', number: 2, status: 'OCCUPIED', assignedWaiterId: null, floor: { branchId: 'b1', branch: { id: 'b1', isActive: true } } };
+    const table = { id: 't1', number: 2, status: 'OCCUPIED', assignedWaiterId: null, floor: { branchId: 'b1', branch: { id: 'b1', isActive: true, restaurant: { approvalStatus: 'APPROVED' } } } };
     const prisma: any = {
       table: { findUnique: jest.fn().mockResolvedValue(table) },
       order: { findFirst: jest.fn().mockResolvedValueOnce({ id: 'first', items: [] }) },

@@ -9,7 +9,7 @@ const branchA = {
   restaurantId: 'rest-a',
   isActive: true,
   takeawayToken: TOKEN_A,
-  restaurant: { id: 'rest-a', name: 'A' },
+  restaurant: { id: 'rest-a', name: 'A', approvalStatus: 'APPROVED' },
 };
 
 function makeService(branches: any[]) {

@@ -9,6 +9,7 @@ import {
 } from './effective-permissions';
 import { PrismaService } from '../prisma/prisma.service';
 import { getCachedSession, setCachedSession } from './session-cache';
+import { isApproved, notApprovedError } from './approval';
 
 interface JwtPayload {
   sub: string;
@@ -41,11 +42,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      include: permissionInclude,
+      include: { ...permissionInclude, restaurant: { select: { approvalStatus: true } } },
     });
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Session no longer valid');
+    }
+    // Enforced on every request, not only at login: a restaurant that is
+    // pending or rejected cannot use an older session either.
+    if (!isApproved(user.restaurant?.approvalStatus)) {
+      throw notApprovedError(user.restaurant?.approvalStatus);
     }
 
     const session: SessionUser = {

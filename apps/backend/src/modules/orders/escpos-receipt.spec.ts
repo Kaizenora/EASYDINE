@@ -132,8 +132,12 @@ describe('receipt job', () => {
     expect(total.endsWith('€31.40')).toBe(true);
     expect(total).toHaveLength(cols); // value flush right at the last column
     expect(text).toContain('18/10/2026');
-    // a bitmap job would contain GS v 0 / ESC * raster commands
-    expect(job.buffer.includes(Buffer.from([0x1d, 0x76, 0x30]))).toBe(false);
+    // The bill is native text: the only raster is the small footer logo
+    // (one GS v 0), never a bitmap of the whole bill, and no ESC * graphics.
+    const gsv0 = Buffer.from([0x1d, 0x76, 0x30]);
+    const first = job.buffer.indexOf(gsv0);
+    expect(first).toBeGreaterThan(job.buffer.indexOf(Buffer.from('TOTAL')));
+    expect(readJob(job.buffer).commands.filter((c) => c.startsWith('1d7630'))).toHaveLength(1);
     expect(job.buffer.includes(Buffer.from([0x1b, 0x2a]))).toBe(false);
   });
 
@@ -383,5 +387,37 @@ describe('test slip', () => {
     expect(text).toContain('12345678901234567890123456789012');
     expect(text).toContain('58 mm - 32 columns - CP858');
     expect(text).toContain('áéíóú ñ ü ¿? ¡! € £');
+  });
+});
+
+describe('EasyDine footer logo (raster)', () => {
+  const GS_V0 = '1d7630001e003b00'; // GS v 0, normal, 30 bytes (240 dots) x 59 rows
+  const kot = {
+    orderNumber: '7',
+    type: 'TAKEAWAY',
+    createdAt: new Date('2026-11-13T10:00:00Z'),
+    table: null,
+    customer: null,
+    items: [{ nameSnapshot: 'Tea', quantity: 1, kitchenNote: null, modifiers: [] }],
+  };
+
+  it.each([58, 80] as const)('prints the logo once, centred, above the text line on a %s mm bill', (mm) => {
+    const job = buildReceiptEscPosJob({ ...(base as any), profile: resolveProfile({ paperWidthMm: mm }) });
+    const { commands, lines } = readJob(job.buffer);
+    expect(commands.filter((c) => c === GS_V0)).toHaveLength(1);
+    const at = commands.indexOf(GS_V0);
+    expect(commands[at - 1]).toBe('1b6101'); // centred
+    expect(commands[at + 1]).toBe('1b6100'); // back to left
+    expect(lines.some((l) => l.includes('Powered by EasyDine'))).toBe(true);
+    // 240 x 59 dots of image data follow the header, nothing clipped.
+    const hdr = job.buffer.indexOf(Buffer.from(GS_V0, 'hex'));
+    expect(job.buffer.length).toBeGreaterThan(hdr + 8 + 30 * 59);
+  });
+
+  it.each([58, 80] as const)('prints the logo once on a %s mm KOT', (mm) => {
+    const job = buildKotEscPosJob({ branchName: 'Main', order: kot, profile: resolveProfile({ paperWidthMm: mm }) } as any);
+    const { commands, text } = readJob(job.buffer);
+    expect(commands.filter((c) => c === GS_V0)).toHaveLength(1);
+    expect(text).toContain('Powered by EasyDine');
   });
 });

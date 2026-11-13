@@ -98,7 +98,7 @@ describe('OrdersService.resolvePayingCustomer', () => {
 describe('QR guest phone is normalised, not cut to the first 10 digits', () => {
   const TOKEN = 'a'.repeat(32);
   function makePublic() {
-    const branch = { id: 'b1', isActive: true, takeawayToken: TOKEN, restaurant: { name: 'R' } };
+    const branch = { id: 'b1', isActive: true, takeawayToken: TOKEN, restaurant: { name: 'R', approvalStatus: 'APPROVED' } };
     const table = { id: 't1', number: 4, name: null, status: 'AVAILABLE', floor: { branchId: 'b1', branch } };
     const prisma: any = {
       branch: { findUnique: jest.fn().mockResolvedValue(branch) },

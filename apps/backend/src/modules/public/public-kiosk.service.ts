@@ -1,3 +1,4 @@
+import { isApproved } from '../../auth/approval';
 import {
   BadRequestException,
   ConflictException,
@@ -41,7 +42,7 @@ export class PublicKioskService {
       where: { kioskToken },
       include: { restaurant: true },
     });
-    if (!branch || !branch.isActive) {
+    if (!branch || !branch.isActive || !isApproved(branch.restaurant?.approvalStatus)) {
       throw new NotFoundException('This kiosk is not available');
     }
     return branch;

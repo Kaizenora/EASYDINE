@@ -468,7 +468,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
       {/* 2. DINE-IN FLOOR FILTER BAR, TAKEAWAY QR & SEARCH */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-sm font-bold text-white">Dine-in floor</span>
+          <span className="mr-1 text-sm font-bold text-foreground">Dine-in floor</span>
           {(["ALL", "ORDERING", "PREPARING", "BILL"] as const).map((f) => {
             const label =
               f === "ALL"
@@ -486,8 +486,8 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 className={cn(
                   "rounded-full px-3.5 py-1 text-xs font-semibold transition-all",
                   filter === f
-                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                    : "bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white"
+                    ? "bg-primary text-primary-foreground border border-primary"
+                    : "bg-card text-muted-foreground border border-border hover:text-foreground"
                 )}
               >
                 {label}
@@ -499,20 +499,20 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           <button
             type="button"
             onClick={() => setTakeawayQrOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+            className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-accent px-3 py-1 text-xs font-bold text-accent-foreground hover:bg-primary/15 transition-all"
           >
-            <QrCode className="h-3.5 w-3.5 text-amber-400" />
+            <QrCode className="h-3.5 w-3.5" />
             <span>🥡 Takeaway QR</span>
           </button>
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search table or guest"
-            className="h-9 rounded-xl border-neutral-800 bg-neutral-900/80 pl-9 text-xs text-white placeholder:text-neutral-500 focus-visible:border-amber-500"
+            className="h-9 rounded-xl border-input bg-card pl-9 text-xs text-foreground placeholder:text-muted-foreground focus-visible:border-primary"
           />
         </div>
       </div>

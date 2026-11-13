@@ -11,7 +11,7 @@ const branch = {
   isActive: true,
   kioskDineInEnabled: true,
   kioskTakeawayEnabled: true,
-  restaurant: { currency: 'EUR' },
+  restaurant: { currency: 'EUR', approvalStatus: 'APPROVED' },
 };
 
 const dec = (v: string) => new Prisma.Decimal(v);
@@ -249,7 +249,7 @@ describe('PublicKioskService', () => {
         taxMode: 'INCLUSIVE',
         taxRegime: 'ES_IVA',
         taxLabel: null,
-        restaurant: { name: 'Bar', logoUrl: null, currency: 'EUR' },
+        restaurant: { name: 'Bar', logoUrl: null, currency: 'EUR', approvalStatus: 'APPROVED' },
       });
       const menu = await service.getMenu(TOKEN);
       expect(menu).toMatchObject({

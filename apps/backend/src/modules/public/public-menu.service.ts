@@ -1,3 +1,4 @@
+import { isApproved } from '../../auth/approval';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { normalizePhone, type CartItemDto } from '@easydine/types';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -38,7 +39,8 @@ export class PublicMenuService {
         where: { takeawayToken: token },
         include: { restaurant: true },
       });
-      if (!branch || !branch.isActive) {
+      // A restaurant the platform has not approved serves no guests.
+      if (!branch || !branch.isActive || !isApproved(branch.restaurant?.approvalStatus)) {
         throw new NotFoundException('This QR code is not recognized');
       }
       return { isTakeaway: true, branch, table: null };
@@ -48,7 +50,9 @@ export class PublicMenuService {
       where: { qrToken },
       include: { floor: { include: { branch: { include: { restaurant: true } } } } },
     });
-    if (!table) throw new NotFoundException('This QR code is not recognized');
+    if (!table || !isApproved(table.floor.branch.restaurant?.approvalStatus)) {
+      throw new NotFoundException('This QR code is not recognized');
+    }
     return { isTakeaway: false, branch: table.floor.branch, table };
   }
 

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, type RegisterDto } from "@easydine/types";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
@@ -14,12 +15,15 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useRegister } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api";
+import { ApprovalNotice } from "@/components/auth/approval-notice";
 
 export default function SignupPage() {
   const router = useRouter();
   const register = useRegister();
   const { note, clear, toast } = useNoteToast();
   const prefersReducedMotion = useReducedMotion();
+  // New restaurants wait for platform approval: no session until then.
+  const [pending, setPending] = useState<string | null>(null);
   const {
     register: field,
     handleSubmit,
@@ -28,7 +32,13 @@ export default function SignupPage() {
 
   const onSubmit = (dto: RegisterDto) => {
     register.mutate(dto, {
-      onSuccess: () => router.push("/dashboard"),
+      onSuccess: (data) => {
+        if (data.pending) {
+          setPending(data.restaurantName ?? dto.restaurantName);
+          return;
+        }
+        router.push("/dashboard");
+      },
       onError: (err) => {
         toast.error(err instanceof ApiError ? err.message : "Something went wrong");
       },
@@ -48,15 +58,16 @@ export default function SignupPage() {
         className="w-full max-w-sm"
       >
         <div className="mb-10 flex flex-col items-center gap-2 text-center">
-          <Link href="/">
-            <Logo size={44} />
+          <Link href="/" aria-label="EasyDine home">
+            <Logo size={40} />
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            EasyDine
-          </h1>
+          <h1 className="sr-only">Set up your restaurant on EasyDine</h1>
           <p className="text-sm text-muted-foreground">Set up your restaurant</p>
         </div>
 
+        {pending !== null ? (
+          <ApprovalNotice status="pending" restaurantName={pending} />
+        ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="restaurantName">Restaurant name</Label>
@@ -128,6 +139,7 @@ export default function SignupPage() {
             {register.isPending ? "Creating your account…" : "Create account"}
           </Button>
         </form>
+        )}
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
           Already have an account?{" "}

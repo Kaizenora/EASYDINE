@@ -10,12 +10,12 @@ export function PoweredByEasyDine({ tone = "dark", className = "" }: { tone?: "d
     <div className={`flex items-center justify-center gap-1.5 ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/logo.png"
+        src="/brand/easydine-badge.png"
         alt=""
         aria-hidden="true"
         width={18}
         height={18}
-        className={`h-[18px] w-[18px] rounded-[5px] border object-contain p-[1px] ${ring}`}
+        className={`h-[18px] w-[18px] rounded-full object-contain ${ring}`}
       />
       <span className={`text-[10px] font-medium tracking-wide ${text}`}>
         Powered by <span className="font-semibold">EasyDine</span>

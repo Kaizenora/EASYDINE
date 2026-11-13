@@ -13,6 +13,7 @@
 // (computed once, correctly, in pricing.ts — see its own multi-region
 // note) and are never recomputed here.
 
+import { BRAND_PRINT_LOGO_PNG } from './brand-print-logo';
 import { qrSvg } from '../verifactu/verifactu.qr';
 import type { ReceiptVerifactu } from './escpos-receipt';
 import {
@@ -238,6 +239,7 @@ export function buildReceiptHtml({
   .vf svg { display: block; margin: 4px auto; }
   .footer { text-align: center; margin-top: 6px; font-size: 11px; }
   .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
+  .powered-logo { display: block; width: 26mm; max-width: 60%; height: auto; margin: 6px auto 1px; image-rendering: pixelated; }
 ${paperSize === '58mm' ? `
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 2mm; color: #111; width: 54mm; }
   h1 { font-size: 13px; text-align: center; margin: 0 0 2px; }
@@ -326,6 +328,7 @@ ${paperSize === '58mm' ? `
         ? 'Bill only &mdash; not a receipt. Payment pending.'
         : 'Thank you! Visit again.'
     }</p>
+    <img class="powered-logo" src="${BRAND_PRINT_LOGO_PNG}" alt="EasyDine" />
     <p class="powered">Powered by EasyDine</p>
   </div>
 </body>

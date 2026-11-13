@@ -27,6 +27,7 @@ describe('session cache', () => {
       id: 'u9', restaurantId: 'r1', name: 'B', roleId: 'role', isActive: true,
       role: { name: 'OWNER', permissions: [{ permission: { key: 'orders.view' } }] },
       permissionOverrides: [],
+      restaurant: { approvalStatus: 'APPROVED' },
     });
     const strat = new JwtStrategy({ getOrThrow: () => 'secret' } as any, { user: { findUnique } } as any);
     const a = await strat.validate({ sub: 'u9' });
