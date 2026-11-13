@@ -1,3 +1,4 @@
+import { clearSessionCache } from '../auth/session-cache';
 import {
   BadRequestException,
   ConflictException,
@@ -117,6 +118,7 @@ export class RolesService {
         select: SELECT,
       });
     });
+    clearSessionCache(); // every holder of this role
 
     await this.audit.record({
       userId: actorId,
@@ -147,6 +149,7 @@ export class RolesService {
     }
 
     await this.prisma.role.delete({ where: { id } });
+    clearSessionCache();
 
     await this.audit.record({
       userId: actorId,

@@ -1,3 +1,4 @@
+import { clearSessionCache } from './session-cache';
 import {
   ForbiddenException,
   BadRequestException,
@@ -109,6 +110,7 @@ export class AuthService {
         },
       }),
     ]);
+    clearSessionCache(userId); // deactivated: no further requests
     return { ok: true };
   }
 

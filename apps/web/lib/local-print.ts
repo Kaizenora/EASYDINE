@@ -319,7 +319,30 @@ export function prefetchKotPage(orderId: string, scope: PrintScope, version = ""
   if (hit && hit.version === version && Date.now() - hit.at < KOT_PAGE_TTL_MS) return;
   const missed = kotPageMisses.get(key);
   if (missed && Date.now() - missed < KOT_PAGE_MISS_MS) return;
-  void loadKotPage(orderId, scope.branchId, version, page);
+  if (kotPageLoads.has(key) || prefetchQueued.has(key)) return;
+  const branchId = scope.branchId;
+  prefetchQueued.add(key);
+  prefetchQueue.push(() => loadKotPage(orderId, branchId, version, page).finally(() => prefetchQueued.delete(key)));
+  pumpPrefetch();
+}
+
+// Background loads go out at most PREFETCH_PARALLEL at a time, so opening a
+// Kitchen Display with 20 tickets does not fire 20 requests at once on a slow
+// server (the board's own data comes first). A click never waits in this
+// queue: takeKotPage / loadKotPage are called directly.
+const PREFETCH_PARALLEL = 3;
+const prefetchQueue: (() => Promise<unknown>)[] = [];
+const prefetchQueued = new Set<string>();
+let prefetchRunning = 0;
+function pumpPrefetch() {
+  while (prefetchRunning < PREFETCH_PARALLEL && prefetchQueue.length > 0) {
+    const job = prefetchQueue.shift()!;
+    prefetchRunning++;
+    void job().finally(() => {
+      prefetchRunning--;
+      pumpPrefetch();
+    });
+  }
 }
 
 /** The prefetched page, used once. */
