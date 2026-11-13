@@ -2,7 +2,9 @@ import {
   ArrowRight,
   ChefHat,
   ClipboardList,
+  Instagram,
   Languages,
+  Mail,
   Printer,
   QrCode,
   Receipt,
@@ -13,10 +15,16 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { EasyDineWordmark } from "@/components/brand/easydine-logo";
+import { ProductTour } from "@/components/marketing/product-tour";
 
 // The public EasyDine homepage for logged-out visitors. Original copy; the
-// screenshots are of the EasyDine app itself (demo data). Only features the
-// product really has are listed: no reviews, client counts or pricing.
+// screenshots are of the EasyDine app itself (sample data). Only features the
+// product really has are listed: no reviews, client counts or prices.
+
+export const CONTACT_EMAIL = "sgcreates18@gmail.com";
+export const INSTAGRAM_HANDLE = "@easydine._";
+export const INSTAGRAM_URL = "https://www.instagram.com/easydine._/";
+const PRICING_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("EasyDine subscription: pricing and plans")}`;
 
 const STEPS = [
   {
@@ -44,12 +52,6 @@ const FEATURES = [
   { icon: Languages, title: "English, Hindi, Marathi", body: "Guest menus and staff screens are available in three languages." },
 ];
 
-const SHOTS = [
-  { src: "/screenshots/tables-light.png", alt: "EasyDine tables screen showing the floor with table status", title: "Tables" },
-  { src: "/screenshots/kds-light.png", alt: "EasyDine kitchen display showing order tickets", title: "Kitchen display" },
-  { src: "/screenshots/dashboard-light.png", alt: "EasyDine dashboard with the day's sales summary", title: "Dashboard" },
-];
-
 function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md">
@@ -60,6 +62,9 @@ function Nav() {
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
           <a href="#how-it-works" className="hover:text-foreground">How it works</a>
           <a href="#features" className="hover:text-foreground">Features</a>
+          <a href="#product-tour" className="hover:text-foreground">Product tour</a>
+          <a href="#pricing" className="hover:text-foreground">Pricing</a>
+          <a href="#contact" className="hover:text-foreground">Contact</a>
         </nav>
         <div className="flex items-center gap-2">
           <Link
@@ -165,19 +170,25 @@ export function Landing() {
           </ul>
         </section>
 
-        {/* Screens */}
-        <section className="border-t border-border/70 bg-card/60">
-          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-            <h2 className="text-3xl font-bold tracking-tight">See the screens</h2>
-            <p className="mt-2 max-w-2xl text-muted-foreground">Real EasyDine screens, shown with demo data.</p>
-            <div className="mt-10 grid gap-6 md:grid-cols-3">
-              {SHOTS.map((s) => (
-                <figure key={s.src} className="overflow-hidden rounded-2xl border border-border bg-background">
-                  <Image src={s.src} alt={s.alt} width={1440} height={900} className="h-auto w-full" />
-                  <figcaption className="border-t border-border px-4 py-3 text-sm font-medium">{s.title}</figcaption>
-                </figure>
-              ))}
-            </div>
+        <ProductTour />
+
+        {/* Subscription */}
+        <section id="pricing" className="mx-auto max-w-6xl px-4 pt-16 sm:px-6">
+          <div className="rounded-3xl border border-border bg-card p-6 sm:p-10">
+            <p className="inline-flex rounded-full border border-primary/25 bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
+              Monthly subscription
+            </p>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight">Plans and pricing</h2>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+              EasyDine is available on a monthly subscription, designed to support your restaurant&apos;s daily
+              operations. Contact us for pricing and plan details.
+            </p>
+            <a
+              href={PRICING_MAILTO}
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-[var(--primary-hover)]"
+            >
+              <Mail className="h-4 w-4" aria-hidden /> Contact us for pricing
+            </a>
           </div>
         </section>
 
@@ -198,6 +209,46 @@ export function Landing() {
             </Link>
           </div>
         </section>
+
+        {/* Contact */}
+        <section id="contact" className="border-t border-border/70 bg-card/60">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+            <h2 className="text-3xl font-bold tracking-tight">Contact</h2>
+            <p className="mt-2 max-w-2xl text-muted-foreground">Questions about EasyDine, plans or setting up your restaurant? Reach us here.</p>
+            <ul className="mt-8 grid gap-4 sm:grid-cols-2">
+              <li>
+                <a
+                  href={`mailto:${CONTACT_EMAIL}`}
+                  className="flex items-center gap-4 rounded-2xl border border-border bg-background p-5 transition-colors hover:border-primary/40"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                    <Mail className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm text-muted-foreground">Email</span>
+                    <span className="block break-all font-semibold">{CONTACT_EMAIL}</span>
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href={INSTAGRAM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-4 rounded-2xl border border-border bg-background p-5 transition-colors hover:border-primary/40"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                    <Instagram className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm text-muted-foreground">Instagram</span>
+                    <span className="block font-semibold">{INSTAGRAM_HANDLE}</span>
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </section>
       </main>
 
       <footer className="border-t border-border/70">
@@ -212,6 +263,12 @@ export function Landing() {
             <Link href="/docs/api" className="hover:text-foreground">API &amp; MCP</Link>
             <Link href="/docs/accessibility" className="hover:text-foreground">Accessibility</Link>
             <Link href="/docs/compliance-india" className="hover:text-foreground">India compliance notes</Link>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="inline-flex items-center gap-1.5 hover:text-foreground">
+              <Mail className="h-3.5 w-3.5" aria-hidden /> {CONTACT_EMAIL}
+            </a>
+            <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-foreground">
+              <Instagram className="h-3.5 w-3.5" aria-hidden /> {INSTAGRAM_HANDLE}
+            </a>
           </nav>
         </div>
         <div className="border-t border-border/70">
