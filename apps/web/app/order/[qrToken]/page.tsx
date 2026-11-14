@@ -1,6 +1,9 @@
 "use client";
 
 import { PoweredByEasyDine } from "@/components/order/powered-by";
+import { VoiceOrder, type VoiceAddLine } from "@/components/order/voice-order";
+import { useI18n } from "@/lib/i18n/context";
+import { RECOGNITION_LANG, type VoiceMenuItem } from "@/lib/voice-order";
 import {
   ArrowLeft,
   BellRing,
@@ -206,6 +209,8 @@ export default function LuxuryCustomerMenu({
   // Modals
   const [customizingItem, setCustomizingItem] = useState<{ item: PublicMenuItem; categoryName: string } | null>(null);
   const [selectedModifierIds, setSelectedModifierIds] = useState<string[]>([]);
+  // The app's language drives speech recognition: en -> en-IN, hi -> hi-IN, mr -> mr-IN.
+  const { locale } = useI18n();
   const [cookingNote, setCookingNote] = useState("");
   const [currentRequestId, setCurrentRequestId] = useState<string>(() => "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
   const [customizingQty, setCustomizingQty] = useState(1);
@@ -633,6 +638,71 @@ export default function LuxuryCustomerMenu({
     });
   };
 
+  // ---- Voice ordering: menu for the parser, and adding reviewed lines -------
+  const menuIndex = useMemo(() => {
+    const m = new Map<string, { item: PublicMenuItem; categoryName: string }>();
+    for (const cat of data?.categories ?? []) for (const item of cat.items) m.set(item.id, { item, categoryName: cat.name });
+    return m;
+  }, [data]);
+
+  const voiceMenu = useMemo<VoiceMenuItem[]>(
+    () =>
+      [...menuIndex.values()].map(({ item, categoryName }) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        category: categoryName,
+        // A required option, or options picked by default, must be chosen on screen.
+        needsChoice: (item.modifierGroups || []).some(
+          (g) => g.modifierGroup.isRequired || g.modifierGroup.minSelect > 0 || g.modifierGroup.modifiers.some((m) => m.isDefault),
+        ),
+      })),
+    [menuIndex],
+  );
+
+  const openItemOptions = (item: PublicMenuItem, categoryName: string) => {
+    const defaultMods = (item.modifierGroups || [])
+      .flatMap((g) => g.modifierGroup.modifiers)
+      .filter((m) => m.isDefault)
+      .map((m) => m.id);
+    setCustomizingItem({ item, categoryName });
+    setCustomizingQty(1);
+    setCookingNote("");
+    setSelectedModifierIds(defaultMods);
+  };
+
+  // Reviewed voice lines join the normal cart (still editable; the order is
+  // placed only through the Confirm Order modal). Prices come from the menu.
+  const addVoiceLines = (lines: VoiceAddLine[]) => {
+    setCart((prev) => {
+      let next = [...prev];
+      lines.forEach((l, i) => {
+        const hit = menuIndex.get(l.itemId);
+        if (!hit || l.quantity < 1) return;
+        const { item, categoryName } = hit;
+        const defaultId = `line-${item.id}-default`;
+        const existing = !l.note && next.find((c) => c.id === defaultId);
+        if (existing) {
+          next = next.map((c) => (c.id === defaultId ? { ...c, quantity: c.quantity + l.quantity } : c));
+          return;
+        }
+        next.push({
+          id: l.note ? `line-${item.id}-voice-${Date.now()}-${i}` : defaultId,
+          menuItemId: item.id,
+          name: item.name,
+          imageUrl: getDishImage(item, categoryName),
+          isVeg: item.isVeg,
+          modifierIds: [],
+          modifierLabel: "",
+          unitPrice: parseFloat(item.price),
+          quantity: l.quantity,
+          cookingNote: l.note.slice(0, 120),
+        });
+      });
+      return next;
+    });
+  };
+
   // Working Audio Speech Recognition
   const triggerAudioVoiceInput = (target: "search" | "cooking") => {
     const SpeechRecognition =
@@ -649,7 +719,7 @@ export default function LuxuryCustomerMenu({
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN";
+      recognition.lang = RECOGNITION_LANG[locale];
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
@@ -1375,11 +1445,21 @@ export default function LuxuryCustomerMenu({
               "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
               isListeningSearchMic ? "text-red-500 animate-pulse bg-red-500/20" : "text-muted-foreground hover:text-primary"
             )}
-            title="Search with voice"
+            title="Search with voice (your browser may send the audio to its speech service; this app does not save it)"
           >
             <Mic className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Voice ordering: speak a whole order, review it, then add to cart */}
+        <VoiceOrder
+          menu={voiceMenu}
+          onAdd={addVoiceLines}
+          onChooseOptions={(id) => {
+            const hit = menuIndex.get(id);
+            if (hit) openItemOptions(hit.item, hit.categoryName);
+          }}
+        />
 
         {/* Filter chips: [🟢 Veg], Popular, Spicy, Breads (Image 3 match) */}
         <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
@@ -1653,7 +1733,7 @@ export default function LuxuryCustomerMenu({
                     "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
                     isListeningCustomMic ? "text-red-500 animate-pulse bg-red-500/20" : "text-muted-foreground hover:text-primary"
                   )}
-                  title="Speak cooking instructions"
+                  title="Speak cooking instructions (your browser may send the audio to its speech service; this app does not save it)"
                 >
                   <Mic className="h-4 w-4" />
                 </button>
