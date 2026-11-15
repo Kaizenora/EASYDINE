@@ -616,6 +616,14 @@ export class VoiceOrderSession {
     this.menu = menu;
   }
 
+  setOnAdd(onAdd?: (lines: VoiceAddLine[]) => void) {
+    this.onAdd = onAdd;
+  }
+
+  onNewRecognitionInstance() {
+    this.tracker.onInstanceStart();
+  }
+
   getQuestion(): string | null {
     return this.pendingQueue.length > 0 ? this.pendingQueue[0].question : null;
   }
@@ -751,7 +759,8 @@ function isSuffixOf(smaller: string[], larger: string[]): boolean {
  * seconds is ignored. Call reset() when a new recognition session starts.
  */
 export function createUtteranceTracker(repeatWindowMs = 4000) {
-  const seen = new Set<number>();
+  let seen = new Set<number>();
+  let lastSeenIndex = -1;
   let lastFinal: string[] = [];
   let lastDelta = "";
   let lastAt = -Infinity;
@@ -759,12 +768,28 @@ export function createUtteranceTracker(repeatWindowMs = 4000) {
     reset() {
       seen.clear();
       lastFinal = [];
+      lastDelta = "";
+      lastAt = -Infinity;
+      lastSeenIndex = -1;
+    },
+    onInstanceStart() {
+      seen.clear();
+      lastFinal = [];
+      lastSeenIndex = -1;
     },
     accept(resultIndex: number, text: string, isFinal: boolean, nowMs: number): string | null {
-      if (!isFinal || seen.has(resultIndex)) return null;
+      if (!isFinal) return null;
+      // When a new SpeechRecognition instance starts (e.g. after onend restart on mobile),
+      // resultIndex resets to 0 (or is less than last seen index). Clear seen so subsequent items are accepted!
+      if (resultIndex < lastSeenIndex || (resultIndex === 0 && seen.has(0))) {
+        seen.clear();
+        lastFinal = [];
+      }
+      if (seen.has(resultIndex)) return null;
       const toks = tokensOf(text);
       if (!toks.length) return null;
       seen.add(resultIndex);
+      lastSeenIndex = resultIndex;
       let delta = toks;
       if (lastFinal.length && lastFinal.length < toks.length && lastFinal.every((t, k) => toks[k] === t)) {
         delta = toks.slice(lastFinal.length);

@@ -175,6 +175,36 @@ test("7. repeated interim transcript does not double-add", () => {
   assert.equal(added[1].quantity, 1);
 });
 
+test("continuous voice ordering across multiple browser recognition restarts does not refuse to listen", () => {
+  const added: VoiceAddLine[] = [];
+  const s = new VoiceOrderSession(MENU, (lines) => added.push(...lines));
+
+  // Instance 1: customer orders first dish
+  s.onNewRecognitionInstance();
+  const r1 = s.processTranscript("2 paneer mutter", true, 0, 1000);
+  assert.equal(r1.added.length, 1);
+  assert.equal(r1.added[0].itemId, "pm");
+
+  // Recognition instance ends on Android and restarts!
+  // Instance 2 spawns fresh, so resultIndex restarts at 0
+  s.onNewRecognitionInstance();
+  const r2 = s.processTranscript("1 chicken biryani", true, 0, 5000);
+  assert.equal(r2.added.length, 1);
+  assert.equal(r2.added[0].itemId, "cb");
+
+  // Instance 2 produces a second dish at index 1
+  const r3 = s.processTranscript("2 bisleri", true, 1, 8000);
+  assert.equal(r3.added.length, 1);
+  assert.equal(r3.added[0].itemId, "bis");
+
+  // Instance 3 restarts automatically without onNewRecognitionInstance (auto-detected by index 0)
+  const r4 = s.processTranscript("4 cheese garlic naan", true, 0, 12000);
+  assert.equal(r4.added.length, 1);
+  assert.equal(r4.added[0].itemId, "cgn");
+
+  assert.equal(added.length, 4);
+});
+
 // ----------------------------------------------------------------
 // ADDITIONAL ROBUSTNESS & SPEECH TESTS
 // ----------------------------------------------------------------

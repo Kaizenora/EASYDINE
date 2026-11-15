@@ -100,6 +100,7 @@ export function VoiceOrder({
     voiceSession.current = new VoiceOrderSession(menu, onAdd);
   }
   voiceSession.current.setMenu(menu);
+  voiceSession.current.setOnAdd(onAdd);
 
   const session = useRef({
     active: false,
@@ -193,32 +194,9 @@ export function VoiceOrder({
     rec.continuous = true;
     rec.maxAlternatives = 1;
 
-    // Prioritize recognizing this restaurant's specific menu dishes in the browser speech engine
-    try {
-      const SpeechGrammarList =
-        (window as unknown as { SpeechGrammarList?: new () => any; webkitSpeechGrammarList?: new () => any }).SpeechGrammarList ||
-        (window as unknown as { SpeechGrammarList?: new () => any; webkitSpeechGrammarList?: new () => any }).webkitSpeechGrammarList;
-      if (SpeechGrammarList && live.current.menu.length > 0) {
-        const grammarList = new SpeechGrammarList();
-        const dishNames = new Set<string>();
-        for (const it of live.current.menu) {
-          if (!it.name) continue;
-          const clean = it.name.replace(/[<>;=*+?^$|[\](){}!/\\,."']/g, " ").replace(/\s+/g, " ").trim();
-          if (clean) dishNames.add(clean);
-          if (IS_DEV.test(it.name)) {
-            const tr = transliterate(it.name).replace(/[<>;=*+?^$|[\](){}!/\\,."']/g, " ").replace(/\s+/g, " ").trim();
-            if (tr) dishNames.add(tr);
-          }
-        }
-        if (dishNames.size > 0) {
-          const grammar = `#JSGF V1.0 UTF-8; grammar menuDishes; public <dish> = ${Array.from(dishNames).join(" | ")} ;`;
-          grammarList.addFromString(grammar, 1);
-          rec.grammars = grammarList;
-        }
-      }
-    } catch {
-      // SpeechGrammarList is an optional hint; proceed safely if not supported
-    }
+    // Notify session of new recognition instance so resultIndex sets don't block subsequent items
+    voiceSession.current?.onNewRecognitionInstance();
+
     rec.onresult = (e: SpeechEvent) => {
       armIdle();
       s.consecutiveNetworkErrors = 0;
@@ -230,6 +208,7 @@ export function VoiceOrder({
           const out = voiceSession.current?.processTranscript(text, true, i, nowMs());
           if (out) {
             if (out.added.length > 0) {
+              setMessage(null);
               const newRecent = out.added.map((a) => ({
                 key: ++session.current.key,
                 name: a.name,
