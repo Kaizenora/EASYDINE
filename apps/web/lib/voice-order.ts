@@ -42,7 +42,7 @@ export type VoiceResult =
       itemId?: string;
       name?: string;
     }
-  | { kind: "skipped"; heard: string };
+  | { kind: "skipped"; heard: string; pendingQty?: number };
 
 const MAX_QTY = 20;
 
@@ -75,19 +75,25 @@ function numberOf(tok: string): number | null {
 
 // ---------------------------------------------------------------- separators, fillers
 const SEPARATORS = new Set([",", "and", "plus", "then", "also", "और", "aur", "फिर", "आणि", "ani", "व", "तसेच", "अजून"]);
+export const MULTIPLIERS = new Set([
+  "x", "X", "ex", "eks", "into", "times", "cross", "by", "star", "multiply", "multiplied",
+  "गुना", "गुणा", "पट", "वेळा", "बार", "guna", "pat", "vela",
+]);
 const FILLERS = new Set([
   // English
   "i", "want", "would", "like", "please", "give", "me", "get", "us", "order", "the", "of", "plate", "plates",
   "piece", "pieces", "portion", "portions", "serving", "servings", "can", "have", "need", "we", "for", "bring",
   "just", "okay", "ok", "um", "uh", "hmm", "it", "that", "this", "nos", "number", "glass", "glasses", "bowl", "bowls",
   "wala", "wali", "wale", "one's", "ones", "item", "items", "dish", "dishes",
+  "x", "ex", "into", "times", "cross", "by", "star", "multiply",
   // Hindi
   "मुझे", "हमें", "चाहिए", "दीजिए", "दीजिये", "दे", "देना", "दो", "लाओ", "लाना", "लाइए", "प्लेट", "प्लीज", "प्लीज़", "भी",
   "कृपया", "का", "की", "के", "को", "एक्स", "गिलास", "बाउल", "पीस", "बस", "और", "ठीक", "है", "हाँ", "हां",
-  "mujhe", "chahiye", "dijiye", "lao", "bhi", "ka", "ki", "ke", "वाला", "वाली", "वाले", "आइटम",
+  "गुना", "गुणा", "बार",
+  "mujhe", "chahiye", "dijiye", "lao", "bhi", "ka", "ki", "ke", "वाला", "वाली", "वाले", "आइटम", "guna",
   // Marathi
   "मला", "आम्हाला", "हवे", "हवा", "हवी", "हवेत", "द्या", "द्यावा", "द्यावी", "पाहिजे", "पाहिजेत", "करा", "पण", "आणा",
-  "ग्लास", "प्लेट्स", "ना", "हो", "mala", "have", "dya",
+  "ग्लास", "प्लेट्स", "ना", "हो", "पट", "वेळा", "mala", "have", "dya", "pat", "vela",
 ]);
 
 // ---------------------------------------------------------------- spoken instructions -> cooking note
@@ -159,7 +165,7 @@ export function transliterate(word: string): string {
   return out;
 }
 
-const IS_DEV = /[ऀ-ॿ]/;
+export const IS_DEV = /[ऀ-ॿ]/;
 
 /** A spelling-insensitive key: mutter/matar, paneer/panir, naan/nan, chicken/chikan... */
 export function phoneticKey(raw: string): string {
@@ -198,6 +204,13 @@ const ALIAS_GROUPS = [
   ["chaas", "chhaas", "chaach", "छाछ", "ताक"], ["spicy", "तीखा"], ["sweet", "स्वीट"], ["fish", "मछली", "मासे"],
   ["prawns", "prawn", "कोळंबी", "झींगा"], ["soup", "सूप"], ["salad", "सलाद", "सॅलड"], ["sandwich", "सैंडविच", "सँडविच"],
   ["pizza", "पिज़्ज़ा", "पिझ्झा"], ["burger", "बर्गर"], ["fries", "फ्राइज़"], ["mojito", "मोहितो"], ["cola", "कोला"],
+  ["cheese", "चीज", "चीज़"], ["garlic", "lahsun", "lasun", "लहसुन", "लसूण"],
+  ["bisleri", "water", "mineral", "paani", "पानी", "बिसलेरी"], ["curd", "dahi", "दही"],
+  ["raita", "रायता"], ["papad", "पापड़", "पापड", "पापडा"], ["chole", "chhole", "छोले", "चना", "chana"],
+  ["pav", "पाव"], ["bhaji", "भाजी"], ["dosa", "dhosa", "डोसा"], ["idli", "इडली"],
+  ["sambar", "sambhar", "सांभर"], ["vada", "wada", "वडा", "बड़ा"], ["kebab", "kabab", "kebabs", "kababs", "कबाब"],
+  ["margherita", "margerita", "मार्गेरिटा"], ["pasta", "पास्ता"], ["hakka", "हक्का"],
+  ["schezwan", "shezwan", "सेजवान", "शेजवान"], ["crispy", "क्रिस्पी"],
 ];
 const ALIAS = new Map<string, string>();
 for (const g of ALIAS_GROUPS) {
@@ -283,46 +296,74 @@ function splitSegments(transcript: string, menuWordKeys: Set<string>): Segment[]
     cur.notes.push(...notes);
     cur.heard.push(chunk);
     const toks = rest ? rest.split(" ") : [];
+    let prevWasMultiplier = false;
     for (let i = 0; i < toks.length; i++) {
       const tok = toks[i];
+      if (MULTIPLIERS.has(tok)) {
+        prevWasMultiplier = true;
+        continue;
+      }
       const n = numberOf(tok);
       const isWordNumber = n !== null && !/^\d/.test(tok);
-      const more = toks.slice(i + 1).some((t) => !FILLERS.has(t) && numberOf(t) === null);
+      const more = toks.slice(i + 1).some((t) => !FILLERS.has(t) && !MULTIPLIERS.has(t) && numberOf(t) === null);
       // "chicken do pyaza": a number word inside a dish name stays a word
       if (isWordNumber && more && cur.words.length > 0 && menuWordKeys.has(phoneticKey(tok))) {
         cur.words.push(tok);
+        prevWasMultiplier = false;
         continue;
       }
       if (n !== null) {
         if (cur.words.length === 0) {
-          if (cur.qty === null) cur.qty = n;
+          if (cur.qty === null) {
+            cur.qty = n;
+          } else if (prevWasMultiplier || n === 1 || cur.qty === 1) {
+            // e.g. "4 x 1", "4 into 1", "4 1", "1 x 4" -> keep 4
+            if (n === 1) {
+              // 4 x 1 -> 4
+            } else if (cur.qty === 1) {
+              // 1 x 4 -> 4
+              cur.qty = n;
+            } else {
+              cur.qty = cur.qty * n;
+            }
+          }
+          prevWasMultiplier = false;
           continue;
         }
         if (!more) {
           // trailing number: "paneer tikka two" -> postfix qty; Hindi "... दो" (give) -> ignore
           if (cur.qty === null && !["दो", "do", "दे"].includes(tok)) cur.qty = n;
+          prevWasMultiplier = false;
           continue;
         }
         segs.push(cur);
         cur = fresh();
         cur.heard.push(chunk);
         cur.qty = n;
+        prevWasMultiplier = false;
         continue;
       }
       if (VAGUE_QTY.has(tok)) {
         cur.qtyVague = true;
+        prevWasMultiplier = false;
         continue;
       }
       if (VARIANT_WORDS.has(tok)) {
         cur.variant = true;
+        prevWasMultiplier = false;
         continue;
       }
       if (MODIFIER_MARKERS.has(tok)) {
         cur.modifier = true;
+        prevWasMultiplier = false;
         continue;
       }
-      if (FILLERS.has(tok)) continue;
+      if (FILLERS.has(tok)) {
+        prevWasMultiplier = false;
+        continue;
+      }
       cur.words.push(tok);
+      prevWasMultiplier = false;
     }
     segs.push(cur);
   }
@@ -398,15 +439,15 @@ function opt(s: Scored): VoiceOption {
   return { itemId: s.item.id, name: s.item.name, unitPrice: priceOf(s.item) };
 }
 
-function decide(seg: Segment, menu: VoiceMenuItem[]): VoiceResult {
+function decide(seg: Segment, menu: VoiceMenuItem[], defaultQty = 1): VoiceResult {
   const heard = seg.heard.join(" ").trim();
   const note = [...new Set(seg.notes)].join(", ");
-  if (seg.words.length === 0) return { kind: "skipped", heard };
+  if (seg.words.length === 0) return { kind: "skipped", heard, pendingQty: seg.qty ?? undefined };
   const scored = menu.map((it) => scoreItem(seg.words, it)).filter((s) => s.score >= 0.28).sort((a, b) => b.score - a.score);
   if (scored.length === 0) {
     const text = seg.words.join("");
     const looksLikeWord = text.length >= 3 && /[aeiouyऀ-ॿ]/.test(text);
-    return looksLikeWord ? { kind: "unavailable", heard, reason: "not_on_menu" } : { kind: "skipped", heard };
+    return looksLikeWord ? { kind: "unavailable", heard, reason: "not_on_menu" } : { kind: "skipped", heard, pendingQty: seg.qty ?? undefined };
   }
   // Asked for an extra/add-on or a size: explain, add nothing.
   if ((seg.modifier || seg.variant) && scored[0].full) {
@@ -433,7 +474,7 @@ function decide(seg: Segment, menu: VoiceMenuItem[]): VoiceResult {
   }
   if (!confident) {
     const options = scored.slice(0, 4).map(opt);
-    return { kind: "choose", heard, quantity: seg.qtyVague ? null : seg.qty, note, options };
+    return { kind: "choose", heard, quantity: seg.qtyVague ? null : (seg.qty ?? (defaultQty > 1 ? defaultQty : null)), note, options };
   }
   const it = confident.item;
   if (it.available === false) return { kind: "unavailable", heard, reason: "sold_out", itemId: it.id, name: it.name };
@@ -441,20 +482,28 @@ function decide(seg: Segment, menu: VoiceMenuItem[]): VoiceResult {
   if (seg.modifier) return { kind: "unavailable", heard, reason: "modifier", itemId: it.id, name: it.name };
   if (it.needsChoice) return { kind: "unavailable", heard, reason: "needs_choice", itemId: it.id, name: it.name };
   const base = { heard, itemId: it.id, name: it.name, unitPrice: priceOf(it), note };
-  // No quantity said means one; a vague or impossible amount is asked.
+  // No quantity said means one (or defaultQty if carrying over from an isolated number chunk); a vague or impossible amount is asked.
   if (seg.qtyVague || (seg.qty !== null && (seg.qty < 1 || seg.qty > MAX_QTY))) return { kind: "quantity", ...base };
-  return { kind: "add", ...base, quantity: seg.qty ?? 1 };
+  return { kind: "add", ...base, quantity: seg.qty ?? defaultQty };
 }
 
 /** Parse one final transcript against the restaurant's loaded menu. */
-export function parseVoiceOrder(transcript: string, menu: VoiceMenuItem[]): VoiceResult[] {
+export function parseVoiceOrder(transcript: string, menu: VoiceMenuItem[], defaultQty = 1): VoiceResult[] {
   if (!transcript || !transcript.trim() || menu.length === 0) return [];
   const menuWordKeys = new Set(menu.flatMap((m) => nameWords(m.name).map(phoneticKey)));
-  return splitSegments(transcript, menuWordKeys).map((s) => decide(s, menu));
+  return splitSegments(transcript, menuWordKeys).map((s) => decide(s, menu, defaultQty));
 }
 
 function tokensOf(text: string): string[] {
   return normalise(text).replace(/,/g, " ").split(/\s+/).filter(Boolean);
+}
+
+function isSuffixOf(smaller: string[], larger: string[]): boolean {
+  if (smaller.length > larger.length) return false;
+  for (let k = 0; k < smaller.length; k++) {
+    if (smaller[smaller.length - 1 - k] !== larger[larger.length - 1 - k]) return false;
+  }
+  return true;
 }
 
 /**
@@ -480,7 +529,13 @@ export function createUtteranceTracker(repeatWindowMs = 4000) {
       if (!toks.length) return null;
       seen.add(resultIndex);
       let delta = toks;
-      if (lastFinal.length && lastFinal.length < toks.length && lastFinal.every((t, k) => toks[k] === t)) delta = toks.slice(lastFinal.length);
+      if (lastFinal.length && lastFinal.length < toks.length && lastFinal.every((t, k) => toks[k] === t)) {
+        delta = toks.slice(lastFinal.length);
+      } else if (nowMs - lastAt < repeatWindowMs && lastFinal.length > 0 && isSuffixOf(toks, lastFinal)) {
+        // Recognition tail echo within repeat window: suppress duplicate addition
+        lastFinal = toks;
+        return null;
+      }
       lastFinal = toks;
       const key = delta.join(" ");
       if (!key) return null;

@@ -200,3 +200,56 @@ test("utterance tracker: interim ignored, indices once, Android cumulative resul
   // ...but saying it again later is a real new order
   assert.equal(u.accept(1, "one paneer tikka", true, 9000), "one paneer tikka");
 });
+
+test("multipliers (X, into, times, cross, guna) keep exact single item quantity without splitting or extra 1", () => {
+  const menuWithChicken: VoiceMenuItem[] = [
+    ...MENU,
+    { id: "cm", name: "Chicken Masala", price: "220.00" },
+    { id: "cgn", name: "Cheese Garlic Naan", price: "80.00" },
+    { id: "bis", name: "Bisleri", price: "20.00" },
+  ];
+
+  // Variations of "4 X chicken masala"
+  assert.deepEqual(adds(parseVoiceOrder("4 X chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 x chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4x chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 into chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 times chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 cross chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 गुना चिकन मसाला", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 एक्स चिकन मसाला", menuWithChicken)), [["cm", 4, ""]]);
+
+  // "4 x 1" or "4 into 1" arithmetic speech transcriptions
+  assert.deepEqual(adds(parseVoiceOrder("4 x 1 chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 into 1 chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 times 1 chicken masala", menuWithChicken)), [["cm", 4, ""]]);
+
+  // Dish with cheese, garlic, bisleri
+  assert.deepEqual(adds(parseVoiceOrder("4 cheese garlic naan", menuWithChicken)), [["cgn", 4, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("2 bisleri", menuWithChicken)), [["bis", 2, ""]]);
+});
+
+test("utterance tracker suppresses trailing recognition echo within repeat window", () => {
+  const u = createUtteranceTracker(4000);
+  // Full utterance arrives in result 0
+  assert.equal(u.accept(0, "4 chicken masala", true, 100), "4 chicken masala");
+  // Chrome emits duplicate suffix/tail chunk 600ms later: must be suppressed
+  assert.equal(u.accept(1, "chicken masala", true, 700), null);
+  // Deliberate re-order of chicken masala after the repeat window: accepted
+  assert.equal(u.accept(2, "chicken masala", true, 5500), "chicken masala");
+});
+
+test("isolated quantity carries over as default quantity for next dish chunk", () => {
+  const menuWithChicken: VoiceMenuItem[] = [
+    ...MENU,
+    { id: "cm", name: "Chicken Masala", price: "220.00" },
+  ];
+  // First chunk has only "4"
+  const r1 = parseVoiceOrder("4", menuWithChicken);
+  assert.equal(r1[0].kind, "skipped");
+  assert.equal((r1[0] as { pendingQty?: number }).pendingQty, 4);
+
+  // Next chunk adopts defaultQty 4
+  const r2 = parseVoiceOrder("chicken masala", menuWithChicken, 4);
+  assert.deepEqual(adds(r2), [["cm", 4, ""]]);
+});

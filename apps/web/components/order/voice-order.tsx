@@ -19,8 +19,10 @@ import { cn } from "@/lib/utils";
 import { LOCALE_LABELS, LOCALES, useI18n, type Locale } from "@/lib/i18n/context";
 import {
   createUtteranceTracker,
+  IS_DEV,
   parseVoiceOrder,
   RECOGNITION_LANG,
+  transliterate,
   type VoiceMenuItem,
   type VoiceResult,
 } from "@/lib/voice-order";
@@ -41,6 +43,7 @@ interface Recognition {
   interimResults: boolean;
   continuous: boolean;
   maxAlternatives: number;
+  grammars?: unknown;
   onresult: ((e: SpeechEvent) => void) | null;
   onerror: ((e: SpeechErrorEvent) => void) | null;
   onend: (() => void) | null;
@@ -105,6 +108,7 @@ export function VoiceOrder({
   const [recent, setRecent] = useState<Recent[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const pendingQtyRef = useRef<{ qty: number; at: number } | null>(null);
 
   const session = useRef({
     active: false,
@@ -137,6 +141,7 @@ export function VoiceOrder({
   const stopListening = (msg?: string) => {
     const s = session.current;
     s.active = false;
+    pendingQtyRef.current = null;
     if (s.idle) clearTimeout(s.idle);
     s.idle = null;
     s.rec?.stop();
@@ -154,12 +159,22 @@ export function VoiceOrder({
   const handleText = (text: string) => {
     const s = session.current;
     const { menu: m, onAdd: add } = live.current;
-    const results = parseVoiceOrder(text, m);
+    const currentPendingQty =
+      pendingQtyRef.current && nowMs() - pendingQtyRef.current.at < 6000
+        ? pendingQtyRef.current.qty
+        : 1;
+    const results = parseVoiceOrder(text, m, currentPendingQty);
     const adds: VoiceAddLine[] = [];
     const added: Recent[] = [];
     const asks: Pending[] = [];
     for (const r of results) {
-      if (r.kind === "skipped") continue;
+      if (r.kind === "skipped") {
+        const pQty = (r as { pendingQty?: number }).pendingQty;
+        if (pQty && pQty >= 1) {
+          pendingQtyRef.current = { qty: pQty, at: nowMs() };
+        }
+        continue;
+      }
       if (r.kind === "add") {
         adds.push({ itemId: r.itemId, quantity: r.quantity, note: r.note });
         added.push({ key: ++s.key, name: r.name, qty: r.quantity, note: r.note });
@@ -175,7 +190,10 @@ export function VoiceOrder({
         });
       }
     }
-    if (adds.length) add(adds);
+    if (adds.length) {
+      pendingQtyRef.current = null;
+      add(adds);
+    }
     if (added.length) setRecent((rs) => [...added.reverse(), ...rs].slice(0, 4));
     if (asks.length) setPending((ps) => [...ps, ...asks]);
   };
@@ -202,6 +220,33 @@ export function VoiceOrder({
     rec.interimResults = true;
     rec.continuous = true;
     rec.maxAlternatives = 1;
+
+    // Prioritize recognizing this restaurant's specific menu dishes in the browser speech engine
+    try {
+      const SpeechGrammarList =
+        (window as unknown as { SpeechGrammarList?: new () => any; webkitSpeechGrammarList?: new () => any }).SpeechGrammarList ||
+        (window as unknown as { SpeechGrammarList?: new () => any; webkitSpeechGrammarList?: new () => any }).webkitSpeechGrammarList;
+      if (SpeechGrammarList && live.current.menu.length > 0) {
+        const grammarList = new SpeechGrammarList();
+        const dishNames = new Set<string>();
+        for (const it of live.current.menu) {
+          if (!it.name) continue;
+          const clean = it.name.replace(/[<>;=*+?^$|[\](){}!/\\,."']/g, " ").replace(/\s+/g, " ").trim();
+          if (clean) dishNames.add(clean);
+          if (IS_DEV.test(it.name)) {
+            const tr = transliterate(it.name).replace(/[<>;=*+?^$|[\](){}!/\\,."']/g, " ").replace(/\s+/g, " ").trim();
+            if (tr) dishNames.add(tr);
+          }
+        }
+        if (dishNames.size > 0) {
+          const grammar = `#JSGF V1.0 UTF-8; grammar menuDishes; public <dish> = ${Array.from(dishNames).join(" | ")} ;`;
+          grammarList.addFromString(grammar, 1);
+          rec.grammars = grammarList;
+        }
+      }
+    } catch {
+      // SpeechGrammarList is an optional hint; proceed safely if not supported
+    }
     rec.onresult = (e: SpeechEvent) => {
       armIdle();
       let partial = "";
@@ -245,6 +290,7 @@ export function VoiceOrder({
     s.active = true;
     s.startedAt = nowMs();
     s.tracker = createUtteranceTracker();
+    pendingQtyRef.current = null;
     setRecent([]);
     setPending([]);
     setInterim("");
