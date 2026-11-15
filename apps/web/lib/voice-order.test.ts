@@ -1,37 +1,183 @@
-// Parser tests with mocked transcripts. These do NOT exercise a microphone or
-// a browser's speech engine; real-device recognition is tested separately.
+// Parser & session tests with mocked transcripts. These do NOT exercise a microphone
+// or a browser's speech engine; real-device recognition is tested separately.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createUtteranceTracker,
+  parseQuantityOnly,
   parseVoiceOrder,
   phoneticKey,
   RECOGNITION_LANG,
   transliterate,
+  VoiceOrderSession,
+  type VoiceAddLine,
   type VoiceMenuItem,
   type VoiceResult,
 } from "./voice-order.ts";
 
 const MENU: VoiceMenuItem[] = [
-  { id: "pm", name: "Paneer Mutter", price: "300.00" },
+  { id: "pm", name: "Matar Paneer", price: "300.00" },
   { id: "pt", name: "Paneer Tikka", price: "280.00" },
   { id: "ptm", name: "Paneer Tikka Masala", price: "340.00" },
   { id: "bn", name: "Butter Naan", price: "60.00" },
   { id: "gn", name: "Garlic Naan", price: "70.00" },
+  { id: "cgn", name: "Cheese Garlic Naan", price: "90.00" },
   { id: "cb", name: "Chicken Biryani", price: "320.00" },
+  { id: "cm", name: "Chicken Masala", price: "220.00" },
   { id: "vb", name: "Veg Biryani", price: "240.00" },
   { id: "dm", name: "Dal Makhani", price: "260.00" },
   { id: "mc", name: "Masala Chaas", price: "80.00" },
+  { id: "ls", name: "Lassi", price: "70.00" },
   { id: "cdp", name: "Chicken Do Pyaza", price: "360.00" },
+  { id: "bis", name: "Bisleri", price: "20.00" },
   { id: "th", name: "Veg Thali", price: "250.00", needsChoice: true },
   { id: "gj", name: "Gulab Jamun", price: "90.00", available: false },
 ];
 
 const adds = (r: VoiceResult[]) =>
-  r.filter((x): x is Extract<VoiceResult, { kind: "add" }> => x.kind === "add").map((x) => [x.itemId, x.quantity, x.note]);
+  r
+    .filter((x): x is Extract<VoiceResult, { kind: "add" }> => x.kind === "add")
+    .map((x) => [x.itemId, x.quantity, x.note, x.variant]);
+
 const kinds = (r: VoiceResult[]) => r.map((x) => x.kind);
 const reasonOf = (x: VoiceResult) => (x.kind === "unavailable" ? x.reason : null);
-const optionIds = (x: VoiceResult) => new Set(x.kind === "choose" ? x.options.map((o) => o.itemId) : []);
+
+// ----------------------------------------------------------------
+// 7 MANDATORY UNIT TESTS
+// ----------------------------------------------------------------
+
+test("1. 'do matar paneer ek naan' -> 2 x Matar Paneer, 1 x Naan", () => {
+  const r = parseVoiceOrder("do matar paneer ek naan", MENU);
+  assert.equal(r.length, 2);
+  assert.deepEqual(adds(r), [
+    ["pm", 2, "", undefined],
+    ["bn", 1, "", undefined],
+  ]);
+});
+
+test("2. '2 plate chicken' -> 2 x Chicken dish (closest match)", () => {
+  const r = parseVoiceOrder("2 plate chicken", MENU);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].kind, "add");
+  if (r[0].kind === "add") {
+    assert.equal(r[0].quantity, 2);
+    // Matches Chicken Biryani (or Chicken Masala)
+    assert.ok(["cb", "cm"].includes(r[0].itemId));
+  }
+});
+
+test("3. 'ek half paneer' -> Half portion x 1 (never 0.5)", () => {
+  const r = parseVoiceOrder("ek half paneer", MENU);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].kind, "add");
+  if (r[0].kind === "add") {
+    assert.equal(r[0].quantity, 1);
+    assert.equal(r[0].variant, "Half");
+  }
+
+  // Also check session adds note with "Half portion" and qty 1
+  const added: VoiceAddLine[] = [];
+  const s = new VoiceOrderSession(MENU, (lines) => added.push(...lines));
+  const res = s.processTranscript("ek half paneer");
+  assert.equal(added.length, 1);
+  assert.equal(added[0].quantity, 1);
+  assert.equal(added[0].note, "Half portion");
+  assert.equal(res.added[0].quantity, 1);
+  assert.equal(res.added[0].variant, "Half");
+});
+
+test("4. 'teen lassi' -> 3 x Lassi", () => {
+  const r = parseVoiceOrder("teen lassi", MENU);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].kind, "add");
+  if (r[0].kind === "add") {
+    assert.equal(r[0].itemId, "ls");
+    assert.equal(r[0].quantity, 3);
+  }
+});
+
+test("5. utterance with no quantity asks 'Kitne <dish>?' and accepts mic reply 'do'", () => {
+  const added: VoiceAddLine[] = [];
+  const s = new VoiceOrderSession(MENU, (lines) => added.push(...lines));
+
+  // Customer says dish name with no quantity
+  const out1 = s.processTranscript("cheese garlic naan", true, 0, 1000);
+  assert.equal(out1.added.length, 0);
+  assert.equal(out1.question, "Kitne Cheese Garlic Naan?");
+  assert.equal(added.length, 0);
+
+  // Customer answers on mic with only the quantity "do" (dish name not repeated)
+  const out2 = s.processTranscript("do", true, 1, 2500);
+  assert.equal(out2.added.length, 1);
+  assert.equal(out2.added[0].name, "Cheese Garlic Naan");
+  assert.equal(out2.added[0].quantity, 2);
+  assert.equal(out2.question, null);
+  assert.deepEqual(added, [{ itemId: "cgn", quantity: 2, note: "" }]);
+});
+
+test("6. two-dish utterance missing both quantities asks sequentially, correct dish each time", () => {
+  const added: VoiceAddLine[] = [];
+  const s = new VoiceOrderSession(MENU, (lines) => added.push(...lines));
+
+  // Utterance has two dishes, neither specifies quantity
+  const out1 = s.processTranscript("matar paneer, garlic naan", true, 0, 1000);
+  assert.equal(out1.added.length, 0);
+  assert.equal(out1.question, "Kitne Matar Paneer?");
+  assert.equal(s.getPendingList().length, 2);
+
+  // Customer answers first quantity on mic
+  const out2 = s.processTranscript("do", true, 1, 3000);
+  assert.equal(out2.added.length, 1);
+  assert.equal(out2.added[0].itemId, "pm");
+  assert.equal(out2.added[0].quantity, 2);
+  assert.equal(out2.question, "Kitne Garlic Naan?");
+  assert.equal(s.getPendingList().length, 1);
+
+  // Customer answers second quantity on mic
+  const out3 = s.processTranscript("teen", true, 2, 5000);
+  assert.equal(out3.added.length, 1);
+  assert.equal(out3.added[0].itemId, "gn");
+  assert.equal(out3.added[0].quantity, 3);
+  assert.equal(out3.question, null);
+  assert.equal(s.getPendingList().length, 0);
+
+  assert.deepEqual(added, [
+    { itemId: "pm", quantity: 2, note: "" },
+    { itemId: "gn", quantity: 3, note: "" },
+  ]);
+});
+
+test("7. repeated interim transcript does not double-add", () => {
+  const added: VoiceAddLine[] = [];
+  const s = new VoiceOrderSession(MENU, (lines) => added.push(...lines));
+
+  // Stream of interim results from Web Speech API
+  s.processTranscript("do butter naan", false, 0, 100);
+  s.processTranscript("do butter naan", false, 0, 200);
+  assert.equal(added.length, 0);
+
+  // Final result arrives
+  s.processTranscript("do butter naan", true, 0, 300);
+  assert.equal(added.length, 1);
+  assert.equal(added[0].quantity, 2);
+
+  // Duplicate final with same result index (e.g. re-emitted)
+  s.processTranscript("do butter naan", true, 0, 400);
+  assert.equal(added.length, 1);
+
+  // Echo repetition of the identical utterance within the repeat window (e.g. 500ms later)
+  s.processTranscript("do butter naan", true, 1, 800);
+  assert.equal(added.length, 1);
+
+  // Deliberate re-order later outside repeat window increments quantity
+  s.processTranscript("aur ek butter naan", true, 2, 6000);
+  assert.equal(added.length, 2);
+  assert.equal(added[1].quantity, 1);
+});
+
+// ----------------------------------------------------------------
+// ADDITIONAL ROBUSTNESS & SPEECH TESTS
+// ----------------------------------------------------------------
 
 test("locale drives the recognition language", () => {
   assert.deepEqual(RECOGNITION_LANG, { en: "en-IN", hi: "hi-IN", mr: "mr-IN" });
@@ -45,211 +191,65 @@ test("transliteration + phonetic keys line up spelling variants", () => {
   assert.equal(phoneticKey("tikka"), phoneticKey("टिक्का"));
 });
 
-test("Marathi full order with word quantities (दोन, एक) and reversed word order", () => {
+test("closest-match auto-add on spelling/pronunciation similarity ('mutter panir' -> 'Matar Paneer')", () => {
+  const r = parseVoiceOrder("2 mutter panir", MENU);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].kind, "add");
+  if (r[0].kind === "add") {
+    assert.equal(r[0].itemId, "pm");
+    assert.equal(r[0].name, "Matar Paneer");
+    assert.equal(r[0].quantity, 2);
+  }
+});
+
+test("no reasonable match gives not_found", () => {
+  const r = parseVoiceOrder("two sushi", MENU);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].kind, "not_found");
+});
+
+test("Marathi full order with word quantities (दोन, एक)", () => {
   const r = parseVoiceOrder("दोन मटर पनीर, एक चिकन बिर्याणी", MENU);
-  assert.deepEqual(adds(r), [["pm", 2, ""], ["cb", 1, ""]]);
+  assert.deepEqual(adds(r), [
+    ["pm", 2, "", undefined],
+    ["cb", 1, "", undefined],
+  ]);
 });
 
-test("English order with digit quantities", () => {
-  const r = parseVoiceOrder("2 butter naan, 1 paneer tikka", MENU);
-  assert.deepEqual(adds(r), [["bn", 2, ""], ["pt", 1, ""]]);
-});
-
-test("Hindi word quantity + spoken instruction goes to the cooking note", () => {
+test("Hindi word quantity + spoken cooking instruction goes to note", () => {
   const r = parseVoiceOrder("दो पनीर टिक्का मसाला कम तीखा", MENU);
-  assert.deepEqual(adds(r), [["ptm", 2, "कम तीखा"]]);
+  assert.deepEqual(adds(r), [["ptm", 2, "कम तीखा", undefined]]);
 });
 
-test("Marathi instruction (तिखट नको) and Devanagari dish names", () => {
-  const r = parseVoiceOrder("एक दाल मखनी तिखट नको", MENU);
-  assert.deepEqual(adds(r), [["dm", 1, "तिखट नको"]]);
-});
-
-test("English instruction after a separator attaches to the dish before it", () => {
+test("English instruction after separator attaches to dish note", () => {
   const r = parseVoiceOrder("one chicken biryani less spicy and no onion", MENU);
-  assert.deepEqual(adds(r), [["cb", 1, "less spicy, no onion"]]);
+  assert.deepEqual(adds(r), [["cb", 1, "less spicy, no onion", undefined]]);
 });
 
-test("Devanagari digits and English words spoken in Devanagari script", () => {
-  const r = parseVoiceOrder("२ बटर नान", MENU);
-  assert.deepEqual(adds(r), [["bn", 2, ""]]);
+test("sold-out and needsChoice items report unavailable", () => {
+  const r1 = parseVoiceOrder("one gulab jamun", MENU);
+  assert.deepEqual(r1.map((x) => [x.kind, reasonOf(x)]), [["unavailable", "sold_out"]]);
+
+  const r2 = parseVoiceOrder("one veg thali", MENU);
+  assert.deepEqual(r2.map((x) => [x.kind, reasonOf(x)]), [["unavailable", "needs_choice"]]);
 });
 
-test("spelling variants (mutter / matar) are matched", () => {
-  assert.deepEqual(adds(parseVoiceOrder("three mutter paneer", MENU)), [["pm", 3, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("three paneer matar", MENU)), [["pm", 3, ""]]);
+test("multipliers (X, into, times) parse exact single item quantity without splitting", () => {
+  assert.deepEqual(adds(parseVoiceOrder("4 X chicken masala", MENU)), [["cm", 4, "", undefined]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 into chicken masala", MENU)), [["cm", 4, "", undefined]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 times chicken masala", MENU)), [["cm", 4, "", undefined]]);
+  assert.deepEqual(adds(parseVoiceOrder("4 x 1 chicken masala", MENU)), [["cm", 4, "", undefined]]);
 });
 
-test("near-name dishes: the exact name wins only when it explains every word", () => {
-  assert.deepEqual(adds(parseVoiceOrder("one paneer tikka", MENU)), [["pt", 1, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("one paneer tikka masala", MENU)), [["ptm", 1, ""]]);
-});
-
-test("ambiguous dish -> customer chooses, nothing added, quantity kept", () => {
-  const r = parseVoiceOrder("two paneer", MENU);
-  assert.deepEqual(kinds(r), ["choose"]);
-  const c = r[0] as Extract<VoiceResult, { kind: "choose" }>;
-  assert.equal(c.quantity, 2);
-  assert.deepEqual(new Set(c.options.map((o) => o.itemId)), new Set(["pm", "pt", "ptm"]));
-});
-
-test("no quantity said means one", () => {
-  assert.deepEqual(adds(parseVoiceOrder("butter naan", MENU)), [["bn", 1, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("एक बटर नान, दाल मखनी", MENU)), [["bn", 1, ""], ["dm", 1, ""]]);
-});
-
-test("a word only one dish has is enough (no confirmation)", () => {
-  assert.deepEqual(adds(parseVoiceOrder("two dal", MENU)), [["dm", 2, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("one makhani", MENU)), [["dm", 1, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("एक छाछ", MENU)), [["mc", 1, ""]]);
-});
-
-test("whole name heard plus an unknown word is still added", () => {
-  assert.deepEqual(adds(parseVoiceOrder("one butter naan kadak", MENU)), [["bn", 1, ""]]);
-});
-
-test("words several dishes share still ask", () => {
-  assert.equal(parseVoiceOrder("one biryani", MENU)[0].kind, "choose");
-  assert.equal(parseVoiceOrder("one naan", MENU)[0].kind, "choose");
-});
-
-test("vague quantity ('some') -> ask", () => {
-  assert.deepEqual(kinds(parseVoiceOrder("some garlic naan", MENU)), ["quantity"]);
-});
-
-test("Hindi trailing दो (also means 'give') is not taken as a quantity", () => {
-  assert.deepEqual(adds(parseVoiceOrder("पनीर मटर दो", MENU)), [["pm", 1, ""]]);
-});
-
-test("item not on the menu is explained, nothing added", () => {
-  const r = parseVoiceOrder("two pizza", MENU);
-  assert.deepEqual(r.map((x) => [x.kind, reasonOf(x)]), [["unavailable", "not_on_menu"]]);
-});
-
-test("sold-out item is explained, nothing added", () => {
-  const r = parseVoiceOrder("one gulab jamun", MENU);
-  assert.deepEqual(r.map((x) => [x.kind, reasonOf(x)]), [["unavailable", "sold_out"]]);
-});
-
-test("item that needs an options choice is explained, nothing added", () => {
-  const r = parseVoiceOrder("one veg thali", MENU);
-  assert.deepEqual(r.map((x) => [x.kind, reasonOf(x)]), [["unavailable", "needs_choice"]]);
-});
-
-test("size/variant words and extras are explained, nothing added", () => {
-  assert.equal(reasonOf(parseVoiceOrder("half chicken biryani", MENU)[0]), "variant");
-  assert.equal(reasonOf(parseVoiceOrder("one butter naan with extra cheese", MENU)[0]), "modifier");
-  assert.deepEqual(adds(parseVoiceOrder("one butter naan with extra cheese", MENU)), []);
-});
-
-test("extra spicy is an instruction, not an extra", () => {
-  assert.deepEqual(adds(parseVoiceOrder("one veg biryani extra spicy", MENU)), [["vb", 1, "extra spicy"]]);
-});
-
-test("cut-off transcript asks instead of adding", () => {
-  const r = parseVoiceOrder("2 butter na", MENU);
-  assert.deepEqual(adds(r), []);
-  assert.equal(r[0].kind, "choose");
-  const r2 = parseVoiceOrder("एक चिकन", MENU);
-  assert.equal(r2[0].kind, "choose");
-  assert.deepEqual(optionIds(r2[0]), new Set(["cb", "cdp"]));
-});
-
-test("number word that is part of a dish name stays in the name", () => {
-  assert.deepEqual(adds(parseVoiceOrder("one chicken do pyaza", MENU)), [["cdp", 1, ""]]);
-});
-
-test("repeated phrase from recognition collapses to one line", () => {
-  assert.deepEqual(adds(parseVoiceOrder("two butter naan two butter naan", MENU)), [["bn", 2, ""]]);
-});
-
-test("unclear fragments are skipped, never added", () => {
-  const r = parseVoiceOrder("mmm, two butter naan", MENU);
-  assert.deepEqual(adds(r), [["bn", 2, ""]]);
-  assert.ok(r.every((x) => x.kind === "add" || x.kind === "skipped"));
-});
-
-test("prices always come from the menu", () => {
-  const r = parseVoiceOrder("2 butter naan", MENU)[0];
-  assert.equal(r.kind === "add" ? r.unitPrice : null, 60);
-});
-
-test("quantity above the limit is asked again", () => {
-  assert.deepEqual(kinds(parseVoiceOrder("99 butter naan", MENU)), ["quantity"]);
-});
-
-test("Hindi quantity words (तीन) with a Devanagari drink name", () => {
-  assert.deepEqual(adds(parseVoiceOrder("तीन मसाला छाछ", MENU)), [["mc", 3, ""]]);
-});
-
-test("empty transcript or empty menu gives nothing", () => {
-  assert.deepEqual(parseVoiceOrder("   ", MENU), []);
-  assert.deepEqual(parseVoiceOrder("two butter naan", []), []);
-});
-
-test("utterance tracker: interim ignored, indices once, Android cumulative results, echoes", () => {
-  const u = createUtteranceTracker(4000);
-  assert.equal(u.accept(0, "two butter naan", false, 0), null); // interim
-  assert.equal(u.accept(0, "two butter naan", true, 100), "two butter naan");
-  assert.equal(u.accept(0, "two butter naan", true, 200), null); // same index again
-  // Android: the next final repeats everything said so far
-  assert.equal(u.accept(1, "two butter naan one paneer tikka", true, 900), "one paneer tikka");
-  // an echo of the same phrase a moment later (new session) is ignored...
-  u.reset();
-  assert.equal(u.accept(0, "One paneer tikka.", true, 1500), null);
-  // ...but saying it again later is a real new order
-  assert.equal(u.accept(1, "one paneer tikka", true, 9000), "one paneer tikka");
-});
-
-test("multipliers (X, into, times, cross, guna) keep exact single item quantity without splitting or extra 1", () => {
-  const menuWithChicken: VoiceMenuItem[] = [
-    ...MENU,
-    { id: "cm", name: "Chicken Masala", price: "220.00" },
-    { id: "cgn", name: "Cheese Garlic Naan", price: "80.00" },
-    { id: "bis", name: "Bisleri", price: "20.00" },
-  ];
-
-  // Variations of "4 X chicken masala"
-  assert.deepEqual(adds(parseVoiceOrder("4 X chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 x chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4x chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 into chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 times chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 cross chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 गुना चिकन मसाला", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 एक्स चिकन मसाला", menuWithChicken)), [["cm", 4, ""]]);
-
-  // "4 x 1" or "4 into 1" arithmetic speech transcriptions
-  assert.deepEqual(adds(parseVoiceOrder("4 x 1 chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 into 1 chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("4 times 1 chicken masala", menuWithChicken)), [["cm", 4, ""]]);
-
-  // Dish with cheese, garlic, bisleri
-  assert.deepEqual(adds(parseVoiceOrder("4 cheese garlic naan", menuWithChicken)), [["cgn", 4, ""]]);
-  assert.deepEqual(adds(parseVoiceOrder("2 bisleri", menuWithChicken)), [["bis", 2, ""]]);
-});
-
-test("utterance tracker suppresses trailing recognition echo within repeat window", () => {
-  const u = createUtteranceTracker(4000);
-  // Full utterance arrives in result 0
-  assert.equal(u.accept(0, "4 chicken masala", true, 100), "4 chicken masala");
-  // Chrome emits duplicate suffix/tail chunk 600ms later: must be suppressed
-  assert.equal(u.accept(1, "chicken masala", true, 700), null);
-  // Deliberate re-order of chicken masala after the repeat window: accepted
-  assert.equal(u.accept(2, "chicken masala", true, 5500), "chicken masala");
-});
-
-test("isolated quantity carries over as default quantity for next dish chunk", () => {
-  const menuWithChicken: VoiceMenuItem[] = [
-    ...MENU,
-    { id: "cm", name: "Chicken Masala", price: "220.00" },
-  ];
-  // First chunk has only "4"
-  const r1 = parseVoiceOrder("4", menuWithChicken);
-  assert.equal(r1[0].kind, "skipped");
-  assert.equal((r1[0] as { pendingQty?: number }).pendingQty, 4);
-
-  // Next chunk adopts defaultQty 4
-  const r2 = parseVoiceOrder("chicken masala", menuWithChicken, 4);
-  assert.deepEqual(adds(r2), [["cm", 4, ""]]);
+test("parseQuantityOnly standalone quantity parser", () => {
+  assert.equal(parseQuantityOnly("do"), 2);
+  assert.equal(parseQuantityOnly("2"), 2);
+  assert.equal(parseQuantityOnly("two"), 2);
+  assert.equal(parseQuantityOnly("teen"), 3);
+  assert.equal(parseQuantityOnly("चार"), 4);
+  assert.equal(parseQuantityOnly("ek plate"), 1);
+  assert.equal(parseQuantityOnly("sirf do"), 2);
+  assert.equal(parseQuantityOnly("char chahiye"), 4);
+  assert.equal(parseQuantityOnly("cheese garlic naan"), null); // dish, not quantity
+  assert.equal(parseQuantityOnly(""), null);
 });

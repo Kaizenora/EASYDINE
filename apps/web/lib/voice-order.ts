@@ -31,14 +31,46 @@ export interface VoiceOption {
   unitPrice: number;
 }
 
+export interface VoiceAddLine {
+  itemId: string;
+  quantity: number;
+  note: string;
+}
+
 export type VoiceResult =
-  | { kind: "add"; heard: string; itemId: string; name: string; unitPrice: number; quantity: number; note: string }
-  | { kind: "quantity"; heard: string; itemId: string; name: string; unitPrice: number; note: string }
-  | { kind: "choose"; heard: string; quantity: number | null; note: string; options: VoiceOption[] }
+  | {
+      kind: "add";
+      heard: string;
+      itemId: string;
+      name: string;
+      unitPrice: number;
+      quantity: number;
+      variant?: string;
+      note: string;
+    }
+  | {
+      kind: "ask_quantity";
+      heard: string;
+      itemId: string;
+      name: string;
+      unitPrice: number;
+      variant?: string;
+      note: string;
+      question: string;
+    }
+  | {
+      kind: "quantity_only";
+      heard: string;
+      quantity: number;
+    }
+  | {
+      kind: "not_found";
+      heard: string;
+    }
   | {
       kind: "unavailable";
       heard: string;
-      reason: "not_on_menu" | "sold_out" | "needs_choice" | "modifier" | "variant";
+      reason: "not_on_menu" | "sold_out" | "needs_choice" | "modifier";
       itemId?: string;
       name?: string;
     }
@@ -113,9 +145,23 @@ const INSTRUCTIONS = [
   "मीठ कमी", "कमी मीठ", "साखर कमी", "कमी साखर", "साखर नको", "बर्फ नको", "tikhat nako", "kami tikhat", "kanda nako",
 ].sort((a, b) => b.split(" ").length - a.split(" ").length || b.length - a.length);
 
-/** Asking for extras/add-ons/sizes: not supported by voice (pick them on screen). */
+/** Asking for extras/add-ons: not supported by voice (pick them on screen). */
 const MODIFIER_MARKERS = new Set(["extra", "add", "with", "double", "topping", "toppings", "एक्स्ट्रा", "अतिरिक्त", "साथ", "सोबत", "जास्त", "ज्यादा", "ज़्यादा"]);
-const VARIANT_WORDS = new Set(["half", "full", "small", "medium", "large", "regular", "हाफ", "फुल", "आधा", "आधी", "पूरा", "पूर्ण", "अर्धा", "अर्धी", "छोटा", "बड़ा", "मोठा", "लहान"]);
+export const VARIANT_MAP: Record<string, string> = {
+  half: "Half",
+  haaf: "Half",
+  haf: "Half",
+  "हाफ": "Half",
+  "आधा": "Half",
+  "आधी": "Half",
+  "अर्धा": "Half",
+  "अर्धी": "Half",
+  full: "Full",
+  ful: "Full",
+  "फुल": "Full",
+  "पूरा": "Full",
+  "पूर्ण": "Full",
+};
 
 // ---------------------------------------------------------------- Devanagari -> Latin (approximate, for matching only)
 const CONS: Record<string, string> = {
@@ -250,7 +296,7 @@ interface Segment {
   words: string[];
   notes: string[];
   modifier: boolean;
-  variant: boolean;
+  variant: string | null;
 }
 
 function normalise(t: string): string {
@@ -286,7 +332,7 @@ function pullInstructions(text: string): { rest: string; notes: string[] } {
 
 function splitSegments(transcript: string, menuWordKeys: Set<string>): Segment[] {
   const segs: Segment[] = [];
-  const fresh = (): Segment => ({ heard: [], qty: null, qtyVague: false, words: [], notes: [], modifier: false, variant: false });
+  const fresh = (): Segment => ({ heard: [], qty: null, qtyVague: false, words: [], notes: [], modifier: false, variant: null });
   const chunks = normalise(transcript)
     .split(/\s*,\s*/)
     .flatMap((c) => c.split(new RegExp(`\\s+(?:${[...SEPARATORS].filter((s) => s !== ",").join("|")})\\s+`)));
@@ -348,8 +394,8 @@ function splitSegments(transcript: string, menuWordKeys: Set<string>): Segment[]
         prevWasMultiplier = false;
         continue;
       }
-      if (VARIANT_WORDS.has(tok)) {
-        cur.variant = true;
+      if (VARIANT_MAP[tok]) {
+        cur.variant = VARIANT_MAP[tok];
         prevWasMultiplier = false;
         continue;
       }
@@ -439,63 +485,254 @@ function opt(s: Scored): VoiceOption {
   return { itemId: s.item.id, name: s.item.name, unitPrice: priceOf(s.item) };
 }
 
-function decide(seg: Segment, menu: VoiceMenuItem[], defaultQty = 1): VoiceResult {
+function decide(seg: Segment, menu: VoiceMenuItem[]): VoiceResult {
   const heard = seg.heard.join(" ").trim();
   const note = [...new Set(seg.notes)].join(", ");
-  if (seg.words.length === 0) return { kind: "skipped", heard, pendingQty: seg.qty ?? undefined };
-  const scored = menu.map((it) => scoreItem(seg.words, it)).filter((s) => s.score >= 0.28).sort((a, b) => b.score - a.score);
+  if (seg.words.length === 0) {
+    if (seg.qty !== null) return { kind: "quantity_only", heard, quantity: seg.qty };
+    return { kind: "skipped", heard, pendingQty: seg.qty ?? undefined };
+  }
+
+  const scored = menu
+    .map((it) => scoreItem(seg.words, it))
+    .filter((s) => s.score >= 0.28)
+    .sort((a, b) => b.score - a.score);
+
   if (scored.length === 0) {
-    const text = seg.words.join("");
-    const looksLikeWord = text.length >= 3 && /[aeiouyऀ-ॿ]/.test(text);
-    return looksLikeWord ? { kind: "unavailable", heard, reason: "not_on_menu" } : { kind: "skipped", heard, pendingQty: seg.qty ?? undefined };
+    return { kind: "not_found", heard };
   }
-  // Asked for an extra/add-on or a size: explain, add nothing.
-  if ((seg.modifier || seg.variant) && scored[0].full) {
+
+  // Modifiers (e.g. "with extra cheese"): not supported by voice, pick on screen
+  if (seg.modifier && scored[0].full) {
     const it = scored[0].item;
-    return { kind: "unavailable", heard, reason: seg.variant ? "variant" : "modifier", itemId: it.id, name: it.name };
+    return { kind: "unavailable", heard, reason: "modifier", itemId: it.id, name: it.name };
   }
+
+  // Closest match auto-add: take the single top-scoring dish
   const top = scored[0];
-  const second = scored[1];
-  const exact = scored.filter((s) => s.full && s.usedAll);
-  const covering = scored.filter((s) => s.covers);
-  let confident: Scored | null = null;
-  if (exact.length === 1 && !scored.some((s) => s !== exact[0] && s.full && s.usedAll)) {
-    // The whole name was said and explains every word ("paneer tikka" beats "paneer tikka masala").
-    confident = exact[0];
-  } else if (exact.length === 0 && covering.length === 1) {
-    // Only one dish has all the words that were said ("biryani" when there is one biryani).
-    confident = covering[0];
-  } else if (exact.length === 0 && covering.length === 0 && top.full && (!second || second.score <= top.score - 0.2)) {
-    // Whole name heard plus a word we don't know ("butter naan kadak").
-    confident = top;
-  } else if (exact.length === 0 && covering.length === 0 && scored.length === 1 && top.score >= 0.5) {
-    // A single close spelling and nothing else on the menu like it.
-    confident = top;
+  const it = top.item;
+
+  if (it.available === false) {
+    return { kind: "unavailable", heard, reason: "sold_out", itemId: it.id, name: it.name };
   }
-  if (!confident) {
-    const options = scored.slice(0, 4).map(opt);
-    return { kind: "choose", heard, quantity: seg.qtyVague ? null : (seg.qty ?? (defaultQty > 1 ? defaultQty : null)), note, options };
+  if (it.needsChoice) {
+    return { kind: "unavailable", heard, reason: "needs_choice", itemId: it.id, name: it.name };
   }
-  const it = confident.item;
-  if (it.available === false) return { kind: "unavailable", heard, reason: "sold_out", itemId: it.id, name: it.name };
-  if (seg.variant) return { kind: "unavailable", heard, reason: "variant", itemId: it.id, name: it.name };
-  if (seg.modifier) return { kind: "unavailable", heard, reason: "modifier", itemId: it.id, name: it.name };
-  if (it.needsChoice) return { kind: "unavailable", heard, reason: "needs_choice", itemId: it.id, name: it.name };
-  const base = { heard, itemId: it.id, name: it.name, unitPrice: priceOf(it), note };
-  // No quantity said means one (or defaultQty if carrying over from an isolated number chunk); a vague or impossible amount is asked.
-  if (seg.qtyVague || (seg.qty !== null && (seg.qty < 1 || seg.qty > MAX_QTY))) return { kind: "quantity", ...base };
-  return { kind: "add", ...base, quantity: seg.qty ?? defaultQty };
+
+  const base = {
+    heard,
+    itemId: it.id,
+    name: it.name,
+    unitPrice: priceOf(it),
+    variant: seg.variant ?? undefined,
+    note,
+  };
+
+  // Missing or unclear quantity: NEVER assume 1! Ask by dish name on screen.
+  if (seg.qty === null || seg.qtyVague) {
+    const dishLabel = seg.variant ? `${seg.variant} ${it.name}` : it.name;
+    return {
+      kind: "ask_quantity",
+      ...base,
+      question: `Kitne ${dishLabel}?`,
+    };
+  }
+
+  return {
+    kind: "add",
+    ...base,
+    quantity: seg.qty,
+  };
 }
 
 /** Parse one final transcript against the restaurant's loaded menu. */
-export function parseVoiceOrder(transcript: string, menu: VoiceMenuItem[], defaultQty = 1): VoiceResult[] {
+export function parseVoiceOrder(transcript: string, menu: VoiceMenuItem[]): VoiceResult[] {
   if (!transcript || !transcript.trim() || menu.length === 0) return [];
   const menuWordKeys = new Set(menu.flatMap((m) => nameWords(m.name).map(phoneticKey)));
-  return splitSegments(transcript, menuWordKeys).map((s) => decide(s, menu, defaultQty));
+  return splitSegments(transcript, menuWordKeys).map((s) => decide(s, menu));
+}
+
+export function parseQuantityOnly(text: string): number | null {
+  const cleaned = toAsciiDigits(text.toLowerCase())
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
+    .trim();
+  if (!cleaned) return null;
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+
+  const IGNORED = new Set([
+    "plate", "plates", "portion", "portions", "serving", "servings",
+    "piece", "pieces", "bowl", "bowls", "glass", "glasses", "nos", "number",
+    "sirf", "bas", "only", "bhai", "please", "chahiye", "rakho", "kardo", "kar",
+    "de", "dijiye", "lao", "bhi", "dya", "hawa",
+    "कृपया", "बस", "सिर्फ", "प्लेट", "पीस", "ग्लास", "बाउल", "कप", "चाहिए", "दीजिए", "लाइए", "लाओ", "द्या",
+  ]);
+
+  const numValues: number[] = [];
+  for (const w of words) {
+    if (/^\d{1,2}$/.test(w)) {
+      numValues.push(parseInt(w, 10));
+    } else if (NUMBER_WORDS[w] !== undefined) {
+      numValues.push(NUMBER_WORDS[w]);
+    } else if (!IGNORED.has(w)) {
+      return null;
+    }
+  }
+
+  if (numValues.length === 1) {
+    return numValues[0];
+  }
+  return null;
+}
+
+export interface PendingDish {
+  id: string;
+  itemId: string;
+  name: string;
+  unitPrice: number;
+  variant?: string;
+  note: string;
+  question: string;
+}
+
+export interface VoiceSessionOutput {
+  added: { itemId: string; name: string; quantity: number; note: string; unitPrice: number; variant?: string }[];
+  question: string | null;
+  notFound: string[];
+}
+
+export class VoiceOrderSession {
+  private menu: VoiceMenuItem[];
+  private onAdd?: (lines: VoiceAddLine[]) => void;
+  private pendingQueue: PendingDish[] = [];
+  private tracker = createUtteranceTracker();
+
+  constructor(menu: VoiceMenuItem[], onAdd?: (lines: VoiceAddLine[]) => void) {
+    this.menu = menu;
+    this.onAdd = onAdd;
+  }
+
+  setMenu(menu: VoiceMenuItem[]) {
+    this.menu = menu;
+  }
+
+  getQuestion(): string | null {
+    return this.pendingQueue.length > 0 ? this.pendingQueue[0].question : null;
+  }
+
+  getPendingList(): PendingDish[] {
+    return [...this.pendingQueue];
+  }
+
+  resolveActiveQuestion(qty: number): VoiceSessionOutput {
+    if (this.pendingQueue.length === 0 || qty < 1) {
+      return { added: [], question: this.getQuestion(), notFound: [] };
+    }
+    const current = this.pendingQueue.shift()!;
+    const noteWithVariant = current.variant
+      ? current.note
+        ? `${current.variant} portion, ${current.note}`
+        : `${current.variant} portion`
+      : current.note;
+    const line: VoiceAddLine = {
+      itemId: current.itemId,
+      quantity: qty,
+      note: noteWithVariant,
+    };
+    if (this.onAdd) this.onAdd([line]);
+    return {
+      added: [
+        {
+          itemId: current.itemId,
+          name: current.name,
+          quantity: qty,
+          note: noteWithVariant,
+          unitPrice: current.unitPrice,
+          variant: current.variant,
+        },
+      ],
+      question: this.getQuestion(),
+      notFound: [],
+    };
+  }
+
+  dismissActiveQuestion(): string | null {
+    if (this.pendingQueue.length > 0) {
+      this.pendingQueue.shift();
+    }
+    return this.getQuestion();
+  }
+
+  processTranscript(transcript: string, isFinal = true, resultIndex = 0, nowMs = Date.now()): VoiceSessionOutput {
+    const cleanText = this.tracker.accept(resultIndex, transcript, isFinal, nowMs);
+    if (!cleanText) {
+      return { added: [], question: this.getQuestion(), notFound: [] };
+    }
+
+    // 1. If we are currently waiting for a quantity answer:
+    if (this.pendingQueue.length > 0) {
+      const q = parseQuantityOnly(cleanText);
+      if (q !== null && q >= 1) {
+        return this.resolveActiveQuestion(q);
+      }
+    }
+
+    // 2. Parse transcript as dish orders
+    const results = parseVoiceOrder(cleanText, this.menu);
+    const addedLines: VoiceAddLine[] = [];
+    const addedSummary: { itemId: string; name: string; quantity: number; note: string; unitPrice: number; variant?: string }[] = [];
+    const notFound: string[] = [];
+
+    for (const r of results) {
+      if (r.kind === "add") {
+        const noteWithVariant = r.variant
+          ? r.note
+            ? `${r.variant} portion, ${r.note}`
+            : `${r.variant} portion`
+          : r.note;
+        addedLines.push({ itemId: r.itemId, quantity: r.quantity, note: noteWithVariant });
+        addedSummary.push({
+          itemId: r.itemId,
+          name: r.name,
+          quantity: r.quantity,
+          note: noteWithVariant,
+          unitPrice: r.unitPrice,
+          variant: r.variant,
+        });
+      } else if (r.kind === "ask_quantity") {
+        this.pendingQueue.push({
+          id: `${r.itemId}-${Date.now()}-${Math.random()}`,
+          itemId: r.itemId,
+          name: r.name,
+          unitPrice: r.unitPrice,
+          variant: r.variant,
+          note: r.note,
+          question: r.question,
+        });
+      } else if (r.kind === "not_found") {
+        notFound.push(r.heard);
+      }
+    }
+
+    if (addedLines.length > 0 && this.onAdd) {
+      this.onAdd(addedLines);
+    }
+
+    return {
+      added: addedSummary,
+      question: this.getQuestion(),
+      notFound,
+    };
+  }
+
+  reset() {
+    this.pendingQueue = [];
+    this.tracker.reset();
+  }
 }
 
 function tokensOf(text: string): string[] {
-  return normalise(text).replace(/,/g, " ").split(/\s+/).filter(Boolean);
+  return normalise(text).split(/\s+/).filter(Boolean);
 }
 
 function isSuffixOf(smaller: string[], larger: string[]): boolean {

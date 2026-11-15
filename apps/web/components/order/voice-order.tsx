@@ -23,15 +23,13 @@ import {
   parseVoiceOrder,
   RECOGNITION_LANG,
   transliterate,
+  VoiceOrderSession,
+  type VoiceAddLine,
   type VoiceMenuItem,
   type VoiceResult,
 } from "@/lib/voice-order";
 
-export interface VoiceAddLine {
-  itemId: string;
-  quantity: number;
-  note: string;
-}
+export type { VoiceAddLine };
 
 // Minimal Web Speech API types (not in TypeScript's DOM lib everywhere).
 interface SpeechAlt { transcript: string }
@@ -63,23 +61,11 @@ const nowMs = () => Date.now();
 const IDLE_STOP_MS = 20_000; // quiet this long -> stop listening
 const MAX_SESSION_MS = 180_000; // never keep the mic on longer than this
 
-interface Pending {
-  key: number;
-  res: Exclude<VoiceResult, { kind: "add" } | { kind: "skipped" }>;
-  itemId: string | null;
-  name: string;
-  qty: number | null;
-  note: string;
-}
 interface Recent {
   key: number;
   name: string;
   qty: number;
   note: string;
-}
-
-function money(n: number) {
-  return `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
 }
 
 // The bar renders at page level (inside the page's light-theme wrapper):
@@ -92,12 +78,12 @@ function Floating({ children }: { children: ReactNode }) {
 export function VoiceOrder({
   menu,
   onAdd,
-  onChooseOptions,
+  onChooseOptions: _onChooseOptions,
   bottomOffset = 16,
 }: {
   menu: VoiceMenuItem[];
   onAdd: (lines: VoiceAddLine[]) => void;
-  onChooseOptions: (itemId: string) => void;
+  onChooseOptions?: (itemId: string) => void;
   bottomOffset?: number;
 }) {
   const { locale, setLocale, t } = useI18n();
@@ -106,14 +92,18 @@ export function VoiceOrder({
   const [barOpen, setBarOpen] = useState(false);
   const [interim, setInterim] = useState("");
   const [recent, setRecent] = useState<Recent[]>([]);
-  const [pending, setPending] = useState<Pending[]>([]);
+  const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const pendingQtyRef = useRef<{ qty: number; at: number } | null>(null);
+
+  const voiceSession = useRef<VoiceOrderSession | null>(null);
+  if (!voiceSession.current) {
+    voiceSession.current = new VoiceOrderSession(menu, onAdd);
+  }
+  voiceSession.current.setMenu(menu);
 
   const session = useRef({
     active: false,
     rec: null as Recognition | null,
-    tracker: createUtteranceTracker(),
     idle: null as ReturnType<typeof setTimeout> | null,
     startedAt: 0,
     key: 0,
@@ -136,12 +126,9 @@ export function VoiceOrder({
     };
   }, []);
 
-  const byId = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
-
   const stopListening = (msg?: string) => {
     const s = session.current;
     s.active = false;
-    pendingQtyRef.current = null;
     if (s.idle) clearTimeout(s.idle);
     s.idle = null;
     s.rec?.stop();
@@ -154,48 +141,6 @@ export function VoiceOrder({
     const s = session.current;
     if (s.idle) clearTimeout(s.idle);
     s.idle = setTimeout(() => stopListening(live.current.t("voice.idle")), IDLE_STOP_MS);
-  };
-
-  const handleText = (text: string) => {
-    const s = session.current;
-    const { menu: m, onAdd: add } = live.current;
-    const currentPendingQty =
-      pendingQtyRef.current && nowMs() - pendingQtyRef.current.at < 6000
-        ? pendingQtyRef.current.qty
-        : 1;
-    const results = parseVoiceOrder(text, m, currentPendingQty);
-    const adds: VoiceAddLine[] = [];
-    const added: Recent[] = [];
-    const asks: Pending[] = [];
-    for (const r of results) {
-      if (r.kind === "skipped") {
-        const pQty = (r as { pendingQty?: number }).pendingQty;
-        if (pQty && pQty >= 1) {
-          pendingQtyRef.current = { qty: pQty, at: nowMs() };
-        }
-        continue;
-      }
-      if (r.kind === "add") {
-        adds.push({ itemId: r.itemId, quantity: r.quantity, note: r.note });
-        added.push({ key: ++s.key, name: r.name, qty: r.quantity, note: r.note });
-      } else {
-        const one = r.kind === "quantity";
-        asks.push({
-          key: ++s.key,
-          res: r,
-          itemId: one ? r.itemId : null,
-          name: one ? r.name : r.kind === "unavailable" ? (r.name ?? "") : "",
-          qty: r.kind === "choose" ? (r.quantity ?? 1) : null,
-          note: r.kind === "choose" || r.kind === "quantity" ? r.note : "",
-        });
-      }
-    }
-    if (adds.length) {
-      pendingQtyRef.current = null;
-      add(adds);
-    }
-    if (added.length) setRecent((rs) => [...added.reverse(), ...rs].slice(0, 4));
-    if (asks.length) setPending((ps) => [...ps, ...asks]);
   };
 
   const spawn = () => {
@@ -215,7 +160,6 @@ export function VoiceOrder({
       return;
     }
     s.rec = rec;
-    s.tracker.reset();
     rec.lang = RECOGNITION_LANG[live.current.locale as Locale];
     rec.interimResults = true;
     rec.continuous = true;
@@ -254,8 +198,22 @@ export function VoiceOrder({
         const r = e.results[i];
         const text = r[0]?.transcript ?? "";
         if (r.isFinal) {
-          const fresh = s.tracker.accept(i, text, true, nowMs());
-          if (fresh) handleText(fresh);
+          const out = voiceSession.current?.processTranscript(text, true, i, nowMs());
+          if (out) {
+            if (out.added.length > 0) {
+              const newRecent = out.added.map((a) => ({
+                key: ++session.current.key,
+                name: a.name,
+                qty: a.quantity,
+                note: a.note,
+              }));
+              setRecent((rs) => [...newRecent.reverse(), ...rs].slice(0, 4));
+            }
+            setActiveQuestion(out.question);
+            if (out.notFound.length > 0) {
+              setMessage(`“${out.notFound.join(", ")}” ${live.current.t("voice.notOnMenu", { heard: out.notFound.join(", ") })}`);
+            }
+          }
         } else partial += text;
       }
       setInterim(partial);
@@ -289,10 +247,9 @@ export function VoiceOrder({
     const s = session.current;
     s.active = true;
     s.startedAt = nowMs();
-    s.tracker = createUtteranceTracker();
-    pendingQtyRef.current = null;
+    voiceSession.current?.reset();
+    setActiveQuestion(null);
     setRecent([]);
-    setPending([]);
     setInterim("");
     setListening(true);
     setBarOpen(true);
@@ -309,16 +266,30 @@ export function VoiceOrder({
   const closeBar = () => {
     stopListening();
     setBarOpen(false);
-    setPending([]);
+    setActiveQuestion(null);
     setRecent([]);
   };
 
-  const resolve = (p: Pending, itemId: string, name: string, qty: number) => {
-    onAdd([{ itemId, quantity: qty, note: p.note.trim() }]);
-    setRecent((rs) => [{ key: ++session.current.key, name, qty, note: p.note.trim() }, ...rs].slice(0, 4));
-    setPending((ps) => ps.filter((x) => x.key !== p.key));
+  const handleAnswerQty = (qty: number) => {
+    const out = voiceSession.current?.resolveActiveQuestion(qty);
+    if (out) {
+      if (out.added.length > 0) {
+        const newRecent = out.added.map((a) => ({
+          key: ++session.current.key,
+          name: a.name,
+          qty: a.quantity,
+          note: a.note,
+        }));
+        setRecent((rs) => [...newRecent.reverse(), ...rs].slice(0, 4));
+      }
+      setActiveQuestion(out.question);
+    }
   };
-  const dismiss = (key: number) => setPending((ps) => ps.filter((x) => x.key !== key));
+
+  const handleDismissQuestion = () => {
+    const nextQ = voiceSession.current?.dismissActiveQuestion() ?? null;
+    setActiveQuestion(nextQ);
+  };
 
   const langLabel: Record<Locale, string> = { en: "EN", hi: "हिं", mr: "मरा" };
   const langPicker = (
@@ -444,106 +415,42 @@ export function VoiceOrder({
                     </span>
                   </p>
                 ))}
-                {recent.length > 0 && !pending.length && !listening && (
+                {recent.length > 0 && !activeQuestion && !listening && (
                   <p className="text-[11px] text-muted-foreground">{t("voice.inCart")}</p>
                 )}
-                {pending.map((p) => (
-                  <PendingRow key={p.key} p={p} byId={byId} t={t} onResolve={resolve} onDismiss={dismiss} onChooseOptions={onChooseOptions} />
-                ))}
+                {activeQuestion && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold text-foreground">
+                        🎙️ {activeQuestion}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleDismissQuestion}
+                        aria-label={t("voice.noneOfThese")}
+                        className="rounded p-1 text-muted-foreground hover:bg-secondary"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => handleAnswerQty(n)}
+                          className="h-8 w-9 rounded-lg border border-border bg-card text-xs font-bold text-foreground hover:border-primary hover:bg-primary/10 transition-colors"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </Floating>
     );
   }
-}
-
-function PendingRow({
-  p,
-  byId,
-  t,
-  onResolve,
-  onDismiss,
-  onChooseOptions,
-}: {
-  p: Pending;
-  byId: Map<string, VoiceMenuItem>;
-  t: (k: string, v?: Record<string, string | number>) => string;
-  onResolve: (p: Pending, itemId: string, name: string, qty: number) => void;
-  onDismiss: (key: number) => void;
-  onChooseOptions: (itemId: string) => void;
-}) {
-  const { res } = p;
-  const close = (
-    <button type="button" onClick={() => onDismiss(p.key)} aria-label={t("voice.noneOfThese")} className="ml-auto rounded p-0.5 text-muted-foreground hover:bg-secondary">
-      <X className="h-3.5 w-3.5" />
-    </button>
-  );
-
-  if (res.kind === "unavailable") {
-    const name = res.name ?? "";
-    const msg =
-      res.reason === "not_on_menu" ? t("voice.notOnMenu", { heard: res.heard })
-      : res.reason === "sold_out" ? t("voice.soldOut", { name })
-      : res.reason === "needs_choice" ? t("voice.needsChoice", { name })
-      : res.reason === "variant" ? t("voice.variant", { name })
-      : t("voice.modifier", { name });
-    return (
-      <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground">
-        <div className="flex items-start gap-1.5">
-          <Info className="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-          <span className="flex-1">{msg}</span>
-          {close}
-        </div>
-        {res.itemId && res.reason !== "sold_out" && byId.has(res.itemId) && (
-          <button type="button" onClick={() => { onDismiss(p.key); onChooseOptions(res.itemId!); }} className="mt-1.5 rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
-            {t("voice.chooseOptions")}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  if (res.kind === "choose") {
-    return (
-      <div className="rounded-xl border border-border bg-background px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <p className="text-xs font-bold text-foreground">
-            {t("voice.didYouMean")} <span className="font-normal text-muted-foreground">“{res.heard}”</span>
-          </p>
-          {close}
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {res.options.map((o) => (
-            <button
-              key={o.itemId}
-              type="button"
-              onClick={() => onResolve(p, o.itemId, o.name, p.qty ?? 1)}
-              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary"
-            >
-              {(p.qty ?? 1) > 1 ? `${p.qty}× ` : ""}
-              {o.name} <span className="text-muted-foreground">{money(o.unitPrice)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // quantity (vague or impossible amount)
-  return (
-    <div className="rounded-xl border border-border bg-background px-3 py-2">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs font-bold text-foreground">{t("voice.howMany", { name: p.name })}</p>
-        {close}
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} type="button" onClick={() => onResolve(p, p.itemId!, p.name, n)} className="h-8 w-9 rounded-lg border border-border bg-card text-xs font-bold text-foreground hover:border-primary">
-            {n}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 }
