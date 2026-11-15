@@ -22,7 +22,7 @@ import {
   UtensilsCrossed,
   X,
 } from "lucide-react";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
@@ -222,6 +222,9 @@ export default function LuxuryCustomerMenu({
     return [];
   });
   const [showGamesModal, setShowGamesModal] = useState(false);
+  const handleCloseGames = useCallback(() => {
+    setShowGamesModal(false);
+  }, []);
   const [viewMode, setViewMode] = useState<"MENU" | "TRACKING">("MENU");
 
   // Filters & Search
@@ -368,6 +371,13 @@ export default function LuxuryCustomerMenu({
       setViewMode("TRACKING");
     }
   }, [activeOrder?.orderNumber]);
+
+  // Immediately close games modal when order is marked paid or settled
+  useEffect(() => {
+    if (!activeOrder || activeOrder.status === "PAID" || (activeOrder as any).paymentStatus === "PAID" || paidOrder || justPaidSnapshot) {
+      setShowGamesModal(false);
+    }
+  }, [activeOrder, paidOrder, justPaidSnapshot]);
 
   // Detect when cashier marks order as paid:
   // Backend stops returning the order (status.order becomes null).
@@ -1313,12 +1323,12 @@ export default function LuxuryCustomerMenu({
         )}
 
         {/* TABLE GAMES MODAL (TRACKING VIEW) */}
-        {showGamesModal && activeOrderId && activeOrder && activeOrder.paymentStatus !== "PAID" && (
+        {showGamesModal && activeOrder && (
           <GamesDialog
             restaurantName={(data as any)?.restaurantName || data?.branchName || "EasyDine"}
             restaurantLogoUrl={(data as any)?.restaurantLogoUrl || (data as any)?.logoUrl}
-            onClose={() => setShowGamesModal(false)}
-            isOrderPaid={activeOrder?.paymentStatus === "PAID" || activeOrder?.status === "PAID"}
+            onClose={handleCloseGames}
+            isOrderPaid={!activeOrder || activeOrder.status === "PAID" || (activeOrder as any).paymentStatus === "PAID"}
             settings={getStoredGameSettings((data as any)?.branchId || null)}
           />
         )}
@@ -1360,9 +1370,18 @@ export default function LuxuryCustomerMenu({
               <button
                 type="button"
                 onClick={() => setViewMode("TRACKING")}
-                className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground hover:bg-secondary"
+                className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground hover:bg-secondary cursor-pointer"
               >
                 <span>Live Order</span>
+              </button>
+            )}
+            {activeOrder && (
+              <button
+                type="button"
+                onClick={() => setShowGamesModal(true)}
+                className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                <span>🎮 Games</span>
               </button>
             )}
             <button
@@ -2087,13 +2106,13 @@ export default function LuxuryCustomerMenu({
         </div>
       )}
 
-      {/* TABLE GAMES MODAL */}
-      {showGamesModal && activeOrderId && activeOrder && activeOrder.paymentStatus !== "PAID" && (
+      {/* TABLE GAMES MODAL (MENU VIEW) */}
+      {showGamesModal && activeOrder && (
         <GamesDialog
           restaurantName={(data as any)?.restaurantName || data?.branchName || "EasyDine"}
           restaurantLogoUrl={(data as any)?.restaurantLogoUrl || (data as any)?.logoUrl}
-          onClose={() => setShowGamesModal(false)}
-          isOrderPaid={activeOrder?.paymentStatus === "PAID" || activeOrder?.status === "PAID"}
+          onClose={handleCloseGames}
+          isOrderPaid={!activeOrder || activeOrder.status === "PAID" || (activeOrder as any).paymentStatus === "PAID"}
           settings={getStoredGameSettings((data as any)?.branchId || null)}
         />
       )}
