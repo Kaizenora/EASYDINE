@@ -1311,6 +1311,17 @@ export default function LuxuryCustomerMenu({
             </div>
           </div>
         )}
+
+        {/* TABLE GAMES MODAL (TRACKING VIEW) */}
+        {showGamesModal && activeOrderId && activeOrder && activeOrder.paymentStatus !== "PAID" && (
+          <GamesDialog
+            restaurantName={(data as any)?.restaurantName || data?.branchName || "EasyDine"}
+            restaurantLogoUrl={(data as any)?.restaurantLogoUrl || (data as any)?.logoUrl}
+            onClose={() => setShowGamesModal(false)}
+            isOrderPaid={activeOrder?.paymentStatus === "PAID" || activeOrder?.status === "PAID"}
+            settings={getStoredGameSettings((data as any)?.branchId || null)}
+          />
+        )}
       </div>
     );
   }

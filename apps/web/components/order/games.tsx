@@ -96,7 +96,7 @@ export function GamesDialog({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-amber-500/10 via-background to-background text-foreground backdrop-blur-md overflow-hidden select-none">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background/95 backdrop-blur-lg text-foreground overflow-hidden select-none touch-manipulation">
       {/* Top Banner / Navigation */}
       <div className="flex items-center justify-between border-b border-border/80 bg-card/90 px-4 py-3 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
@@ -505,6 +505,7 @@ function CatchSnacksGame({ settings }: { settings?: GameSettings }) {
   const nextIdRef = useRef(1);
   const spawnTimerRef = useRef(0);
   const isPlayingRef = useRef(false);
+  const tappedIdsRef = useRef<Set<number>>(new Set());
 
   // Custom or default assets
   const snackList = settings?.catchImages?.length
@@ -520,6 +521,7 @@ function CatchSnacksGame({ settings }: { settings?: GameSettings }) {
     setScore(0);
     setTimeLeft(30);
     itemsRef.current = [];
+    tappedIdsRef.current.clear();
     setRenderedItems([]);
     setScorePopups([]);
     isPlayingRef.current = true;
@@ -616,9 +618,12 @@ function CatchSnacksGame({ settings }: { settings?: GameSettings }) {
   }, [phase, burntList, snackList]);
 
   // Tap handler on falling item
-  const handleItemTap = (item: FallingItem, e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleItemTap = (item: FallingItem, e?: React.SyntheticEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    if (tappedIdsRef.current.has(item.id)) return;
+    tappedIdsRef.current.add(item.id);
 
     // Remove from ref immediately
     itemsRef.current = itemsRef.current.filter((i) => i.id !== item.id);
@@ -700,13 +705,14 @@ function CatchSnacksGame({ settings }: { settings?: GameSettings }) {
       )}
 
       {/* Main Game Stage */}
-      <div className="relative w-full h-[52vh] sm:h-[420px] rounded-3xl overflow-hidden border-2 border-orange-500/30 bg-gradient-to-b from-orange-500/5 via-amber-500/10 to-orange-500/15 shadow-inner touch-none select-none">
+      <div className="relative w-full h-[52vh] sm:h-[420px] rounded-3xl overflow-hidden border-2 border-orange-500/30 bg-gradient-to-b from-orange-500/5 via-amber-500/10 to-orange-500/15 shadow-inner select-none touch-manipulation">
         {/* Falling items */}
         {renderedItems.map((item) => (
           <button
             key={item.id}
             type="button"
             onPointerDown={(e) => handleItemTap(item, e)}
+            onClick={(e) => handleItemTap(item, e)}
             style={{
               position: "absolute",
               left: `${item.x}%`,
@@ -714,7 +720,7 @@ function CatchSnacksGame({ settings }: { settings?: GameSettings }) {
               transform: "translate(-50%, -50%)",
             }}
             className={cn(
-              "flex flex-col items-center justify-center p-2 rounded-2xl shadow-lg border transition-transform active:scale-125 cursor-pointer touch-none",
+              "flex flex-col items-center justify-center p-2 rounded-2xl shadow-lg border transition-transform active:scale-125 cursor-pointer touch-manipulation",
               item.type === "snack"
                 ? "bg-amber-400/90 border-amber-300 shadow-amber-500/30 text-white animate-bounce"
                 : "bg-neutral-900/90 border-neutral-700 shadow-red-500/30 text-rose-400 animate-pulse"
