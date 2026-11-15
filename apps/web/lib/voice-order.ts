@@ -2,13 +2,12 @@
 // Hindi or Marathi, from the browser's Web Speech API) into proposed cart
 // lines, matched against ONLY this restaurant's loaded menu.
 //
-// Accuracy over forcing a match: a wrong add is worse than asking again.
-// The parser never guesses. It proposes an "add" only when exactly one menu
-// item is a confident match AND the quantity is clear; everything else comes
-// back as a question (pick a dish, pick a quantity) or an explanation (not on
-// the menu, sold out, needs an options choice, unsupported extra). Prices
-// always come from the menu, never from speech. Nothing here touches the cart;
-// the page shows these results for review first.
+// A wrong add is worse than asking, but asking too often is frustrating, so:
+// an item is added when exactly one dish on THIS menu fits what was said
+// (the full name, or words that only one dish has). A missing quantity means
+// one. The guest is asked only when several dishes fit equally well, and
+// told when a dish is not on the menu, sold out, or needs options picked on
+// screen. Prices always come from the menu, never from speech.
 
 export type VoiceLocale = "en" | "hi" | "mr";
 
@@ -81,10 +80,11 @@ const FILLERS = new Set([
   "i", "want", "would", "like", "please", "give", "me", "get", "us", "order", "the", "of", "plate", "plates",
   "piece", "pieces", "portion", "portions", "serving", "servings", "can", "have", "need", "we", "for", "bring",
   "just", "okay", "ok", "um", "uh", "hmm", "it", "that", "this", "nos", "number", "glass", "glasses", "bowl", "bowls",
+  "wala", "wali", "wale", "one's", "ones", "item", "items", "dish", "dishes",
   // Hindi
   "मुझे", "हमें", "चाहिए", "दीजिए", "दीजिये", "दे", "देना", "दो", "लाओ", "लाना", "लाइए", "प्लेट", "प्लीज", "प्लीज़", "भी",
   "कृपया", "का", "की", "के", "को", "एक्स", "गिलास", "बाउल", "पीस", "बस", "और", "ठीक", "है", "हाँ", "हां",
-  "mujhe", "chahiye", "dijiye", "lao", "bhi", "ka", "ki", "ke",
+  "mujhe", "chahiye", "dijiye", "lao", "bhi", "ka", "ki", "ke", "वाला", "वाली", "वाले", "आइटम",
   // Marathi
   "मला", "आम्हाला", "हवे", "हवा", "हवी", "हवेत", "द्या", "द्यावा", "द्यावी", "पाहिजे", "पाहिजेत", "करा", "पण", "आणा",
   "ग्लास", "प्लेट्स", "ना", "हो", "mala", "have", "dya",
@@ -346,6 +346,7 @@ interface Scored {
   score: number;
   full: boolean; // every word of the dish name was heard (strongly)
   usedAll: boolean; // every spoken dish word is explained by this dish
+  covers: boolean; // every spoken dish word strongly matches a word of this dish
 }
 
 function nameWords(name: string): string[] {
@@ -359,6 +360,7 @@ function nameWords(name: string): string[] {
 function scoreItem(words: string[], item: VoiceMenuItem): Scored {
   const nw = nameWords(item.name);
   const used = new Set<number>();
+  const strongUsed = new Set<number>();
   let total = 0;
   let strong = 0;
   for (const m of nw) {
@@ -373,6 +375,7 @@ function scoreItem(words: string[], item: VoiceMenuItem): Scored {
       }
     });
     if (bi >= 0) used.add(bi);
+    if (bi >= 0 && best >= 0.85) strongUsed.add(bi);
     total += best;
     if (best >= 0.85) strong++;
   }
@@ -383,6 +386,7 @@ function scoreItem(words: string[], item: VoiceMenuItem): Scored {
     score: cover * (0.6 + 0.4 * segCover),
     full: nw.length > 0 && strong === nw.length,
     usedAll: used.size === words.length,
+    covers: words.length > 0 && strongUsed.size === words.length,
   };
 }
 
@@ -409,11 +413,24 @@ function decide(seg: Segment, menu: VoiceMenuItem[]): VoiceResult {
     const it = scored[0].item;
     return { kind: "unavailable", heard, reason: seg.variant ? "variant" : "modifier", itemId: it.id, name: it.name };
   }
+  const top = scored[0];
+  const second = scored[1];
   const exact = scored.filter((s) => s.full && s.usedAll);
-  // Exactly one dish explains every spoken word with every name word heard,
-  // and no other dish comes close: that is the only confident case.
-  const confident =
-    exact.length === 1 && scored.filter((s) => s !== exact[0] && s.score >= exact[0].score - 0.1).length === 0 ? exact[0] : null;
+  const covering = scored.filter((s) => s.covers);
+  let confident: Scored | null = null;
+  if (exact.length === 1 && !scored.some((s) => s !== exact[0] && s.full && s.usedAll)) {
+    // The whole name was said and explains every word ("paneer tikka" beats "paneer tikka masala").
+    confident = exact[0];
+  } else if (exact.length === 0 && covering.length === 1) {
+    // Only one dish has all the words that were said ("biryani" when there is one biryani).
+    confident = covering[0];
+  } else if (exact.length === 0 && covering.length === 0 && top.full && (!second || second.score <= top.score - 0.2)) {
+    // Whole name heard plus a word we don't know ("butter naan kadak").
+    confident = top;
+  } else if (exact.length === 0 && covering.length === 0 && scored.length === 1 && top.score >= 0.5) {
+    // A single close spelling and nothing else on the menu like it.
+    confident = top;
+  }
   if (!confident) {
     const options = scored.slice(0, 4).map(opt);
     return { kind: "choose", heard, quantity: seg.qtyVague ? null : seg.qty, note, options };
@@ -424,8 +441,9 @@ function decide(seg: Segment, menu: VoiceMenuItem[]): VoiceResult {
   if (seg.modifier) return { kind: "unavailable", heard, reason: "modifier", itemId: it.id, name: it.name };
   if (it.needsChoice) return { kind: "unavailable", heard, reason: "needs_choice", itemId: it.id, name: it.name };
   const base = { heard, itemId: it.id, name: it.name, unitPrice: priceOf(it), note };
-  if (seg.qty === null || seg.qtyVague || seg.qty < 1 || seg.qty > MAX_QTY) return { kind: "quantity", ...base };
-  return { kind: "add", ...base, quantity: seg.qty };
+  // No quantity said means one; a vague or impossible amount is asked.
+  if (seg.qtyVague || (seg.qty !== null && (seg.qty < 1 || seg.qty > MAX_QTY))) return { kind: "quantity", ...base };
+  return { kind: "add", ...base, quantity: seg.qty ?? 1 };
 }
 
 /** Parse one final transcript against the restaurant's loaded menu. */
@@ -435,22 +453,41 @@ export function parseVoiceOrder(transcript: string, menu: VoiceMenuItem[]): Voic
   return splitSegments(transcript, menuWordKeys).map((s) => decide(s, menu));
 }
 
+function tokensOf(text: string): string[] {
+  return normalise(text).replace(/,/g, " ").split(/\s+/).filter(Boolean);
+}
+
 /**
- * Guards against duplicate recognition results: each final result index is
- * used once, interim results are never used, and the same final text heard
- * twice in one listening session is ignored.
+ * Turns a stream of recognition results into new spoken text, once each:
+ * interim results are ignored, each final result index is used once, some
+ * Android browsers repeat everything said so far in each new result (only
+ * the new words are kept), and an identical phrase echoed within a few
+ * seconds is ignored. Call reset() when a new recognition session starts.
  */
-export function createFinalTranscriptGate() {
-  const seenIndex = new Set<number>();
-  const seenText = new Set<string>();
+export function createUtteranceTracker(repeatWindowMs = 4000) {
+  const seen = new Set<number>();
+  let lastFinal: string[] = [];
+  let lastDelta = "";
+  let lastAt = -Infinity;
   return {
-    accept(resultIndex: number, text: string, isFinal: boolean): boolean {
-      if (!isFinal) return false;
-      const key = normalise(text).replace(/[\s,]+/g, " ").trim();
-      if (!key || seenIndex.has(resultIndex) || seenText.has(key)) return false;
-      seenIndex.add(resultIndex);
-      seenText.add(key);
-      return true;
+    reset() {
+      seen.clear();
+      lastFinal = [];
+    },
+    accept(resultIndex: number, text: string, isFinal: boolean, nowMs: number): string | null {
+      if (!isFinal || seen.has(resultIndex)) return null;
+      const toks = tokensOf(text);
+      if (!toks.length) return null;
+      seen.add(resultIndex);
+      let delta = toks;
+      if (lastFinal.length && lastFinal.length < toks.length && lastFinal.every((t, k) => toks[k] === t)) delta = toks.slice(lastFinal.length);
+      lastFinal = toks;
+      const key = delta.join(" ");
+      if (!key) return null;
+      if (key === lastDelta && nowMs - lastAt < repeatWindowMs) return null;
+      lastDelta = key;
+      lastAt = nowMs;
+      return key;
     },
   };
 }

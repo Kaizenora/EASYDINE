@@ -214,7 +214,6 @@ export default function LuxuryCustomerMenu({
   const [cookingNote, setCookingNote] = useState("");
   const [currentRequestId, setCurrentRequestId] = useState<string>(() => "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
   const [customizingQty, setCustomizingQty] = useState(1);
-  const [isListeningSearchMic, setIsListeningSearchMic] = useState(false);
   const [isListeningCustomMic, setIsListeningCustomMic] = useState(false);
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [showCartDrawer, setShowCartDrawer] = useState(false);
@@ -703,17 +702,15 @@ export default function LuxuryCustomerMenu({
     });
   };
 
-  // Working Audio Speech Recognition
-  const triggerAudioVoiceInput = (target: "search" | "cooking") => {
+  // Cooking-note mic (speech to text into the note box), in the app's language.
+  const triggerAudioVoiceInput = () => {
+    const appendNote = (heard: string) => setCookingNote((prev) => (prev ? `${prev}, ${heard}` : heard));
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       const heard = window.prompt("Speak or type your request:");
-      if (heard) {
-        if (target === "search") setSearchQuery(heard);
-        else setCookingNote((prev) => (prev ? `${prev}, ${heard}` : heard));
-      }
+      if (heard) appendNote(heard);
       return;
     }
 
@@ -722,45 +719,25 @@ export default function LuxuryCustomerMenu({
       recognition.lang = RECOGNITION_LANG[locale];
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
-
-      if (target === "search") setIsListeningSearchMic(true);
-      else setIsListeningCustomMic(true);
-
+      setIsListeningCustomMic(true);
       toast.info("🎙️ Listening... Speak now!");
 
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
-        if (target === "search") {
-          setSearchQuery(transcript);
-          toast.success(`Heard: "${transcript}"`);
-        } else {
-          setCookingNote((prev) => (prev ? `${prev}, ${transcript}` : transcript));
-          toast.success(`Added note: "${transcript}"`);
-        }
-        setIsListeningSearchMic(false);
+        appendNote(transcript);
+        toast.success(`Added note: "${transcript}"`);
         setIsListeningCustomMic(false);
       };
-
       recognition.onerror = () => {
-        setIsListeningSearchMic(false);
         setIsListeningCustomMic(false);
         toast.info("Voice input ended. You can also type directly.");
       };
-
-      recognition.onend = () => {
-        setIsListeningSearchMic(false);
-        setIsListeningCustomMic(false);
-      };
-
+      recognition.onend = () => setIsListeningCustomMic(false);
       recognition.start();
     } catch {
-      setIsListeningSearchMic(false);
       setIsListeningCustomMic(false);
       const heard = window.prompt("Speak or type your request:");
-      if (heard) {
-        if (target === "search") setSearchQuery(heard);
-        else setCookingNote((prev) => (prev ? `${prev}, ${heard}` : heard));
-      }
+      if (heard) appendNote(heard);
     }
   };
 
@@ -1436,25 +1413,15 @@ export default function LuxuryCustomerMenu({
             placeholder='Search "paneer"'
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 w-full rounded-xl border border-border bg-card/90 pl-10 pr-10 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all"
+            className="h-10 w-full rounded-xl border border-border bg-card/90 pl-10 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all"
           />
-          <button
-            type="button"
-            onClick={() => triggerAudioVoiceInput("search")}
-            className={cn(
-              "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
-              isListeningSearchMic ? "text-red-500 animate-pulse bg-red-500/20" : "text-muted-foreground hover:text-primary"
-            )}
-            title="Search with voice (your browser may send the audio to its speech service; this app does not save it)"
-          >
-            <Mic className="h-4 w-4" />
-          </button>
         </div>
 
         {/* Voice ordering: speak a whole order, review it, then add to cart */}
         <VoiceOrder
           menu={voiceMenu}
           onAdd={addVoiceLines}
+          bottomOffset={cart.length > 0 ? 104 : 16}
           onChooseOptions={(id) => {
             const hit = menuIndex.get(id);
             if (hit) openItemOptions(hit.item, hit.categoryName);
@@ -1728,7 +1695,7 @@ export default function LuxuryCustomerMenu({
                 />
                 <button
                   type="button"
-                  onClick={() => triggerAudioVoiceInput("cooking")}
+                  onClick={triggerAudioVoiceInput}
                   className={cn(
                     "absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-all",
                     isListeningCustomMic ? "text-red-500 animate-pulse bg-red-500/20" : "text-muted-foreground hover:text-primary"

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  createFinalTranscriptGate,
+  createUtteranceTracker,
   parseVoiceOrder,
   phoneticKey,
   RECOGNITION_LANG,
@@ -93,10 +93,24 @@ test("ambiguous dish -> customer chooses, nothing added, quantity kept", () => {
   assert.deepEqual(new Set(c.options.map((o) => o.itemId)), new Set(["pm", "pt", "ptm"]));
 });
 
-test("missing quantity -> ask, nothing added", () => {
-  const r = parseVoiceOrder("butter naan", MENU);
-  assert.deepEqual(kinds(r), ["quantity"]);
-  assert.deepEqual(adds(r), []);
+test("no quantity said means one", () => {
+  assert.deepEqual(adds(parseVoiceOrder("butter naan", MENU)), [["bn", 1, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("एक बटर नान, दाल मखनी", MENU)), [["bn", 1, ""], ["dm", 1, ""]]);
+});
+
+test("a word only one dish has is enough (no confirmation)", () => {
+  assert.deepEqual(adds(parseVoiceOrder("two dal", MENU)), [["dm", 2, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("one makhani", MENU)), [["dm", 1, ""]]);
+  assert.deepEqual(adds(parseVoiceOrder("एक छाछ", MENU)), [["mc", 1, ""]]);
+});
+
+test("whole name heard plus an unknown word is still added", () => {
+  assert.deepEqual(adds(parseVoiceOrder("one butter naan kadak", MENU)), [["bn", 1, ""]]);
+});
+
+test("words several dishes share still ask", () => {
+  assert.equal(parseVoiceOrder("one biryani", MENU)[0].kind, "choose");
+  assert.equal(parseVoiceOrder("one naan", MENU)[0].kind, "choose");
 });
 
 test("vague quantity ('some') -> ask", () => {
@@ -104,7 +118,7 @@ test("vague quantity ('some') -> ask", () => {
 });
 
 test("Hindi trailing दो (also means 'give') is not taken as a quantity", () => {
-  assert.deepEqual(kinds(parseVoiceOrder("पनीर मटर दो", MENU)), ["quantity"]);
+  assert.deepEqual(adds(parseVoiceOrder("पनीर मटर दो", MENU)), [["pm", 1, ""]]);
 });
 
 test("item not on the menu is explained, nothing added", () => {
@@ -173,11 +187,16 @@ test("empty transcript or empty menu gives nothing", () => {
   assert.deepEqual(parseVoiceOrder("two butter naan", []), []);
 });
 
-test("final-transcript gate ignores interim, repeated indices and repeated text", () => {
-  const g = createFinalTranscriptGate();
-  assert.equal(g.accept(0, "two butter naan", false), false); // interim
-  assert.equal(g.accept(0, "two butter naan", true), true);
-  assert.equal(g.accept(0, "two butter naan", true), false); // same index again
-  assert.equal(g.accept(1, "Two butter naan.", true), false); // same words, new index
-  assert.equal(g.accept(2, "one paneer tikka", true), true);
+test("utterance tracker: interim ignored, indices once, Android cumulative results, echoes", () => {
+  const u = createUtteranceTracker(4000);
+  assert.equal(u.accept(0, "two butter naan", false, 0), null); // interim
+  assert.equal(u.accept(0, "two butter naan", true, 100), "two butter naan");
+  assert.equal(u.accept(0, "two butter naan", true, 200), null); // same index again
+  // Android: the next final repeats everything said so far
+  assert.equal(u.accept(1, "two butter naan one paneer tikka", true, 900), "one paneer tikka");
+  // an echo of the same phrase a moment later (new session) is ignored...
+  u.reset();
+  assert.equal(u.accept(0, "One paneer tikka.", true, 1500), null);
+  // ...but saying it again later is a real new order
+  assert.equal(u.accept(1, "one paneer tikka", true, 9000), "one paneer tikka");
 });
