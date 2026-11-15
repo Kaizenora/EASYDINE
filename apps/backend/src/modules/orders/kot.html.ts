@@ -27,6 +27,7 @@ interface KotOrder {
     quantity: number;
     kitchenNote: string | null;
     modifiers: { nameSnapshot: string }[];
+    comboDetails?: string[];
   }[];
 }
 
@@ -84,13 +85,16 @@ export function buildKotHtml({
       const modifierLines = item.modifiers
         .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}</div>`)
         .join('');
+      const comboLines = item.comboDetails && item.comboDetails.length > 0
+        ? item.comboDetails.map((c) => `<div class="sub">· ${esc(c)}</div>`).join('')
+        : '';
       const noteLine = item.kitchenNote
         ? `<div class="note">Note: ${esc(item.kitchenNote)}</div>`
         : '';
       return `
         <tr>
           <td class="qty">${item.quantity}×</td>
-          <td>${esc(item.nameSnapshot)}${modifierLines}${noteLine}</td>
+          <td>${esc(item.nameSnapshot)}${comboLines}${modifierLines}${noteLine}</td>
         </tr>`;
     })
     .join('');

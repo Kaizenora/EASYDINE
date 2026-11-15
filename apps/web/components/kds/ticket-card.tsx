@@ -209,6 +209,11 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             <p className="font-medium text-foreground">
               {item.orderItem.quantity}× {item.orderItem.nameSnapshot}
             </p>
+            {(item.orderItem as any).menuItem?.comboComponents && (item.orderItem as any).menuItem.comboComponents.length > 0 && (
+              <p className="text-xs text-muted-foreground/80 italic">
+                Includes: {(item.orderItem as any).menuItem.comboComponents.map((c: any) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+              </p>
+            )}
             {item.orderItem.modifiers.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 {item.orderItem.modifiers.map((m) => m.nameSnapshot).join(", ")}

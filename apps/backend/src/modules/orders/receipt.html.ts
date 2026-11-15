@@ -71,6 +71,7 @@ interface ReceiptOrder {
     lineTotal: number;
     taxRateSnapshot: number;
     modifiers: { nameSnapshot: string; priceAdjSnapshot: number }[];
+    comboDetails?: string[];
   }[];
   payments: {
     method: string;
@@ -130,9 +131,12 @@ export function buildReceiptHtml({
       const modifierLines = item.modifiers
         .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}${m.priceAdjSnapshot > 0 ? ` (+${money(m.priceAdjSnapshot)})` : ''}</div>`)
         .join('');
+      const comboLines = item.comboDetails && item.comboDetails.length > 0
+        ? item.comboDetails.map((c) => `<div class="sub">· ${esc(c)}</div>`).join('')
+        : '';
       return `
         <tr>
-          <td>${esc(item.nameSnapshot)}${modifierLines}${
+          <td>${esc(item.nameSnapshot)}${comboLines}${modifierLines}${
             Number(item.taxRateSnapshot) > 0
               ? `<div class="sub">${esc(taxLabel)} @ ${item.taxRateSnapshot}%</div>`
               : ''

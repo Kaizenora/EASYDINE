@@ -116,6 +116,10 @@ function toKotOrder(order: ReceiptData): EscposKotOrder {
       quantity: item.quantity,
       kitchenNote: item.kitchenNote,
       modifiers: item.modifiers.map((m) => ({ nameSnapshot: m.nameSnapshot })),
+      comboDetails:
+        (item as any).menuItem?.comboComponents?.map(
+          (c: any) => `${c.quantity}× ${c.componentItem?.name ?? 'Item'}`,
+        ) ?? [],
     })),
   };
 }
@@ -168,6 +172,10 @@ function toEscposOrder(
         nameSnapshot: m.nameSnapshot,
         priceAdjSnapshot: Number(m.priceAdjSnapshot),
       })),
+      comboDetails:
+        (item as any).menuItem?.comboComponents?.map(
+          (c: any) => `${c.quantity}× ${c.componentItem?.name ?? 'Item'}`,
+        ) ?? [],
     })),
     payments: order.payments.map((p) => ({
       method: p.method,

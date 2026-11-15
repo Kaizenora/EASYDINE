@@ -3,6 +3,7 @@
 import { PoweredByEasyDine } from "@/components/order/powered-by";
 import { VoiceOrder, type VoiceAddLine } from "@/components/order/voice-order";
 import { useI18n } from "@/lib/i18n/context";
+import { GamesDialog, getStoredGameSettings } from "@/components/order/games";
 import { RECOGNITION_LANG, type VoiceMenuItem } from "@/lib/voice-order";
 import {
   ArrowLeft,
@@ -101,6 +102,17 @@ interface PublicMenuItem {
   price: string;
   imageUrl?: string | null;
   isVeg: boolean;
+  isCombo?: boolean;
+  comboComponents?: {
+    id: string;
+    quantity: number;
+    componentItem: {
+      id: string;
+      name: string;
+      price: string;
+      isActive: boolean;
+    };
+  }[];
   modifierGroups?: {
     modifierGroup: {
       id: string;
@@ -146,6 +158,7 @@ interface PublicStatus {
       modifiers?: { id: string; nameSnapshot: string; priceAdjSnapshot?: string | number }[];
     }[];
     totalAmount?: string;
+    paymentStatus?: string;
   } | null;
   openRequests: ("WAITER" | "BILL")[];
   waiterAcknowledged?: boolean;
@@ -198,8 +211,17 @@ export default function LuxuryCustomerMenu({
   const [nameDraft, setNameDraft] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
 
-  // Cart & Placed status
-  const [cart, setCart] = useState<CartLine[]>([]);
+  // Cart & Placed status (persists across page refresh)
+  const [cart, setCart] = useState<CartLine[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const key = "easy-dine-cart-" + qrToken;
+      const saved = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+  const [showGamesModal, setShowGamesModal] = useState(false);
   const [viewMode, setViewMode] = useState<"MENU" | "TRACKING">("MENU");
 
   // Filters & Search
@@ -233,6 +255,20 @@ export default function LuxuryCustomerMenu({
     totalAmount?: string;
     items: { nameSnapshot: string; quantity: number; unitPriceSnapshot?: string; lineTotal?: string }[];
   } | null>(null);
+
+  // Sync cart to storage so cart survives page refresh
+  useEffect(() => {
+    try {
+      const key = "easy-dine-cart-" + qrToken;
+      if (cart.length > 0) {
+        localStorage.setItem(key, JSON.stringify(cart));
+        sessionStorage.setItem(key, JSON.stringify(cart));
+      } else {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      }
+    } catch {}
+  }, [cart, qrToken]);
 
   // Restore saved credentials from sessionStorage on mount.
   // Note: sessionStorage is isolated per tab. Restoring them ensures a guest
@@ -476,6 +512,10 @@ export default function LuxuryCustomerMenu({
       );
 
       setCart([]);
+      try {
+        localStorage.removeItem("easy-dine-cart-" + qrToken);
+        sessionStorage.removeItem("easy-dine-cart-" + qrToken);
+      } catch {}
       setShowConfirmOrderModal(false);
       setShowCartDrawer(false);
       setViewMode("TRACKING");
@@ -497,11 +537,21 @@ export default function LuxuryCustomerMenu({
     },
   });
 
-  const submitOrder = () => {
+  const submitOrder = (customName?: string, customPhone?: string) => {
+    const finalName = (customName || guestName || nameDraft).trim();
+    if (!finalName) {
+      toast.error("Please enter your name");
+      return;
+    }
+    const cleanPhone = (customPhone || guestPhone || phoneDraft).replace(/\D/g, "").slice(0, 10);
+    if (cleanPhone.length !== 10) {
+      toast.error("Please enter a valid 10-digit mobile number");
+      return;
+    }
     const payload = {
       requestId: currentRequestId,
-      guestName: guestName || "Guest",
-      guestPhone: guestPhone || undefined,
+      guestName: finalName,
+      guestPhone: cleanPhone,
       notes: cart.map((c) => c.cookingNote).filter(Boolean).join("; ") || undefined,
       items: cart.map((c) => ({
         menuItemId: c.menuItemId,
@@ -890,121 +940,7 @@ export default function LuxuryCustomerMenu({
     );
   }
 
-  // 1. WELCOME SCREEN (Image 4 from earlier: Name + Contact Number Input)
-  if (!guestName) {
-    const tableBadge = isTakeaway ? "🥡 Takeaway & Pickup" : (data?.tableName || "Table");
-    return (
-      <div className="relative flex min-h-screen flex-col justify-between bg-background px-6 py-10 font-sans text-foreground">
-        <div className="flex flex-col gap-6">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-primary">
-              <span className="h-2 w-2 rounded-full bg-primary" />
-              <span>{isTakeaway ? "TAKEAWAY · ONLINE MENU" : "QR SCANNED · DINE-IN"}</span>
-            </div>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-foreground">
-              {(data as any)?.restaurantName || data?.branchName || "EasyDine"}
-            </h1>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">
-              Ahmednagar · North Indian & Maharashtrian
-            </p>
-          </div>
-
-          {/* 3 Food preview photos */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=300&auto=format&fit=crop&q=80"
-                alt="Paneer Tikka"
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop&q=80"
-                alt="Biryani"
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <div className="aspect-square overflow-hidden rounded-2xl bg-neutral-200 shadow-sm border border-neutral-300/60">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=300&auto=format&fit=crop&q=80"
-                alt="Gulab Jamun"
-                className="h-full w-full object-cover"
-              />
-            </div>
-          </div>
-
-          {/* Floating Card with Name & Contact input */}
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-accent px-3.5 py-1 text-xs font-bold text-accent-foreground">
-              <span>🪑 {tableBadge}</span>
-            </div>
-
-            <div className="mt-4">
-              <label htmlFor="name-input" className="text-xs font-black uppercase tracking-wider text-muted-foreground/80">
-                YOUR NAME
-              </label>
-              <input
-                id="name-input"
-                type="text"
-                value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
-                placeholder="Enter your name"
-                className="mt-1.5 w-full rounded-2xl border border-input bg-card px-4 py-3 text-base font-bold text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-              />
-            </div>
-
-            <div className="mt-3">
-              <div className="flex items-center justify-between">
-                <label htmlFor="phone-input" className="text-xs font-black uppercase tracking-wider text-muted-foreground/80">
-                  CONTACT NUMBER (10 DIGITS)
-                </label>
-                <span className="text-[11px] font-semibold text-muted-foreground">
-                  {phoneDraft.length}/10
-                </span>
-              </div>
-              <input
-                id="phone-input"
-                type="tel"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={10}
-                value={phoneDraft}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
-                  setPhoneDraft(digits);
-                }}
-                placeholder="10-digit mobile number (e.g. 9876543210)"
-                className="mt-1.5 w-full rounded-2xl border border-input bg-card px-4 py-3 text-base font-bold text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none tracking-wider"
-              />
-              {phoneDraft.length > 0 && phoneDraft.length < 10 && (
-                <p className="mt-1 text-[11px] font-semibold text-primary">
-                  {10 - phoneDraft.length} more digit{10 - phoneDraft.length === 1 ? "" : "s"} required
-                </p>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={confirmCheckIn}
-              className="mt-5 flex h-13 w-full items-center justify-center rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-md shadow-primary/15 transition-all hover:brightness-105 active:scale-[0.99]"
-            >
-              Start ordering
-            </button>
-          </div>
-        </div>
-
-        <p className="mt-6 text-center text-xs font-medium text-muted-foreground">
-          No signup needed · your order goes to this table
-        </p>
-        <PoweredByEasyDine tone="light" className="mt-3" />
-      </div>
-    );
-  }
-
+  // 1. Welcome screen phone gate removed (menu-first browsing)
   // 2. LIVE ORDER TRACKING SCREEN (Images 1 & 2: Order #24 with Stepper, Bill so far, and Action buttons)
   if (viewMode === "TRACKING" && activeOrder) {
     const isServed = activeOrder.status === "SERVED" || activeOrder.status === "READY" || (activeOrder as any).cookingStatus === "SERVED" || (activeOrder as any).cookingStatus === "READY";
@@ -1017,6 +953,30 @@ export default function LuxuryCustomerMenu({
 
     return (
       <div className="relative min-h-screen bg-background pb-32 font-sans text-foreground px-4 pt-6">
+        {/* Games Arcade Banner for Active Order */}
+        {activeOrder && activeOrder.paymentStatus !== "PAID" && (
+          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 p-3.5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-sm text-base">
+                  🎮
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-foreground">Play Table Games</h4>
+                  <p className="text-[10px] text-muted-foreground">Food Memory (4×6) & Catch the Snacks</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGamesModal(true)}
+                className="rounded-xl bg-primary px-3 py-1.5 text-xs font-black text-primary-foreground shadow-sm hover:brightness-105 active:scale-95 transition-all"
+              >
+                Play Now
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top Header (Image 1 match) */}
         <div>
           <div className="flex items-center justify-between">
@@ -1520,6 +1480,18 @@ export default function LuxuryCustomerMenu({
                       <h3 className="mt-1 text-sm font-bold text-foreground leading-snug">
                         {item.name}
                       </h3>
+                      {item.isCombo && (
+                        <div className="mt-1 flex flex-col gap-0.5">
+                          <span className="inline-flex w-fit items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                            Combo Meal
+                          </span>
+                          {item.comboComponents && item.comboComponents.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground leading-tight">
+                              Serves {item.comboComponents.reduce((acc, c) => acc + (c.quantity || 1), 0)} · Includes: {item.comboComponents.map((c) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-1 text-sm font-bold text-foreground">
                         {formatCurrency(item.price)}
                       </div>
@@ -2024,6 +1996,42 @@ export default function LuxuryCustomerMenu({
               ))}
             </div>
 
+            {/* Customer Name & 10-Digit Phone */}
+            <div className="mt-3 space-y-2.5 rounded-2xl border border-border bg-secondary/40 p-3">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Your Name *
+                </label>
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  placeholder="Enter your name"
+                  className="mt-1 w-full rounded-xl border border-input bg-card px-3 py-2 text-xs font-bold text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    Mobile Number (10 Digits) *
+                  </label>
+                  <span className="text-[10px] font-bold text-muted-foreground">
+                    {phoneDraft.replace(/\D/g, "").length}/10
+                  </span>
+                </div>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={phoneDraft}
+                  onChange={(e) => setPhoneDraft(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="10-digit mobile number"
+                  className="mt-1 w-full rounded-xl border border-input bg-card px-3 py-2 text-xs font-bold text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none tracking-wider"
+                />
+              </div>
+            </div>
+
             <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
               <span className="text-xs text-muted-foreground">Total payable</span>
               <span className="text-lg font-black text-primary">₹{cartTotalPrice.toFixed(0)}</span>
@@ -2041,7 +2049,24 @@ export default function LuxuryCustomerMenu({
               <button
                 type="button"
                 disabled={placeOrder.isPending}
-                onClick={() => submitOrder()}
+                onClick={() => {
+                  const finalName = nameDraft.trim();
+                  if (!finalName) {
+                    toast.error("Please enter your name");
+                    return;
+                  }
+                  const cleanPhone = phoneDraft.replace(/\D/g, "").slice(0, 10);
+                  if (cleanPhone.length !== 10) {
+                    toast.error("Please enter a valid 10-digit mobile number");
+                    return;
+                  }
+                  setGuestName(finalName);
+                  setGuestPhone(cleanPhone);
+                  sessionStorage.setItem(nameStorageKey, finalName);
+                  sessionStorage.setItem(phoneStorageKey, cleanPhone);
+                  api.post(`/public/menu/${qrToken}/check-in`, { guestName: finalName, phone: cleanPhone }).catch(() => {});
+                  submitOrder(finalName, cleanPhone);
+                }}
                 className="flex-1 rounded-xl bg-primary py-3 text-xs font-black text-primary-foreground hover:brightness-105 disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {placeOrder.isPending ? "Sending..." : "Confirm and Send"}
@@ -2049,6 +2074,17 @@ export default function LuxuryCustomerMenu({
             </div>
           </div>
         </div>
+      )}
+
+      {/* TABLE GAMES MODAL */}
+      {showGamesModal && activeOrderId && activeOrder && activeOrder.paymentStatus !== "PAID" && (
+        <GamesDialog
+          restaurantName={(data as any)?.restaurantName || data?.branchName || "EasyDine"}
+          restaurantLogoUrl={(data as any)?.restaurantLogoUrl || (data as any)?.logoUrl}
+          onClose={() => setShowGamesModal(false)}
+          isOrderPaid={activeOrder?.paymentStatus === "PAID" || activeOrder?.status === "PAID"}
+          settings={getStoredGameSettings((data as any)?.branchId || null)}
+        />
       )}
 
       {/* CALL WAITER CONFIRMATION MODAL */}

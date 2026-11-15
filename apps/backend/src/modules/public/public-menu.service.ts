@@ -132,8 +132,8 @@ export class PublicMenuService {
   }
 
   /** Customer-visible menu tree, shared by the table-QR page and the kiosk. */
-  menuCategoriesForBranch(branchId: string) {
-    return this.prisma.menuCategory.findMany({
+  async menuCategoriesForBranch(branchId: string) {
+    const categories = await this.prisma.menuCategory.findMany({
       where: { branchId, isActive: true, showOnWebsite: true },
       orderBy: { sortOrder: 'asc' },
       include: {
@@ -151,6 +151,21 @@ export class PublicMenuService {
             isVegan: true,
             spiceLevel: true,
             allergens: true,
+            isCombo: true,
+            comboComponents: {
+              select: {
+                id: true,
+                quantity: true,
+                componentItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    price: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
             modifierGroups: {
               orderBy: { sortOrder: 'asc' },
               select: {
@@ -178,6 +193,18 @@ export class PublicMenuService {
         },
       },
     });
+
+    // Hide combos if any component is unavailable / inactive
+    return categories.map((cat) => ({
+      ...cat,
+      items: cat.items.filter((item) => {
+        if (!item.isCombo) return true;
+        if (!item.comboComponents || item.comboComponents.length === 0) return true;
+        return item.comboComponents.every(
+          (c) => c.componentItem && c.componentItem.isActive,
+        );
+      }),
+    }));
   }
 
   async createOrder(

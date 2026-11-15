@@ -116,6 +116,11 @@ export function OrderDetailDialog({
                         <span className="font-medium text-foreground">
                           {item.quantity}× {item.nameSnapshot}
                         </span>
+                        {(item as any).menuItem?.comboComponents && (item as any).menuItem.comboComponents.length > 0 && (
+                          <span className="text-xs text-muted-foreground/90 italic">
+                            Includes: {(item as any).menuItem.comboComponents.map((c: any) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+                          </span>
+                        )}
                         {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
                           <span className="text-xs text-muted-foreground">
                             {item.modifiers.map((m) => m.nameSnapshot).join(", ")}

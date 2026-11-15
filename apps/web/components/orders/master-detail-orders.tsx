@@ -765,6 +765,13 @@ export function MasterDetailOrders({
                         <div className="flex flex-col gap-1">
                           <span className="text-sm font-bold text-white">{item.nameSnapshot}</span>
 
+                          {/* Combo Components */}
+                          {(item as any).menuItem?.comboComponents && (item as any).menuItem.comboComponents.length > 0 && (
+                            <span className="text-xs text-amber-200/80 italic font-medium">
+                              Includes: {(item as any).menuItem.comboComponents.map((c: any) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+                            </span>
+                          )}
+
                           {/* Modifiers List */}
                           {item.modifiers && item.modifiers.length > 0 && (
                             <div className="flex flex-col gap-0.5">

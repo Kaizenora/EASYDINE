@@ -114,7 +114,18 @@ export class OrdersService {
       include: {
         table: true,
         customer: true,
-        items: { include: { modifiers: true, menuItem: true } },
+        items: {
+          include: {
+            modifiers: true,
+            menuItem: {
+              include: {
+                comboComponents: {
+                  include: { componentItem: true },
+                },
+              },
+            },
+          },
+        },
         kots: { include: { items: true, station: true } },
         payments: true,
       },
@@ -146,7 +157,18 @@ export class OrdersService {
       include: {
         table: true,
         customer: true,
-        items: { include: { modifiers: true } },
+        items: {
+          include: {
+            modifiers: true,
+            menuItem: {
+              include: {
+                comboComponents: {
+                  include: { componentItem: true },
+                },
+              },
+            },
+          },
+        },
         payments: true,
         branch: { include: { restaurant: true } },
       },
