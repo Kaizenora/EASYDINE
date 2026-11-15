@@ -58,8 +58,8 @@ function getRecognitionCtor(): RecognitionCtor | null {
 }
 
 const nowMs = () => Date.now();
-const IDLE_STOP_MS = 20_000; // quiet this long -> stop listening
-const MAX_SESSION_MS = 180_000; // never keep the mic on longer than this
+const IDLE_STOP_MS = 120_000; // 2 minutes of quiet before auto-stopping
+const MAX_SESSION_MS = 600_000; // 10 minutes max ordering session while guest is browsing
 
 interface Recent {
   key: number;
@@ -105,6 +105,8 @@ export function VoiceOrder({
     active: false,
     rec: null as Recognition | null,
     idle: null as ReturnType<typeof setTimeout> | null,
+    restartTimer: null as ReturnType<typeof setTimeout> | null,
+    consecutiveNetworkErrors: 0,
     startedAt: 0,
     key: 0,
   });
@@ -122,7 +124,12 @@ export function VoiceOrder({
     return () => {
       s.active = false;
       if (s.idle) clearTimeout(s.idle);
-      s.rec?.abort();
+      if (s.restartTimer) clearTimeout(s.restartTimer);
+      try {
+        s.rec?.abort();
+      } catch {
+        // ignore
+      }
     };
   }, []);
 
@@ -131,7 +138,14 @@ export function VoiceOrder({
     s.active = false;
     if (s.idle) clearTimeout(s.idle);
     s.idle = null;
-    s.rec?.stop();
+    if (s.restartTimer) clearTimeout(s.restartTimer);
+    s.restartTimer = null;
+    s.consecutiveNetworkErrors = 0;
+    try {
+      s.rec?.stop();
+    } catch {
+      // ignore
+    }
     setListening(false);
     setInterim("");
     if (msg) setMessage(msg);
@@ -142,6 +156,20 @@ export function VoiceOrder({
     if (s.idle) clearTimeout(s.idle);
     s.idle = setTimeout(() => stopListening(live.current.t("voice.idle")), IDLE_STOP_MS);
   };
+
+  // While listening, touching or scrolling the menu refreshes the idle timer so the mic stays on while browsing
+  useEffect(() => {
+    if (!listening) return;
+    const onInteract = () => {
+      if (session.current.active) armIdle();
+    };
+    window.addEventListener("pointerdown", onInteract, { passive: true });
+    window.addEventListener("scroll", onInteract, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onInteract);
+      window.removeEventListener("scroll", onInteract);
+    };
+  }, [listening]);
 
   const spawn = () => {
     const s = session.current;
@@ -193,6 +221,7 @@ export function VoiceOrder({
     }
     rec.onresult = (e: SpeechEvent) => {
       armIdle();
+      s.consecutiveNetworkErrors = 0;
       let partial = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
@@ -221,19 +250,44 @@ export function VoiceOrder({
     rec.onerror = (e: SpeechErrorEvent) => {
       const code = e?.error;
       const tt = live.current.t;
-      if (code === "not-allowed" || code === "service-not-allowed") stopListening(tt("voice.denied"));
-      else if (code === "language-not-supported") stopListening(tt("voice.langUnsupported", { language: LOCALE_LABELS[live.current.locale as Locale] }));
-      else if (code === "network") stopListening(tt("voice.network"));
-      // "no-speech" and "aborted": keep the session; onend restarts it.
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        stopListening(tt("voice.denied"));
+        return;
+      }
+      if (code === "language-not-supported") {
+        stopListening(tt("voice.langUnsupported", { language: LOCALE_LABELS[live.current.locale as Locale] }));
+        return;
+      }
+      if (code === "network") {
+        s.consecutiveNetworkErrors++;
+        // On mobile, network timeouts are common during speech pauses. Only stop if offline/failing continuously.
+        if (s.consecutiveNetworkErrors > 6) {
+          stopListening(tt("voice.network"));
+        }
+        return;
+      }
+      // "no-speech", "audio-capture", "aborted": normal speech pauses or mobile lifecycle events.
+      // Keep session active and let onend restart recognition automatically.
     };
     rec.onend = () => {
       if (s.rec === rec) s.rec = null;
-      if (s.active) setTimeout(spawn, 120); // keep holding the mic
+      if (s.active) {
+        if (s.restartTimer) clearTimeout(s.restartTimer);
+        s.restartTimer = setTimeout(() => {
+          if (s.active) spawn();
+        }, 200);
+      }
     };
     try {
       rec.start();
     } catch {
-      stopListening(live.current.t("voice.unsupported"));
+      // Browser hasn't finished releasing previous instance; retry after delay instead of aborting
+      if (s.active) {
+        if (s.restartTimer) clearTimeout(s.restartTimer);
+        s.restartTimer = setTimeout(() => {
+          if (s.active) spawn();
+        }, 350);
+      }
     }
   };
 
@@ -247,6 +301,7 @@ export function VoiceOrder({
     const s = session.current;
     s.active = true;
     s.startedAt = nowMs();
+    s.consecutiveNetworkErrors = 0;
     voiceSession.current?.reset();
     setActiveQuestion(null);
     setRecent([]);
