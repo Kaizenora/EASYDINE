@@ -29,27 +29,27 @@ export class PublicKioskService {
   ) {}
 
   private async resolveBranch(kioskToken: string) {
+    // "/kiosk/default" and "/kiosk/kiosk": a convenience link for an install
+    // with one restaurant, and only for a branch whose kiosk is switched on.
     if (kioskToken === 'default' || kioskToken === 'kiosk') {
-      const branch =
-        (await this.prisma.branch.findFirst({
-          where: { isActive: true, categories: { some: {} } },
-          include: { restaurant: true },
-        })) ??
-        (await this.prisma.branch.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: 'desc' },
-          include: { restaurant: true },
-        }));
-      if (branch) return branch;
+      const branch = await this.publicMenu.soleRestaurantBranch({
+        kioskToken: { not: null },
+      });
+      if (!branch) throw new NotFoundException('This kiosk is not available');
+      return branch;
     }
-    const branch = await this.prisma.branch.findFirst({
-      where: {
-        OR: [{ kioskToken }, { id: kioskToken }],
-        isActive: true,
-      },
+    // Otherwise only the opaque kiosk token opens a kiosk. A short/garbage
+    // value can never match (avoids a pointless query), and a branch id is
+    // not a credential: kiosk orders go straight to the kitchen, so switching
+    // the kiosk off in Settings (token = null) must really close it.
+    if (!/^[a-f0-9]{32}$/.test(kioskToken)) {
+      throw new NotFoundException('This kiosk is not available');
+    }
+    const branch = await this.prisma.branch.findUnique({
+      where: { kioskToken },
       include: { restaurant: true },
     });
-    if (!branch) {
+    if (!branch || !branch.isActive) {
       throw new NotFoundException('This kiosk is not available');
     }
     return branch;

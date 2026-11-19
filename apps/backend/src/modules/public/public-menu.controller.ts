@@ -9,7 +9,7 @@ import {
   type PublicOrderDto,
 } from '@easydine/types';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import { PublicMenuService } from './public-menu.service';
+import { PublicMenuService, toPublicOrder } from './public-menu.service';
 
 // Deliberately unauthenticated — this is the customer-facing table-QR menu
 // and ordering flow. No @Auth() here on purpose: a guest scanning a table's
@@ -38,15 +38,28 @@ export class PublicMenuController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('menu/:qrToken/order')
   @UsePipes(new ZodValidationPipe(publicOrderSchema))
-  createOrder(@Param('qrToken') qrToken: string, @Body() body: PublicOrderDto) {
-    return this.publicMenuService.createOrder(
-      qrToken,
-      body.items as never,
-      body.guestName,
-      body.guestPhone,
-      body.requestId,
-      body.notes,
+  async createOrder(
+    @Param('qrToken') qrToken: string,
+    @Body() body: PublicOrderDto,
+  ) {
+    // Only the public view leaves the server: never the order row itself.
+    return toPublicOrder(
+      await this.publicMenuService.createOrder(
+        qrToken,
+        body.items as never,
+        body.guestName,
+        body.guestPhone,
+        body.requestId,
+        body.notes,
+      ),
     );
+  }
+
+  // Unauthenticated and keyed by phone, so kept tight; returns one number only.
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Get('menu/:qrToken/loyalty')
+  getLoyalty(@Param('qrToken') qrToken: string, @Query('phone') phone?: string) {
+    return this.publicMenuService.getLoyaltyBalance(qrToken, phone);
   }
 
   @Get('menu/:qrToken/status')

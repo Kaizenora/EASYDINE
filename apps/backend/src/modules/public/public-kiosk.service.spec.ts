@@ -48,6 +48,7 @@ function build() {
   };
   const publicMenu = {
     menuCategoriesForBranch: jest.fn().mockResolvedValue([]),
+    soleRestaurantBranch: jest.fn().mockResolvedValue(null),
   };
   const service = new PublicKioskService(
     prisma as never,
@@ -93,6 +94,50 @@ describe('PublicKioskService', () => {
       await expect(service.getMenu(TOKEN)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('generic link (/kiosk/default)', () => {
+    it('opens the only restaurant\'s kiosk-enabled branch', async () => {
+      const { service, prisma, publicMenu } = build();
+      publicMenu.soleRestaurantBranch.mockResolvedValueOnce({
+        ...branch,
+        name: 'Centro',
+        country: 'ES',
+        taxMode: 'INCLUSIVE',
+        taxRegime: 'ES_IVA',
+        taxLabel: null,
+        restaurant: { name: 'Bar', logoUrl: null, currency: 'EUR' },
+      });
+      await expect(service.getMenu('default')).resolves.toMatchObject({
+        currency: 'EUR',
+      });
+      // only a branch whose kiosk is switched on may be picked
+      expect(publicMenu.soleRestaurantBranch).toHaveBeenCalledWith({
+        kioskToken: { not: null },
+      });
+      expect(prisma.branch.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('is refused when no kiosk is switched on or the server hosts several restaurants', async () => {
+      const { service, ordersService } = build();
+      for (const alias of ['default', 'kiosk']) {
+        await expect(service.getMenu(alias)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        await expect(service.createOrder(alias, dto())).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      }
+      expect(ordersService.createOrder).not.toHaveBeenCalled();
+    });
+
+    it('a branch id is not a kiosk credential', async () => {
+      const { service, prisma } = build();
+      await expect(
+        service.getMenu('cmabcdefghijklmnopqrstuvw'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.branch.findUnique).not.toHaveBeenCalled();
     });
   });
 

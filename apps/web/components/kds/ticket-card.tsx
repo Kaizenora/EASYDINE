@@ -18,9 +18,8 @@ import {
   useUpdateKotStatus,
   type KotTicket,
 } from "@/hooks/use-kds";
-import type { KotStatusDto } from "@easydine/types";
+import { canTransitionKot, tableLabel, type KotStatusDto } from "@easydine/types";
 import { cn } from "@/lib/utils";
-import { tableLabel } from "@easydine/types";
 
 const STATUS_NAMES: Record<string, string> = {
   NEW: "Ordered (New)",
@@ -74,6 +73,10 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<KotStatusDto | null>(null);
+  // The 1 / 2 / 3 pills only offer a move the server will accept (one step
+  // forward or one step back); anything else would just fail with an error.
+  const canMoveTo = (target: KotStatusDto) =>
+    canTransitionKot(ticket.status, target) && !(target === "ACCEPTED" && ticket.status === "NEW");
   const reject = useRejectKot(branchId);
   const { data: me } = useCurrentUser();
   // Rejecting before cooking starts is for anyone on the kitchen screen; food
@@ -182,14 +185,14 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
         <div className="flex items-center justify-between rounded-xl border border-border/80 bg-muted/40 p-1 text-xs font-medium">
           <button
             type="button"
-            disabled={updateStatus.isPending}
+            disabled={updateStatus.isPending || !canMoveTo("ACCEPTED")}
             onClick={() => {
-              if (ticket.status !== "NEW" && ticket.status !== "ACCEPTED") {
+              if (canMoveTo("ACCEPTED")) {
                 setConfirmStatus("ACCEPTED");
               }
             }}
             className={cn(
-              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer",
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer disabled:cursor-default",
               ticket.status === "NEW" || ticket.status === "ACCEPTED"
                 ? "bg-primary text-primary-foreground shadow-sm font-bold"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -201,14 +204,14 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           <span className="px-1 text-muted-foreground/40 font-bold">→</span>
           <button
             type="button"
-            disabled={updateStatus.isPending}
+            disabled={updateStatus.isPending || !canMoveTo("PREPARING")}
             onClick={() => {
-              if (ticket.status !== "PREPARING") {
+              if (canMoveTo("PREPARING")) {
                 setConfirmStatus("PREPARING");
               }
             }}
             className={cn(
-              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer",
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer disabled:cursor-default",
               ticket.status === "PREPARING"
                 ? "bg-primary text-primary-foreground shadow-sm font-bold"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -220,14 +223,14 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           <span className="px-1 text-muted-foreground/40 font-bold">→</span>
           <button
             type="button"
-            disabled={updateStatus.isPending}
+            disabled={updateStatus.isPending || !canMoveTo("READY")}
             onClick={() => {
-              if (ticket.status !== "READY") {
+              if (canMoveTo("READY")) {
                 setConfirmStatus("READY");
               }
             }}
             className={cn(
-              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer",
+              "flex-1 rounded-lg py-1.5 text-center text-xs font-semibold transition-all cursor-pointer disabled:cursor-default",
               ticket.status === "READY"
                 ? "bg-primary text-primary-foreground shadow-sm font-bold"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground"

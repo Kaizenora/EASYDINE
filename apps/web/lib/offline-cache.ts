@@ -79,8 +79,27 @@ export function persistOfflineCache(qc: QueryClient) {
       timer = setTimeout(save, 2000);
     }
   });
+  // The save above is debounced, so a reload right after an edit used to bring
+  // back the copy from BEFORE the edit (and a settings form built from it would
+  // show, and then re-save, the old values). Write immediately when the page is
+  // being left or hidden.
+  const flush = () => {
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    timer = undefined;
+    save();
+  };
+  const onVisibility = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") flush();
+  };
+  window.addEventListener("pagehide", flush);
+  window.addEventListener("beforeunload", flush);
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
   return () => {
     clearTimeout(timer);
     unsubscribe();
+    window.removeEventListener("pagehide", flush);
+    window.removeEventListener("beforeunload", flush);
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
   };
 }

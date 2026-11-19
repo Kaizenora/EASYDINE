@@ -33,3 +33,31 @@ export class ZodValidationPipe<T> implements PipeTransform<unknown, unknown> {
     return result.data;
   }
 }
+
+/**
+ * Validation for PATCH bodies: the full schema's rules, but only for the keys
+ * the client actually sent. `schema.partial()` alone is not enough because
+ * fields with `.default()` would be re-filled and silently overwrite stored
+ * values (e.g. reset `isVeg`, `isActive` or the item's add-on groups on an
+ * unrelated edit). Unknown keys are dropped by the schema, as on create.
+ */
+export class ZodPartialValidationPipe<T> extends ZodValidationPipe<T> {
+  transform(value: unknown, metadata: ArgumentMetadata): unknown {
+    const parsed = super.transform(value, metadata);
+    if (
+      metadata.type !== 'body' ||
+      typeof value !== 'object' ||
+      value === null ||
+      typeof parsed !== 'object' ||
+      parsed === null
+    ) {
+      return parsed;
+    }
+    const sent = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(
+        ([k]) => k in sent,
+      ),
+    );
+  }
+}

@@ -20,6 +20,15 @@ export interface RestaurantSettings {
   upiPayeeName: string | null;
   loyaltyPointValue: string;
   loyaltyEarnPerCurrency: number;
+  loyaltyEnabled: boolean;
+  loyaltyMinOrderAmount: string;
+  loyaltyMinRedeemPoints: number;
+  loyaltyExpiryDays: number;
+  deliveryRedirectEnabled: boolean;
+  zomatoUrl: string | null;
+  swiggyUrl: string | null;
+  reviewUrl: string | null;
+  whatsappTemplates: { greeting?: string; offer?: string; points?: string } | null;
   referralEnabled: boolean;
   referralSharerPoints: number;
   referralReferredPoints: number;
@@ -77,6 +86,7 @@ export type DisplayRestaurant = Pick<
   | "id" | "name" | "legalName" | "logoUrl" | "currency" | "timezone"
   | "upiVpa" | "upiPayeeName" | "loyaltyPointValue" | "loyaltyEarnPerCurrency" | "referralEnabled" | "referralSharerPoints" | "referralReferredPoints" | "referralMinPurchase" | "onlineMinOrderAmount" | "onlinePriceAdjustKind" | "onlinePriceAdjustValue"
   | "maxManualDiscountPercent" | "requireDiscountReason"
+  | "loyaltyEnabled" | "loyaltyMinOrderAmount" | "loyaltyMinRedeemPoints" | "loyaltyExpiryDays" | "reviewUrl" | "whatsappTemplates"
 >;
 export type DisplayBranch = Pick<
   BranchSettings,

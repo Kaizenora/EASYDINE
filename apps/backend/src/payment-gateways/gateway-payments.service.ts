@@ -133,7 +133,15 @@ export class GatewayPaymentsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    if (reusable) return this.present(reusable);
+    if (reusable) {
+      // Same link, but keep whatever the payer typed this time.
+      await this.saveCustomerDetails(
+        reusable.id,
+        input.customerName,
+        input.customerPhone,
+      );
+      return this.present(reusable);
+    }
 
     const row = await this.prisma.gatewayPayment.create({
       data: {

@@ -69,3 +69,28 @@ describe('receipt HTML with VERI*FACTU', () => {
     ).not.toContain('QR tributario');
   });
 });
+
+describe('receipt/KOT timestamp timezone', () => {
+  it('prints the order time in the restaurant timezone, not the server one', () => {
+    const order = { ...base.order, createdAt: new Date('2026-11-12T08:16:39Z') };
+    expect(buildReceiptHtml({ ...base, order, timezone: 'Asia/Kolkata' })).toContain('1:46:39');
+    expect(buildReceiptHtml({ ...base, order, timezone: 'America/New_York' })).toContain('3:16:39');
+  });
+});
+
+describe('receipt loyalty lines', () => {
+  const withLoyalty = (extra: object) =>
+    buildReceiptHtml({ ...base, order: { ...base.order, ...extra } });
+  it('prints points earned and the new balance on a paid bill', () => {
+    const html = withLoyalty({ loyalty: { earned: 12, balance: 87 } });
+    expect(html).toContain('Points earned');
+    expect(html).toContain('>12<');
+    expect(html).toContain('Points balance');
+    expect(html).toContain('<strong>87</strong>');
+  });
+  it('prints nothing when there is no loyalty info or the bill is only provisional', () => {
+    expect(withLoyalty({ loyalty: null })).not.toContain('Points earned');
+    expect(withLoyalty({})).not.toContain('Points balance');
+    expect(withLoyalty({ loyalty: { earned: 1, balance: 1 }, isProvisional: true })).not.toContain('Points earned');
+  });
+});

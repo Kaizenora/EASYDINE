@@ -32,12 +32,24 @@ describe('kitchen ticket state machine', () => {
     expect(path).toEqual(['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED']);
   });
 
-  it('never skips a step or goes backwards', () => {
-    expect(canTransitionKot('NEW', 'PREPARING')).toBe(false);
+  it('lets the kitchen start cooking a new ticket directly (accept + start in one tap)', () => {
+    expect(canTransitionKot('NEW', 'PREPARING')).toBe(true);
+  });
+
+  it('lets a mis-tap be stepped back one step while the ticket is still in the kitchen', () => {
+    // the board's "Back" and "Back to Prep" buttons
+    expect(canTransitionKot('PREPARING', 'ACCEPTED')).toBe(true);
+    expect(canTransitionKot('READY', 'PREPARING')).toBe(true);
+  });
+
+  it('never skips forward, jumps back two steps, returns to NEW or serves unready food', () => {
     expect(canTransitionKot('NEW', 'READY')).toBe(false);
     expect(canTransitionKot('ACCEPTED', 'READY')).toBe(false);
-    expect(canTransitionKot('PREPARING', 'ACCEPTED')).toBe(false);
-    expect(canTransitionKot('READY', 'PREPARING')).toBe(false);
+    expect(canTransitionKot('READY', 'ACCEPTED')).toBe(false);
+    for (const from of ALL) expect(canTransitionKot(from, 'NEW')).toBe(false);
+    expect(canTransitionKot('NEW', 'SERVED')).toBe(false);
+    expect(canTransitionKot('ACCEPTED', 'SERVED')).toBe(false);
+    expect(canTransitionKot('PREPARING', 'SERVED')).toBe(false);
   });
 
   it('has no way out of a terminal state', () => {

@@ -75,3 +75,21 @@ export function localMinuteAndDay(instant: Date, tz: string) {
     day: days.indexOf(get('weekday')),
   };
 }
+
+/**
+ * Format an instant for a printed document in the restaurant's own timezone,
+ * not the server's. Falls back to Asia/Kolkata (the schema default) when the
+ * zone is missing or invalid so a bad value can never break a print.
+ */
+export function formatLocalDateTime(
+  d: Date | string,
+  timeZone: string | null | undefined,
+): string {
+  const date = new Date(d);
+  const zone = timeZone || 'Asia/Kolkata';
+  try {
+    return date.toLocaleString('en-IN', { timeZone: zone });
+  } catch {
+    return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  }
+}

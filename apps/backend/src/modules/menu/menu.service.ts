@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -231,6 +232,14 @@ export class MenuService {
 
   async deleteItem(branchId: string, id: string) {
     await this.getItem(branchId, id);
+    // A dish that has ever been ordered stays: bills, reports and customer
+    // history point at it. Hiding it ("isActive": false) is the way to retire it.
+    const used = await this.prisma.orderItem.count({ where: { menuItemId: id } });
+    if (used > 0) {
+      throw new ConflictException(
+        'This dish has order history and cannot be deleted. Turn it off instead so it no longer shows on the menu.',
+      );
+    }
     await this.prisma.menuItem.delete({ where: { id } });
     return { ok: true };
   }

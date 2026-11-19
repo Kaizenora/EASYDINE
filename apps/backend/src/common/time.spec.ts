@@ -42,3 +42,18 @@ describe('timezone day boundaries', () => {
     });
   });
 });
+
+describe('formatLocalDateTime', () => {
+  const { formatLocalDateTime } = require('./time');
+  const at = new Date('2026-11-12T08:16:39Z');
+
+  it('renders in the restaurant timezone regardless of server tz', () => {
+    expect(formatLocalDateTime(at, 'Asia/Kolkata')).toContain('1:46:39');
+    expect(formatLocalDateTime(at, 'America/New_York')).toContain('3:16:39');
+  });
+
+  it('falls back to Asia/Kolkata for missing or invalid zones', () => {
+    expect(formatLocalDateTime(at, undefined)).toContain('1:46:39');
+    expect(formatLocalDateTime(at, 'Not/AZone')).toContain('1:46:39');
+  });
+});

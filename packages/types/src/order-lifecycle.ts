@@ -8,12 +8,17 @@
 import type { KotStatusDto } from "./orders";
 
 export const KOT_TRANSITIONS: Record<KotStatusDto, readonly KotStatusDto[]> = {
+  // Forward one step at a time (a new ticket may go straight to PREPARING:
+  // "Start Preparing" accepts and starts in one tap). While a ticket is still
+  // in the kitchen a cook can also correct a mis-tap by stepping it back ONE
+  // step - the board's "Back" and "Back to Prep" buttons. What never happens:
+  // back to NEW, out of a terminal state, or skipping READY.
   NEW: ["ACCEPTED", "PREPARING", "REJECTED", "CANCELLED"],
   ACCEPTED: ["PREPARING", "REJECTED", "CANCELLED"],
   // Declining food that is already on the stove is allowed but gated: see
   // KOT_STARTED_STATUSES and the confirmStarted flag.
-  PREPARING: ["READY", "REJECTED", "CANCELLED"],
-  READY: ["SERVED", "CANCELLED"],
+  PREPARING: ["ACCEPTED", "READY", "REJECTED", "CANCELLED"],
+  READY: ["PREPARING", "SERVED", "CANCELLED"],
   SERVED: [],
   CANCELLED: [],
   REJECTED: [],

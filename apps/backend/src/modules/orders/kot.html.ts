@@ -1,3 +1,4 @@
+import { formatLocalDateTime } from '../../common/time';
 // Self-printing HTML kitchen ticket — same iframe+window.print() pattern as
 // receipt.html.ts, deliberately a separate template rather than reusing
 // buildReceiptHtml with a "hide prices" flag: a KOT is read by kitchen
@@ -33,11 +34,13 @@ interface KotOrder {
 export function buildKotHtml({
   branchName,
   order,
+  timezone,
 }: {
   branchName: string;
   order: KotOrder;
+  timezone?: string | null;
 }): string {
-  const dateStr = new Date(order.createdAt).toLocaleString();
+  const dateStr = formatLocalDateTime(order.createdAt, timezone);
 
   const itemRows = order.items
     .map((item) => {

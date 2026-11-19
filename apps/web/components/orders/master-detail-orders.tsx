@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,9 @@ import { api, ApiError } from "@/lib/api";
 import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { useCheckoutOrder, type ManagedOrder } from "@/hooks/use-orders";
+import { useBillPreview, useCheckoutOrder, type ManagedOrder } from "@/hooks/use-orders";
+import { amountToCollect } from "@/lib/order-balance";
+import { uuid } from "@/lib/uuid";
 import { useUpdateKotStatus } from "@/hooks/use-kds";
 import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatCurrency, formatOrderNumber } from "@/lib/format";
@@ -268,13 +270,39 @@ export function MasterDetailOrders({
     },
   });
 
+  // What is still owed, from the server's bill (tax on top, charges, offers
+  // and earlier part payments included) rather than the order row's total.
+  const billPreview = useBillPreview(
+    branchId,
+    selectedOrder?.id ?? "",
+    {},
+    !!selectedOrder && selectedOrder.status === "OPEN",
+  );
+  const amountDue = selectedOrder
+    ? amountToCollect(
+        selectedOrder,
+        selectedOrder.status === "OPEN" && !billPreview.isPlaceholderData && !billPreview.isError
+          ? billPreview.data
+          : null,
+      )
+    : 0;
+  const amountDueLabel = Number.isInteger(amountDue) ? String(amountDue) : amountDue.toFixed(2);
+
+  // One id per payment attempt: tapping twice, or retrying after a dropped
+  // connection, is answered with the first result instead of paying again.
+  const paymentAttempt = useRef<{ key: string; id: string } | null>(null);
+
   // Handle Quick Payment
   const handleCollectPayment = () => {
-    if (!selectedOrder) return;
-    const amount = parseFloat(selectedOrder.totalAmount);
+    if (!selectedOrder || billPreview.isFetching) return;
+    const amount = amountDue;
     if (!amount || amount <= 0) {
-      toast.error("Invalid order total amount");
+      toast.error("Nothing is due on this order");
       return;
+    }
+    const attemptKey = `${selectedOrder.id}:${selectedPaymentMethodDto}:${amount}`;
+    if (paymentAttempt.current?.key !== attemptKey) {
+      paymentAttempt.current = { key: attemptKey, id: uuid() };
     }
 
     checkoutOrder.mutate(
@@ -287,6 +315,7 @@ export function MasterDetailOrders({
               amount: amount,
             },
           ],
+          requestId: paymentAttempt.current.id,
         },
       },
       {
@@ -609,7 +638,9 @@ export function MasterDetailOrders({
                       </span>
                     )}
                   </div>
-                  <span className="text-base font-black text-white">₹{selectedOrder.totalAmount}</span>
+                  <span className="text-base font-black text-white">
+                    ₹{selectedOrderIsPaid ? selectedOrder.totalAmount : amountDueLabel}
+                  </span>
                 </div>
 
                 {!selectedOrderIsPaid ? (
@@ -624,7 +655,7 @@ export function MasterDetailOrders({
                         }}
                       >
                         <DollarSign className="mr-1.5 h-4 w-4" />
-                        Collect Cash (₹{selectedOrder.totalAmount})
+                        Collect Cash (₹{amountDueLabel})
                       </Button>
                       <Button
                         type="button"
@@ -696,8 +727,21 @@ export function MasterDetailOrders({
                         </span>
 
                         {/* Veg / Non-Veg Indicator */}
-                        <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-emerald-600 bg-emerald-950/40">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <div
+                          title={item.menuItem?.isVeg === false ? "Non-veg" : "Veg"}
+                          className={cn(
+                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                            item.menuItem?.isVeg === false
+                              ? "border-rose-600 bg-rose-950/40"
+                              : "border-emerald-600 bg-emerald-950/40"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-2 w-2 rounded-full",
+                              item.menuItem?.isVeg === false ? "bg-rose-500" : "bg-emerald-500"
+                            )}
+                          />
                         </div>
 
                         <div className="flex flex-col gap-1">
@@ -808,7 +852,7 @@ export function MasterDetailOrders({
               <DialogTitle className="flex items-center gap-2 text-base font-bold text-white">
                 <Receipt className="h-5 w-5 text-amber-400" />
                 <span>
-                  Settle Order #{formatOrderNumber(selectedOrder.orderNumber)} · ₹{selectedOrder.totalAmount}
+                  Settle Order {formatOrderNumber(selectedOrder.orderNumber)} · ₹{amountDueLabel}
                 </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-neutral-400">
@@ -821,7 +865,7 @@ export function MasterDetailOrders({
                 <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
                   Total Amount to Settle
                 </span>
-                <p className="text-3xl font-black text-white mt-1">₹{selectedOrder.totalAmount}</p>
+                <p className="text-3xl font-black text-white mt-1">₹{amountDueLabel}</p>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -882,11 +926,11 @@ export function MasterDetailOrders({
               </Button>
               <Button
                 className="rounded-xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-500"
-                disabled={checkoutOrder.isPending}
+                disabled={checkoutOrder.isPending || billPreview.isFetching || amountDue <= 0}
                 onClick={handleCollectPayment}
               >
                 <Check className="mr-1.5 h-4 w-4 stroke-[3]" />
-                {checkoutOrder.isPending ? "Processing..." : `Confirm Payment (₹${selectedOrder.totalAmount})`}
+                {checkoutOrder.isPending ? "Processing..." : `Confirm Payment (₹${amountDueLabel})`}
               </Button>
             </DialogFooter>
           </DialogContent>

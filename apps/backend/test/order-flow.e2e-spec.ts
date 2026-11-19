@@ -379,13 +379,21 @@ run('Order flow: accept, kitchen, bill, payment, roles (e2e)', () => {
       expect(dup.body.acceptedAt).toBe(acceptedAt);
       expect(seen('kot.updated', m)).toHaveLength(1);
 
-      // A stale screen asking for a step that is already behind us.
+      // A stale screen asking to jump two steps back is still refused...
       await advance(kot.id, ['PREPARING', 'READY']);
       const stale = await kitchen.patch(`/kds/tickets/${kot.id}/status${q}`, {
-        status: 'PREPARING',
+        status: 'ACCEPTED',
       });
       expect(stale.status).toBe(409);
-      await advance(kot.id, ['SERVED']);
+      // ...but the board's "Back to Prep" (one step back) works and clears
+      // the ready stamp, so the ticket can be marked ready again later.
+      const back = await kitchen.patch(`/kds/tickets/${kot.id}/status${q}`, {
+        status: 'PREPARING',
+      });
+      expect(back.status).toBe(200);
+      expect(back.body.status).toBe('PREPARING');
+      expect((await detail(order.id)).kots[0].readyAt).toBeFalsy();
+      await advance(kot.id, ['READY', 'SERVED']);
       const afterServed = await kitchen.patch(
         `/kds/tickets/${kot.id}/status${q}`,
         { status: 'READY' },

@@ -257,13 +257,14 @@ export default function MenuPage() {
                       size="icon"
                       className="h-10 w-10 text-destructive"
                       aria-label={`Delete ${item.name}`}
-                      onClick={() =>
+                      onClick={() => {
+                        if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
                         deleteItem.mutate(item.id, {
                           onSuccess: () => toast.success(`${item.name} removed`),
                           onError: (err) =>
                             toast.error(err instanceof ApiError ? err.message : "Could not remove item"),
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -353,13 +354,14 @@ export default function MenuPage() {
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
                           title="Delete item"
-                          onClick={() =>
+                          onClick={() => {
+                            if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
                             deleteItem.mutate(item.id, {
                               onSuccess: () => toast.success(`${item.name} removed`),
                               onError: (err) =>
                                 toast.error(err instanceof ApiError ? err.message : "Could not remove item"),
-                            })
-                          }
+                            });
+                          }}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

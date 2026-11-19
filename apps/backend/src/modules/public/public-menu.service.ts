@@ -1,9 +1,66 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { CartItemDto } from '@easydine/types';
+import type { Prisma } from '@prisma/client';
+import { normalizePhone, type CartItemDto } from '@easydine/types';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { findCustomerByPhone } from '../customers/customer-phone';
+import { usableBalance } from '../loyalty/loyalty';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { OrdersService } from '../orders/orders.service';
+
+/**
+ * What a guest's phone gets back after placing a QR order. The order row
+ * itself carries things a stranger holding the same table QR must never
+ * receive: the first guest's name and phone, the table's notes, staff ids.
+ */
+/** The restaurant-level settings the customer menu needs; nothing else leaves. */
+export function publicRestaurantExtras(r: any) {
+  const zomato = r?.zomatoUrl || null;
+  const swiggy = r?.swiggyUrl || null;
+  return {
+    loyalty: {
+      enabled: !!r?.loyaltyEnabled,
+      earnPerCurrency: r?.loyaltyEarnPerCurrency ?? null,
+      pointValue: r ? Number(r.loyaltyPointValue) : null,
+      minOrderAmount: r ? Number(r.loyaltyMinOrderAmount) : 0,
+    },
+    deliveryRedirect:
+      r?.deliveryRedirectEnabled && (zomato || swiggy)
+        ? { zomatoUrl: zomato, swiggyUrl: swiggy }
+        : null,
+    reviewUrl: r?.reviewUrl || null,
+  };
+}
+
+export function toPublicOrder(order: any) {
+  if (!order) return order;
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    type: order.type,
+    status: order.status,
+    acceptance: order.acceptance,
+    totalAmount: order.totalAmount != null ? String(order.totalAmount) : null,
+    createdAt: order.createdAt,
+    items: (order.items ?? []).map((it: any) => ({
+      id: it.id,
+      menuItemId: it.menuItemId,
+      nameSnapshot: it.nameSnapshot,
+      quantity: it.quantity,
+      unitPriceSnapshot:
+        it.unitPriceSnapshot != null ? String(it.unitPriceSnapshot) : null,
+      lineTotal: it.lineTotal != null ? String(it.lineTotal) : null,
+      status: it.status,
+      kitchenNote: it.kitchenNote ?? null,
+      modifiers: (it.modifiers ?? []).map((m: any) => ({
+        id: m.id,
+        nameSnapshot: m.nameSnapshot,
+        priceAdjSnapshot:
+          m.priceAdjSnapshot != null ? Number(m.priceAdjSnapshot) : 0,
+      })),
+    })),
+  };
+}
 
 @Injectable()
 export class PublicMenuService {
@@ -14,24 +71,46 @@ export class PublicMenuService {
     private readonly realtime: RealtimeGateway,
   ) {}
 
+  /**
+   * The branch a generic link (no branch in it) may stand for: only on an
+   * install that hosts a single restaurant. With several restaurants on one
+   * server a generic link must never land in somebody else's branch.
+   */
+  async soleRestaurantBranch(extraWhere: Prisma.BranchWhereInput = {}) {
+    const restaurants = await this.prisma.restaurant.findMany({
+      select: { id: true },
+      take: 2,
+    });
+    if (restaurants.length !== 1) return null;
+    const where = {
+      restaurantId: restaurants[0].id,
+      isActive: true,
+      ...extraWhere,
+    };
+    return (
+      (await this.prisma.branch.findFirst({
+        where: { ...where, categories: { some: {} } },
+        orderBy: { createdAt: 'asc' },
+        include: { restaurant: true },
+      })) ??
+      (await this.prisma.branch.findFirst({
+        where,
+        orderBy: { createdAt: 'asc' },
+        include: { restaurant: true },
+      }))
+    );
+  }
+
   private async resolveTarget(qrToken: string) {
     if (qrToken === 'takeaway' || qrToken.startsWith('takeaway-') || qrToken === 'qr-takeaway') {
-      const branchId = qrToken.startsWith('takeaway-') ? qrToken.replace('takeaway-', '') : null;
-      let branch = branchId
-        ? await this.prisma.branch.findUnique({ where: { id: branchId }, include: { restaurant: true } })
-        : null;
-      if (!branch) {
-        branch =
-          (await this.prisma.branch.findFirst({
-            where: { isActive: true, categories: { some: {} } },
+      // "takeaway-<branchId>" names its branch and must match it exactly: an
+      // unknown or switched-off branch is refused, never swapped for another.
+      const branch = qrToken.startsWith('takeaway-')
+        ? await this.prisma.branch.findFirst({
+            where: { id: qrToken.slice('takeaway-'.length), isActive: true },
             include: { restaurant: true },
-          })) ??
-          (await this.prisma.branch.findFirst({
-            where: { isActive: true },
-            orderBy: { createdAt: 'desc' },
-            include: { restaurant: true },
-          }));
-      }
+          })
+        : await this.soleRestaurantBranch();
       if (!branch) throw new NotFoundException('Restaurant branch not found');
       return { isTakeaway: true, branch, table: null };
     }
@@ -54,6 +133,32 @@ export class PublicMenuService {
       tableNumber: isTakeaway ? 'Takeaway' : table?.number,
       isTakeaway,
       categories,
+      ...publicRestaurantExtras((branch as any).restaurant),
+    };
+  }
+
+  /**
+   * A guest's points balance for the phone they typed. Needs the QR token (so
+   * it is scoped to that restaurant's branch) and only ever returns the
+   * number; never a name, history or any other detail.
+   */
+  async getLoyaltyBalance(qrToken: string, rawPhone?: string) {
+    const { branch } = await this.resolveTarget(qrToken);
+    const restaurant = (branch as any).restaurant;
+    if (!restaurant?.loyaltyEnabled) return { enabled: false, points: 0 };
+    const phone = normalizePhone(rawPhone);
+    if (!phone) return { enabled: true, points: 0, known: false };
+    const found = await findCustomerByPhone(this.prisma, branch.id, phone);
+    if (!found) return { enabled: true, points: 0, known: false };
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: found.id },
+      select: { loyaltyPoints: true, loyaltyLastEarnedAt: true },
+    });
+    return {
+      enabled: true,
+      known: true,
+      points: usableBalance(restaurant, customer),
+      pointValue: Number(restaurant.loyaltyPointValue),
     };
   }
 
@@ -63,13 +168,9 @@ export class PublicMenuService {
     if (isTakeaway || !table) return { ok: true };
     const branchId = table.floor.branchId;
 
-    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(0, 10) : undefined;
-    if (guestName || cleanPhone) {
-      await this.ordersService.resolveOrCreateCustomer(branchId, {
-        name: guestName,
-        phone: cleanPhone,
-      });
-    }
+    // Scanning a QR and typing a name creates NO customer record: that only
+    // happens once an order is actually paid (OrdersService.checkout).
+    const cleanPhone = normalizePhone(phone) ?? undefined;
 
     if (table.status === 'AVAILABLE') {
       const noteParts = [guestName?.trim(), cleanPhone].filter(Boolean);
@@ -180,14 +281,8 @@ export class PublicMenuService {
       if (!createdById) throw new NotFoundException('This branch has no staff to receive the order');
 
       const cleanGuestName = guestName?.trim() || 'Takeaway Guest';
-      const cleanGuestPhone = guestPhone ? guestPhone.replace(/\D/g, '').slice(0, 10) : undefined;
-
-      // Resolve or create customer from guest details so they appear in
-      // the Customers section even before the cashier marks the order paid.
-      const takeawayCustomerId = await this.ordersService.resolveOrCreateCustomer(
-        branchId,
-        { name: cleanGuestName, phone: cleanGuestPhone },
-      );
+      // Kept on the order; saved to Customers only when the order is paid.
+      const cleanGuestPhone = normalizePhone(guestPhone) ?? undefined;
 
       return this.ordersService.createOrder(
         branchId,
@@ -198,7 +293,6 @@ export class PublicMenuService {
           guestPhone: cleanGuestPhone,
           notes: notes ? `Takeaway · ${notes}` : 'Takeaway Order',
           clientRequestId: requestId,
-          customerId: takeawayCustomerId,
           items: normalizedItems,
         } as any,
         { channel: 'ONLINE', requireAcceptance: true },
@@ -231,15 +325,18 @@ export class PublicMenuService {
       where: { branchId, tableId: table.id, status: 'OPEN' },
     });
     if (openOrder) {
-      // Update phone and link customer if not done yet
+      // Fill in contact details the tab does not have yet. They stay on the
+      // order; the customer record is created when the order is paid.
       const updateData: any = {};
-      if (guestPhone && !openOrder.deliveryPhone) updateData.deliveryPhone = guestPhone;
-      if (!openOrder.customerId) {
-        const existingCustomerId = await this.ordersService.resolveOrCreateCustomer(
-          branchId,
-          { name: guestName, phone: guestPhone },
-        );
-        if (existingCustomerId) updateData.customerId = existingCustomerId;
+      const addPhone = normalizePhone(guestPhone);
+      if (addPhone && !openOrder.deliveryPhone) updateData.deliveryPhone = addPhone;
+      const addName = guestName?.trim();
+      if (
+        addName &&
+        addName.toLowerCase() !== 'guest' &&
+        (!openOrder.guestName || openOrder.guestName.toLowerCase() === 'guest')
+      ) {
+        updateData.guestName = addName;
       }
       if (Object.keys(updateData).length > 0) {
         await this.prisma.order.update({ where: { id: openOrder.id }, data: updateData });
@@ -265,14 +362,8 @@ export class PublicMenuService {
     }
 
     const cleanGuestName = guestName?.trim() || 'Guest';
-    const cleanGuestPhone = guestPhone ? guestPhone.replace(/\D/g, '').slice(0, 10) : undefined;
-
-    // Resolve or create customer from guest name/phone so they appear in
-    // the Customers section immediately when order is placed.
-    const qrCustomerId = await this.ordersService.resolveOrCreateCustomer(
-      branchId,
-      { name: cleanGuestName, phone: cleanGuestPhone },
-    );
+    // Kept on the order; saved to Customers only when the order is paid.
+    const cleanGuestPhone = normalizePhone(guestPhone) ?? undefined;
 
     return this.ordersService.createOrder(
       branchId,
@@ -284,7 +375,6 @@ export class PublicMenuService {
         guestPhone: cleanGuestPhone,
         notes,
         clientRequestId: requestId,
-        customerId: qrCustomerId,
         items: normalizedItems,
       } as any,
       { channel: 'ONLINE', requireAcceptance: true },
@@ -373,7 +463,38 @@ export class PublicMenuService {
       : [];
 
     if (!order) {
-      return { order: null, openRequests: requests.map((r) => r.type) };
+      // The guest's own order, once paid: show what they earned. The order id
+      // is an unguessable token only their device holds, and only two numbers
+      // leave the server.
+      let paid: Record<string, unknown> | undefined;
+      if (requestedOrderId) {
+        const done = await this.prisma.order.findFirst({
+          where: { id: requestedOrderId, branchId: branch.id, status: 'PAID' },
+          select: {
+            orderNumber: true,
+            loyaltyPointsEarned: true,
+            customer: {
+              select: { loyaltyPoints: true, loyaltyLastEarnedAt: true },
+            },
+          },
+        });
+        if (done) {
+          const restaurant = (branch as any).restaurant;
+          paid = {
+            orderNumber: done.orderNumber,
+            loyaltyEnabled: !!restaurant?.loyaltyEnabled,
+            pointsEarned: done.loyaltyPointsEarned,
+            pointsBalance: done.customer
+              ? usableBalance(restaurant, done.customer)
+              : null,
+          };
+        }
+      }
+      return {
+        order: null,
+        openRequests: requests.map((r) => r.type),
+        ...(paid && { paid }),
+      };
     }
 
     // Derive aggregated cooking status from active items and kots

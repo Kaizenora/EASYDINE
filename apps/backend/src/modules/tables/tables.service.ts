@@ -354,28 +354,9 @@ export class TablesService {
     let customerName = order?.customer?.name || order?.guestName || 'Guest';
 
     if (order) {
-      if (!order.customerId && (order.guestName || order.deliveryPhone)) {
-        // Same safe logic as checkout: phone identifies (normalized, per
-        // branch), a name alone never merges and a name-only guest simply
-        // gets no shared record.
-        try {
-          const resolvedId = await this.ordersService.resolveOrCreateCustomer(
-            branchId,
-            { name: order.guestName, phone: order.deliveryPhone },
-          );
-          if (resolvedId) {
-            const linked = await this.prisma.order.update({
-              where: { id: order.id },
-              data: { customerId: resolvedId },
-              include: { customer: true },
-            });
-            customerName = linked.customer?.name || customerName;
-          }
-        } catch {
-          // customer linking must never block settling the table
-        }
-      }
-
+      // The guest's name / phone on the order is saved to Customers by
+      // checkout() itself, in the same transaction that marks the order paid
+      // (phone identifies, per branch; a name alone never merges).
       const preview = await this.ordersService.previewBill(branchId, order.id, {});
       checkoutResult = await this.ordersService.checkout(
         branchId,
@@ -385,11 +366,18 @@ export class TablesService {
           payments: [
             {
               method: method as any,
-              amount: preview.totalDue,
+              // What is still owed: an earlier part-payment must not be
+              // charged a second time.
+              amount: preview.balanceDue ?? preview.totalDue,
             },
           ],
         },
       );
+      const paidOrder = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        select: { customer: { select: { name: true } } },
+      });
+      customerName = paidOrder?.customer?.name || customerName;
     }
 
     await this.prisma.tableRequest.updateMany({
@@ -428,7 +416,16 @@ export class TablesService {
       subtotal,
       tax,
       totalAmount,
-      date: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: (
+          await this.prisma.branch.findUnique({
+            where: { id: branchId },
+            select: { restaurant: { select: { timezone: true } } },
+          })
+        )?.restaurant.timezone ?? 'Asia/Kolkata',
+      }),
     };
   }
 

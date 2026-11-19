@@ -137,6 +137,17 @@ function toEscposOrder(
     loyaltyPointsRedeemed: order.loyaltyPointsRedeemed,
     loyaltyDiscountAmount: Number(order.loyaltyDiscountAmount),
     totalAmount: Number(order.totalAmount),
+    // Only a paid bill for a known customer, and only if the restaurant runs
+    // the program: the guest sees what they earned and what they now hold.
+    loyalty:
+      order.status === 'PAID' &&
+      order.customer &&
+      order.branch.restaurant.loyaltyEnabled
+        ? {
+            earned: order.loyaltyPointsEarned,
+            balance: order.customer.loyaltyPoints,
+          }
+        : null,
     ...overrides,
     items: order.items.map((item) => ({
       nameSnapshot: item.nameSnapshot,
@@ -466,6 +477,7 @@ export class OrdersController {
     const html = buildReceiptHtml({
       isTest: true,
       paperSize,
+      timezone: branch.restaurant.timezone,
       restaurantName: branch.restaurant.name,
       currency: branch.restaurant.currency,
       branch: {
@@ -534,6 +546,7 @@ export class OrdersController {
     const paperSize = query.paperSize === '58mm' || query.paperSize === 'A4' ? query.paperSize : '80mm';
     const html = buildReceiptHtml({
       paperSize,
+      timezone: order.branch.restaurant.timezone,
       restaurantName: order.branch.restaurant.name,
       currency: order.branch.restaurant.currency,
       branch: {
@@ -569,6 +582,7 @@ export class OrdersController {
     const order = await this.ordersService.getReceiptData(branchId, id);
     const html = buildKotHtml({
       branchName: order.branch.name,
+      timezone: order.branch.restaurant.timezone,
       order: toKotOrder(order),
     });
     res.type('html').send(html);
