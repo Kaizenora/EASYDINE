@@ -4,6 +4,7 @@ import { KOT_NEXT_STATUS, type KotStatusDto } from "@easydine/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
+import { acceptOrderWithKot, getActivePrintScope, type AcceptTarget } from "@/lib/local-print";
 import { isNativeApp } from "@/lib/native";
 import { isNetworkError, outbox } from "@/lib/outbox";
 
@@ -105,6 +106,24 @@ export function useUpdateKotStatus(branchId: string | null) {
         return null;
       }
     },
+    // Optimistic: the board shows the new step the moment it is tapped; the
+    // server answer only confirms it (or rolls it back on a refusal).
+    onMutate: async ({ id, status }) => {
+      const key = ["kds", "tickets", branchId];
+      await queryClient.cancelQueries({ queryKey: key });
+      const before = queryClient.getQueriesData<KotTicket[]>({ queryKey: key });
+      queryClient.setQueriesData<KotTicket[]>({ queryKey: key }, (list) =>
+        list
+          ? status === "SERVED"
+            ? list.filter((t) => t.id !== id)
+            : list.map((t) => (t.id === id ? { ...t, status } : t))
+          : list,
+      );
+      return { before };
+    },
+    onError: (_e, _v, ctx) => {
+      for (const [k, data] of ctx?.before ?? []) queryClient.setQueryData(k, data);
+    },
     // Also on error: a 409 means the ticket moved on another screen, and the
     // board must show where it really is rather than the stale step.
     onSettled: () => {
@@ -112,6 +131,11 @@ export function useUpdateKotStatus(branchId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
+}
+
+/** Kitchen step order; moving forward needs no confirmation, moving back does. */
+export function kotStepRank(status: KotStatusDto | string): number {
+  return status === "NEW" || status === "ACCEPTED" ? 0 : status === "PREPARING" ? 1 : status === "READY" ? 2 : status === "SERVED" ? 3 : -1;
 }
 
 export const NEXT_STATUS = KOT_NEXT_STATUS;
@@ -170,7 +194,13 @@ function invalidateAfterAnswer(queryClient: ReturnType<typeof useQueryClient>, b
 export function useAcceptIncoming(branchId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (orderId: string) => api.post(`/kds/incoming/${orderId}/accept?branchId=${branchId}`),
+    // Accept + first KOT in the same click, via the KOT routing rule (helper
+    // direct print when reachable and mapped, otherwise the print dialog).
+    mutationFn: async (target: string | AcceptTarget) => {
+      const r = await acceptOrderWithKot(target, { ...getActivePrintScope(), branchId });
+      if (!r.accepted && r.reason !== "busy") throw new Error(r.message);
+      return r;
+    },
     onSettled: () => invalidateAfterAnswer(queryClient, branchId),
   });
 }

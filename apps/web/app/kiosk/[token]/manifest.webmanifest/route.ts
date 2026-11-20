@@ -10,9 +10,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   const base = `/kiosk/${token}`;
   const manifest = {
     id: base,
-    name: "Autopedido",
-    short_name: "Autopedido",
-    description: "Autopedido para clientes",
+    name: "Self-order kiosk",
+    short_name: "Kiosk",
+    description: "Self-ordering for customers",
     start_url: base,
     scope: `${base}`,
     display: "fullscreen",
@@ -20,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     orientation: "landscape",
     background_color: "#fbf9f8",
     theme_color: "#6D4AFF",
-    lang: "es",
+    lang: "en",
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

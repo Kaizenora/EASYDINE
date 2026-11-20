@@ -27,6 +27,7 @@ interface KotOrder {
     quantity: number;
     kitchenNote: string | null;
     modifiers: { nameSnapshot: string }[];
+    comboDetails?: string[];
   }[];
 }
 
@@ -84,13 +85,16 @@ export function buildKotHtml({
       const modifierLines = item.modifiers
         .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}</div>`)
         .join('');
+      const comboLines = item.comboDetails && item.comboDetails.length > 0
+        ? item.comboDetails.map((c) => `<div class="sub">· ${esc(c)}</div>`).join('')
+        : '';
       const noteLine = item.kitchenNote
         ? `<div class="note">Note: ${esc(item.kitchenNote)}</div>`
         : '';
       return `
         <tr>
           <td class="qty">${item.quantity}×</td>
-          <td>${esc(item.nameSnapshot)}${modifierLines}${noteLine}</td>
+          <td>${esc(item.nameSnapshot)}${comboLines}${modifierLines}${noteLine}</td>
         </tr>`;
     })
     .join('');
@@ -99,7 +103,7 @@ export function buildKotHtml({
 <html>
 <head>
 <meta charset="utf-8">
-<title>KOT ${esc(order.orderNumber)}</title>
+<title>KOT ${esc(order.orderNumber || order.table?.label || '')}</title>
 <style>
   * { box-sizing: border-box; }
   html { margin: 0; }
@@ -116,6 +120,7 @@ export function buildKotHtml({
   .sub { font-size: 13px; color: #444; padding-left: 4px; }
   .note { font-size: 13px; font-weight: 600; color: #111; padding-left: 4px; }
   .reprint { font-size: 16px; font-weight: 700; text-align: center; margin: 2px 0; }
+  .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
   ${kotPageCss(paper)}
 </style>
 </head>
@@ -131,7 +136,7 @@ export function buildKotHtml({
     <hr class="rule">
     <p class="muted">
       ${esc(dateStr)}<br>
-      Order: #${esc(order.orderNumber)} · ${esc(order.type.replace('_', ' '))}
+      Order: ${order.orderNumber ? `#${esc(order.orderNumber)} · ` : ''}${esc(order.type.replace('_', ' '))}
       ${order.table ? `<br><strong>Table: ${esc(order.table.label)}</strong>` : ''}
       ${order.customer ? `<br>Guest: ${esc(order.customer.name)}` : ''}
     </p>
@@ -140,6 +145,7 @@ export function buildKotHtml({
       <tbody>${itemRows}</tbody>
     </table>
     <hr class="rule">
+    <p class="powered">Powered by EasyDine</p>
   </div>
 </body>
 </html>`;

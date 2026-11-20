@@ -45,7 +45,8 @@ import { ReasonDialog } from "@/components/orders/reason-dialog";
 import { formatCurrency, formatOrderNumber } from "@/lib/format";
 import { tableLabel, type PaymentMethodDto } from "@easydine/types";
 import { openReceiptPrint } from "@/lib/print";
-import { acceptOrderWithKot, reprintKot as reprintKotRouted } from "@/lib/local-print";
+import { acceptOrderWithKot, prefetchKotPage, toAcceptTarget, type AcceptTarget, reprintKot as reprintKotRouted } from "@/lib/local-print";
+import { kotPageVersion } from "@/lib/printer-routing";
 import { usePrintScope } from "@/components/settings/local-printer-scope";
 import { StatusNote, useStatusNote } from "@/components/ui/status-note";
 
@@ -236,6 +237,13 @@ export function MasterDetailOrders({
   // The outcome is shown inline and honestly (queued / failed / unknown);
   // a failed print never undoes the acceptance — Reprint KOT is explicit.
   const printScope = usePrintScope();
+  // Load the KOT page of waiting orders in the background, so Accept & KOT
+  // opens the print dialog the moment it is clicked.
+  useEffect(() => {
+    for (const o of queueOrders.slice(0, 15)) {
+      prefetchKotPage(o.id, printScope, kotPageVersion((o as any).items));
+    }
+  }, [queueOrders, printScope]);
   const [reprinting, setReprinting] = useState(false);
   const { note: printNote, show: showPrintNote, clear: clearPrintNote } = useStatusNote(20_000);
   const refreshAfterAccept = () => {
@@ -260,7 +268,7 @@ export function MasterDetailOrders({
       .finally(() => setReprinting(false));
   };
   const acceptOrder = useMutation({
-    mutationFn: (id: string) => acceptOrderWithKot(id, printScope).then((r) => ({ id, r })),
+    mutationFn: (t: string | AcceptTarget) => acceptOrderWithKot(t, printScope).then((r) => ({ id: toAcceptTarget(t).id, r })),
     onSuccess: ({ id, r }) => {
       if (!r.accepted) {
         if (r.reason === "busy") return;
@@ -294,7 +302,7 @@ export function MasterDetailOrders({
 
   const rejectOrder = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.post(`/orders/${id}/reject`, { reason }),
+      api.post(`/orders/${id}/reject?branchId=${branchId ?? ""}`, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["floors"] });
@@ -694,16 +702,16 @@ export function MasterDetailOrders({
                         Collect UPI / Card
                       </Button>
                     </div>
+                    {/* The bill lives in the header; this card's print action is always Reprint KOT. */}
                     <Button
                       type="button"
                       variant="outline"
                       className="h-10 w-full rounded-xl border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
-                      onClick={() => {
-                        if (branchId) openReceiptPrint(selectedOrder.id, branchId);
-                      }}
+                      disabled={reprinting || (selectedOrder.kots?.length ?? 0) === 0}
+                      onClick={() => reprintKot(selectedOrder.id)}
                     >
                       <Printer className="mr-2 h-4 w-4 text-amber-400" />
-                      Print Bill (Customer Check)
+                      {reprinting ? "Opening…" : "Reprint KOT"}
                     </Button>
                     <p className="text-[11px] text-neutral-400">
                       Settle payment when customer pays at the counter. Order will be marked PAID and moved to History.
@@ -720,12 +728,11 @@ export function MasterDetailOrders({
                       variant="outline"
                       size="sm"
                       className="h-8 rounded-lg border-neutral-700 bg-neutral-800 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white"
-                      onClick={() => {
-                        if (branchId) openReceiptPrint(selectedOrder.id, branchId);
-                      }}
+                      disabled={reprinting || (selectedOrder.kots?.length ?? 0) === 0}
+                      onClick={() => reprintKot(selectedOrder.id)}
                     >
                       <Printer className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
-                      Reprint Receipt
+                      {reprinting ? "Opening…" : "Reprint KOT"}
                     </Button>
                   </div>
                 )}
@@ -757,6 +764,13 @@ export function MasterDetailOrders({
 
                         <div className="flex flex-col gap-1">
                           <span className="text-sm font-bold text-white">{item.nameSnapshot}</span>
+
+                          {/* Combo Components */}
+                          {(item as any).menuItem?.comboComponents && (item as any).menuItem.comboComponents.length > 0 && (
+                            <span className="text-xs text-amber-200/80 italic font-medium">
+                              Includes: {(item as any).menuItem.comboComponents.map((c: any) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+                            </span>
+                          )}
 
                           {/* Modifiers List */}
                           {item.modifiers && item.modifiers.length > 0 && (
@@ -814,7 +828,12 @@ export function MasterDetailOrders({
                   }
                   onClick={() => {
                     // Ignore extra clicks while the first accept is running.
-                    if (!acceptOrder.isPending) acceptOrder.mutate(selectedOrder.id);
+                    if (!acceptOrder.isPending)
+                      acceptOrder.mutate({
+                        id: selectedOrder.id,
+                        scheduledFor: (selectedOrder as any).scheduledFor ?? null,
+                        version: kotPageVersion((selectedOrder as any).items),
+                      });
                   }}
                 >
                   <Check className="mr-2 h-5 w-5 stroke-[3]" />

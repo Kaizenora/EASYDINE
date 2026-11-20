@@ -1,3 +1,4 @@
+import { isApproved, notApprovedError } from '../../auth/approval';
 import {
   CanActivate,
   ExecutionContext,
@@ -48,6 +49,7 @@ export class IntegrationApiKeyGuard implements CanActivate {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const key = await this.prisma.integrationApiKey.findUnique({
       where: { tokenHash },
+      include: { restaurant: { select: { approvalStatus: true } } },
     });
     if (
       !key ||
@@ -55,6 +57,10 @@ export class IntegrationApiKeyGuard implements CanActivate {
       (key.expiresAt && key.expiresAt.getTime() <= Date.now())
     ) {
       throw new UnauthorizedException('Invalid, expired or revoked API key');
+    }
+    // Same platform approval rule as staff sessions.
+    if (!isApproved(key.restaurant?.approvalStatus)) {
+      throw notApprovedError(key.restaurant?.approvalStatus);
     }
 
     const required = this.reflector.getAllAndOverride<string[]>(

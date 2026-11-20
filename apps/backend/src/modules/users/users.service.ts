@@ -1,3 +1,4 @@
+import { clearSessionCache } from '../../auth/session-cache';
 import {
   BadRequestException,
   ConflictException,
@@ -169,6 +170,7 @@ export class UsersService {
       },
       select: SELECT,
     });
+    clearSessionCache(id); // name/role/active may have changed
 
     // Never log `dto.password`/`passwordHash` — only the fields it's safe
     // for an owner reviewing history to see. `passwordChanged` is a boolean
@@ -222,6 +224,7 @@ export class UsersService {
 
     try {
       await this.prisma.user.delete({ where: { id } });
+      clearSessionCache(id);
     } catch (err) {
       // Order/Refund/PurchaseOrder/... all keep a required, non-cascading
       // reference to the staff member who created them, so history is never
@@ -413,6 +416,7 @@ export class UsersService {
         })),
       }),
     ]);
+    clearSessionCache(targetId);
 
     await this.audit.record({
       userId: actor.id,

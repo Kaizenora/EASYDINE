@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EasyDineMark } from "@/components/brand/easydine-mark";
+import { EasyDineWordmark } from "@/components/brand/easydine-logo";
 import { DEMO_HREF } from "@/components/marketing/links";
 
 export function MarketingNav() {
@@ -7,7 +7,7 @@ export function MarketingNav() {
     <header className="sticky top-0 z-50 border-b border-border bg-background">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" aria-label="EasyDine home" className="rounded-lg">
-          <EasyDineMark size={32} />
+          <EasyDineWordmark height={26} />
         </Link>
 
         <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">

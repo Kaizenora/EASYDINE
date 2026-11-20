@@ -131,6 +131,16 @@ export function registerBillPrintRouter(router: BillPrintRouter) {
 }
 
 /** Bill (open order) or receipt (paid order): this PC's saved Bill printer, else the browser dialog. Read-only. */
+/** "&tz=<zone>" for bill pages, so they show this PC's local time (the server may run in UTC). */
+export function receiptTzParam(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz ? `&tz=${encodeURIComponent(tz)}` : "";
+  } catch {
+    return "";
+  }
+}
+
 export function openReceiptPrint(orderId: string, branchId: string, adj: BillQuery = {}) {
   if (!acquirePrintLock()) return;
   if (billPrintRouter?.(orderId, branchId, adj, () => openReceiptDialog(orderId, branchId, adj))) return;
@@ -142,7 +152,7 @@ export function openReceiptDialog(orderId: string, branchId: string, adj: BillQu
   const paperSize = getCashierPaperSize();
   // Only the native Android/iOS Capacitor app with a native printer plugin should use native device printing
   if (isNativeApp() && !!nativePrinter()) {
-    printPageOnDevice(`/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}`, "Bill");
+    printPageOnDevice(`/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}${receiptTzParam()}`, "Bill");
     return;
   }
   const frame = getPrintFrame();
@@ -158,7 +168,7 @@ export function openReceiptDialog(orderId: string, branchId: string, adj: BillQu
     }
   };
   // Force a reload even if printing the same order twice in a row.
-  frame.src = `/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}&t=${Date.now()}`;
+  frame.src = `/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}${receiptTzParam()}&t=${Date.now()}`;
 }
 
 export function openKotPrint(orderId: string, branchId: string) {

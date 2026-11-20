@@ -385,3 +385,28 @@ describe('test slip', () => {
     expect(text).toContain('áéíóú ñ ü ¿? ¡! € £');
   });
 });
+
+describe('EasyDine footer on printed bills and KOTs', () => {
+  const kot = {
+    orderNumber: '7',
+    type: 'TAKEAWAY',
+    createdAt: new Date('2026-11-13T10:00:00Z'),
+    table: null,
+    customer: null,
+    items: [{ nameSnapshot: 'Tea', quantity: 1, kitchenNote: null, modifiers: [] }],
+  };
+
+  it.each([58, 80] as const)('a %s mm bill prints only the text line, no logo', (mm) => {
+    const job = buildReceiptEscPosJob({ ...(base as any), profile: resolveProfile({ paperWidthMm: mm }) });
+    const { commands, lines } = readJob(job.buffer);
+    expect(commands.filter((c) => c.startsWith('1d7630'))).toHaveLength(0);
+    expect(lines.some((l) => l.includes('Powered by EasyDine'))).toBe(true);
+  });
+
+  it.each([58, 80] as const)('a %s mm KOT prints only the text line, no logo', (mm) => {
+    const job = buildKotEscPosJob({ branchName: 'Main', order: kot, profile: resolveProfile({ paperWidthMm: mm }) } as any);
+    const { commands, text } = readJob(job.buffer);
+    expect(commands.filter((c) => c.startsWith('1d7630'))).toHaveLength(0);
+    expect(text).toContain('Powered by EasyDine');
+  });
+});

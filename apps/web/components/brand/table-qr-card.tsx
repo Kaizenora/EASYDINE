@@ -14,7 +14,7 @@ export function TableQrCard({
   url,
   table,
   restaurantName,
-  logoSrc = "/easydine-badge-192.png",
+  logoSrc = "/brand/easydine-badge.png",
   width = 192,
   className,
 }: {

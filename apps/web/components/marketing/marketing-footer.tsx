@@ -1,6 +1,6 @@
 import { Instagram, Mail } from "lucide-react";
 import Link from "next/link";
-import { EasyDineMark } from "@/components/brand/easydine-mark";
+import { EasyDineWordmark } from "@/components/brand/easydine-logo";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/components/marketing/links";
 
 const LINKS = [
@@ -14,7 +14,7 @@ export function MarketingFooter() {
     <footer className="border-t border-border px-4 py-12 sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 md:flex-row md:justify-between">
         <div>
-          <EasyDineMark size={32} />
+          <EasyDineWordmark height={24} />
           <p className="mt-3 text-sm text-muted-foreground">Dine smarter, not harder.</p>
         </div>
 

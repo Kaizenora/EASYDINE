@@ -226,6 +226,35 @@ const SCHEDULE_LEAD_MS = 25 * 60_000;
 
 export type BrowserKotDecision = "dialog" | "no-tickets" | "server-sent" | "server-unknown";
 
+/** Scheduled far enough ahead that the server will not create kitchen tickets yet. */
+export function isScheduledLater(scheduledFor: string | null | undefined, now: number = Date.now()): boolean {
+  if (!scheduledFor) return false;
+  const t = Date.parse(scheduledFor);
+  return Number.isFinite(t) && t > now + SCHEDULE_LEAD_MS;
+}
+
+/** Cache key part for a waiting order's KOT page: changes when its lines change. */
+export function kotPageVersion(items: { id?: string; quantity?: number; status?: string }[] | null | undefined): string {
+  return (items ?? []).map((i) => `${i.id ?? ""}:${i.quantity ?? ""}:${i.status ?? ""}`).join("|");
+}
+
+export type PrintedNotAcceptedKind = "already" | "unconfirmed" | "error";
+
+/**
+ * Print-first Accept & KOT: the dialog opened before the server answered, and
+ * then the acceptance did not go through. Says plainly what to do with the
+ * ticket that may already be at the kitchen.
+ */
+export function printedButNotAcceptedMessage(kind: PrintedNotAcceptedKind, serverMessage?: string): string {
+  if (kind === "already") {
+    return `${serverMessage || "This order was already accepted"}. The KOT just printed is a duplicate if the kitchen already has this order: discard it.`;
+  }
+  if (kind === "unconfirmed") {
+    return "The KOT was printed, but the acceptance could not be confirmed (connection problem). Refresh the list: if the order is still waiting, accept it again and discard the second ticket.";
+  }
+  return `Order NOT accepted${serverMessage ? `: ${serverMessage}` : ""}. Tell the kitchen not to cook the KOT that was just printed.`;
+}
+
 export function browserKotDecision(printStatus: string | undefined, scheduledFor?: string | null, now: number = Date.now()): BrowserKotDecision {
   if (printStatus === "BROWSER") return "dialog";
   if (printStatus === "NO_TICKETS") return "no-tickets";

@@ -25,7 +25,8 @@ import {
   type CheckoutResult,
   type CreatedOrder,
 } from "@/hooks/use-orders";
-import { usePrintKot, usePrintOrderUsb, type PrintJobResult } from "@/hooks/use-print";
+import { usePrintOrderUsb, type PrintJobResult } from "@/hooks/use-print";
+import { getActivePrintScope, reprintKot } from "@/lib/local-print";
 import { useDisplaySettings } from "@/hooks/use-settings";
 import { api, ApiError } from "@/lib/api";
 import { discountSummary, parseMoney, planPayment } from "@/lib/bill";
@@ -36,7 +37,7 @@ import { playPaymentReceived } from "@/lib/celebrate";
 import { buildUpiUri } from "@/lib/upi";
 import { QRCodeSVG } from "qrcode.react";
 import { canPrintEscposLocally } from "@/lib/device-print";
-import { openKotPrint, openReceiptPrint } from "@/lib/print";
+import { openReceiptPrint } from "@/lib/print";
 import { round2 } from "@/lib/pricing-preview";
 
 const METHODS: PaymentMethodDto[] = ["CASH", "CARD", "UPI", "OTHER"];
@@ -112,33 +113,23 @@ export function CheckoutPanel({
   const [editOpen, setEditOpen] = useState(false);
   const phone = canPrintEscposLocally();
   const printUsb = usePrintOrderUsb(branchId);
-  const printKot = usePrintKot(branchId);
   const onPrinted = (r: PrintJobResult) =>
     r.unsupportedChars?.length
       ? toast.warning(`Sent, but ${r.unsupportedChars.join(" ")} cannot be printed by this printer's code page. Use browser print for the full text.`)
       : toast.success("Sent to the thermal printer");
-  // First print sends only tickets not yet printed. If they already went out
-  // (e.g. a double tap or retry) the server refuses to print a duplicate and we
-  // offer an explicit, REPRINT-stamped copy instead.
-  const printKotNow = (reprint: boolean) =>
-    printKot.mutate(
-      { orderId: order.id, reprint },
-      {
-        onSuccess: (r) => {
-          onPrinted(r);
-          if (reprint) toast.success("Reprint sent — marked REPRINT on paper");
-        },
-        onError: (err) => {
-          if (err instanceof ApiError && err.code === "ALREADY_PRINTED") {
-            toast.info("The kitchen ticket was already printed", {
-              action: { label: "Print a REPRINT", onClick: () => printKotNow(true) },
-            });
-            return;
-          }
-          toast.error(err instanceof Error ? err.message : "Could not print to the kitchen printer");
-        },
-      },
-    );
+  // The first KOT already went out with "Send to kitchen". This is the
+  // explicit Reprint only (same routing: helper direct print or dialog).
+  const [reprinting, setReprinting] = useState(false);
+  const reprintKotNow = () => {
+    if (!branchId || reprinting) return;
+    setReprinting(true);
+    void reprintKot(order.id, { ...getActivePrintScope(), branchId })
+      .then((e) => {
+        if (e.status === "FAILED" || e.status === "UNKNOWN") toast.error(e.message);
+        else if (e.status === "QUEUED") toast.success(e.message);
+      })
+      .finally(() => setReprinting(false));
+  };
   const [completed, setCompleted] = useState<CheckoutResult | null>(null);
   const { data: settings } = useDisplaySettings(branchId);
 
@@ -437,21 +428,11 @@ export function CheckoutPanel({
             variant="outline"
             size="sm"
             className="shrink-0"
-            onClick={() => branchId && openKotPrint(order.id, branchId)}
+            disabled={reprinting}
+            onClick={reprintKotNow}
           >
             <Printer className="h-4 w-4" />
-            {phone ? "KOT / PDF" : "KOT (browser)"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={printKot.isPending}
-            onClick={() => printKotNow(false)}
-          >
-            <Printer className="h-4 w-4" />
-            {printKot.isPending ? "Printing…" : phone ? "KOT (Bluetooth)" : "KOT (thermal)"}
+            {reprinting ? "Printing…" : "Reprint KOT"}
           </Button>
           </div>
         </div>

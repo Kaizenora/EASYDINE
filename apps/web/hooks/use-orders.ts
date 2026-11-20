@@ -12,12 +12,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveAwareInterval } from "@/hooks/use-live-interval";
 import type { Customer } from "@/hooks/use-customers";
 import { api } from "@/lib/api";
-import { acceptOrderWithKot, getActivePrintScope } from "@/lib/local-print";
+import { acceptOrderWithKot, createOrderKotQuery, getActivePrintScope, type AcceptTarget } from "@/lib/local-print";
 import { toast } from "@/lib/toast";
 
 export interface CreatedOrder {
   id: string;
   orderNumber: string;
+  /** Kitchen tickets of the order (id only is enough for printing). */
+  kots?: { id: string }[];
+  /** addItems only: the tickets this round created. */
+  newKotIds?: string[];
   subtotal: string;
   taxAmount: string;
   discountAmount: string;
@@ -44,7 +48,8 @@ export interface CheckoutResult extends CreatedOrder {
 export function useCreateOrder(branchId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (dto: CreateOrderDto) => api.post<CreatedOrder>(`/orders?branchId=${branchId}`, dto),
+    mutationFn: (dto: CreateOrderDto) =>
+      api.post<CreatedOrder & { kotHtml?: string }>(`/orders?branchId=${branchId}${createOrderKotQuery(branchId)}`, dto),
     onSuccess: () => {
       // Without refreshing the per-table open-bill cache, going Table 1 -> 2 ->
       // 1 showed Table 1 as having no order and the next send opened a duplicate.
@@ -234,7 +239,7 @@ export function useAllOrders(branchId: string | null) {
   const pollMs = useLiveAwareInterval(2000, 10_000);
   return useQuery({
     queryKey: ["orders", "manage", branchId, "all"],
-    queryFn: ({ signal }) => api.get<ManagedOrder[]>('/orders/manage?tab=all', { signal }),
+    queryFn: ({ signal }) => api.get<ManagedOrder[]>(`/orders/manage?${new URLSearchParams({ branchId: branchId ?? "", tab: "all" }).toString()}`, { signal }),
     enabled: !!branchId,
     refetchInterval: pollMs,
   });
@@ -265,8 +270,8 @@ export function useAcceptOrder(branchId: string | null) {
     // Accept once, then one KOT on this PC's saved Kitchen printer (or the
     // branch printer, as before). Print problems never undo the acceptance;
     // they are shown as an error with the honest status.
-    mutationFn: async (orderId: string) => {
-      const r = await acceptOrderWithKot(orderId, { ...getActivePrintScope(), branchId });
+    mutationFn: async (target: string | AcceptTarget) => {
+      const r = await acceptOrderWithKot(target, { ...getActivePrintScope(), branchId });
       if (!r.accepted) {
         if (r.reason === "busy") return r;
         throw new Error(r.message);

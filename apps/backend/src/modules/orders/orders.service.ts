@@ -62,6 +62,18 @@ const KOT_FORWARD_STATUSES = [
   'SERVED',
 ] as const;
 
+/**
+ * Every order lookup is scoped by the caller's (already access-checked)
+ * branch. Prisma silently drops `branchId: undefined` from a filter, which
+ * would turn "this branch's order" into "any order", so an absent branch is
+ * a hard error here as a second line of defence behind BranchAccessService.
+ */
+export function requireBranch(branchId: unknown): asserts branchId is string {
+  if (typeof branchId !== 'string' || branchId === '') {
+    throw new BadRequestException('branchId is required');
+  }
+}
+
 @Injectable()
 export class OrdersService {
   async getBranchForReceipt(branchId: string) {
@@ -96,12 +108,24 @@ export class OrdersService {
   }
 
   async getOrder(branchId: string, id: string) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id, branchId },
       include: {
         table: true,
         customer: true,
-        items: { include: { modifiers: true, menuItem: true } },
+        items: {
+          include: {
+            modifiers: true,
+            menuItem: {
+              include: {
+                comboComponents: {
+                  include: { componentItem: true },
+                },
+              },
+            },
+          },
+        },
         kots: { include: { items: true, station: true } },
         payments: true,
       },
@@ -127,12 +151,24 @@ export class OrdersService {
   }
 
   async getReceiptData(branchId: string, id: string) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id, branchId },
       include: {
         table: true,
         customer: true,
-        items: { include: { modifiers: true } },
+        items: {
+          include: {
+            modifiers: true,
+            menuItem: {
+              include: {
+                comboComponents: {
+                  include: { componentItem: true },
+                },
+              },
+            },
+          },
+        },
         payments: true,
         branch: { include: { restaurant: true } },
       },
@@ -174,6 +210,121 @@ export class OrdersService {
     // found here — createOrder/addItems already 404 earlier when the
     // branch itself is invalid, so this is just belt-and-suspenders.
     return branch?.taxMode ?? 'INCLUSIVE';
+  }
+
+  /**
+   * Who paid, for the Customers list and loyalty. Picked on the bill > phone
+   * typed on the bill (found or created) > the order's own customer (QR /
+   * cart) > name or phone the order carried. A true walk-in stays anonymous.
+   */
+  async resolvePayingCustomer(
+    branchId: string,
+    order: { customerId: string | null; guestName: string | null; deliveryPhone: string | null },
+    dto: { customerId?: string; customerName?: string; customerPhone?: string },
+  ): Promise<string | null> {
+    let effectiveCustomerId: string | null = order.customerId;
+    // A customer the cashier picked on the bill wins over the one the order
+    // carried (e.g. from the QR scan): that is who paid.
+    if (dto.customerId && dto.customerId !== effectiveCustomerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { id: dto.customerId, branchId },
+      });
+      if (!customer) throw new BadRequestException('Customer not found');
+      effectiveCustomerId = customer.id;
+    }
+    const typedName = dto.customerName?.trim() || null;
+    const typedPhone = normalizePhone(dto.customerPhone);
+    if (!dto.customerId && typedPhone) {
+      // The cashier typed a phone on the bill: that is who paid. It is saved
+      // (found by phone or created) and the order is linked to it, even when
+      // the order already carried another customer (e.g. from the QR).
+      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
+        name: typedName || order.guestName,
+        phone: typedPhone,
+      });
+    } else if (!dto.customerId && typedName && effectiveCustomerId) {
+      // A name typed for a customer we already have: fill it in when the
+      // saved one has none (or only a placeholder); never rename a real name.
+      await this.fillCustomerName(branchId, effectiveCustomerId, typedName);
+    }
+    if (!effectiveCustomerId) {
+      // What the cashier typed at payment wins over what the order carried;
+      // with neither, nothing is created (a true walk-in stays anonymous).
+      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
+        name: typedName || order.guestName,
+        phone: typedPhone || order.deliveryPhone,
+      });
+    }
+    return effectiveCustomerId;
+  }
+
+  /**
+   * Copies guest details from past orders into the Customers list: every
+   * order of this branch with a phone but no linked customer gets one (found
+   * by phone, or created with the order's name) and is linked to it. Only a
+   * phone identifies a guest, so name-only orders are left alone (they would
+   * otherwise each become a separate "Priya"). Safe to run again: linked
+   * orders are skipped. Newest orders first, `limit` per call.
+   */
+  async backfillCustomersFromOrders(branchId: string, limit = 300) {
+    requireBranch(branchId);
+    const orders = await this.prisma.order.findMany({
+      where: { branchId, customerId: null, deliveryPhone: { not: null }, status: { not: 'CANCELLED' } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, guestName: true, deliveryPhone: true },
+    });
+    let linked = 0;
+    let skipped = 0;
+    for (const o of orders) {
+      if (!normalizePhone(o.deliveryPhone)) {
+        skipped++;
+        continue;
+      }
+      try {
+        const customerId = await this.resolveOrCreateCustomer(branchId, {
+          name: o.guestName,
+          phone: o.deliveryPhone,
+        });
+        if (!customerId) {
+          skipped++;
+          continue;
+        }
+        await this.prisma.order.updateMany({
+          where: { id: o.id, branchId, customerId: null },
+          data: { customerId },
+        });
+        linked++;
+      } catch (err) {
+        skipped++;
+        this.logger.warn(
+          `Customer backfill skipped order ${o.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return { scanned: orders.length, linked, skipped };
+  }
+
+  /**
+   * Gives a saved customer the name the cashier typed, but only when it has
+   * no real name yet (empty, "Guest"/"Walk-in" or the "Customer …"
+   * placeholder). A real name is never overwritten from the bill.
+   */
+  private async fillCustomerName(branchId: string, customerId: string, name: string) {
+    const clean = name.trim();
+    if (!clean || ['guest', 'walk-in', 'walk-in guest', 'takeaway guest'].includes(clean.toLowerCase())) return;
+    const c = await this.prisma.customer.findFirst({
+      where: { id: customerId, branchId },
+      select: { name: true },
+    });
+    if (!c) return;
+    const current = c.name?.trim() ?? '';
+    const placeholder =
+      !current ||
+      ['guest', 'walk-in', 'walk-in guest', 'takeaway guest'].includes(current.toLowerCase()) ||
+      current.startsWith('Customer ');
+    if (!placeholder) return;
+    await this.prisma.customer.update({ where: { id: customerId }, data: { name: clean } });
   }
 
   /**
@@ -271,7 +422,54 @@ export class OrdersService {
     return id;
   }
 
+  /**
+   * Creates an order exactly once per request id (dto.requestId, or
+   * options.clientRequestId). A retry with the same id returns the order the
+   * first attempt saved, including when two attempts race: the
+   * (branchId, clientRequestId) unique index decides, and the loser returns
+   * the winner's order instead of failing.
+   */
   async createOrder(
+    branchId: string,
+    userId: string,
+    dto: CreateOrderDto,
+    options: Parameters<OrdersService['createOrderOnce']>[3] = {},
+  ) {
+    const requestId =
+      options.clientRequestId ??
+      (dto as { requestId?: string }).requestId ??
+      ((dto as { clientRequestId?: string }).clientRequestId || undefined);
+    const opts = requestId ? { ...options, clientRequestId: requestId } : options;
+    try {
+      return await this.createOrderOnce(branchId, userId, dto, opts);
+    } catch (err) {
+      if (
+        requestId &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const existing = await this.prisma.order.findFirst({
+          where: { branchId, clientRequestId: requestId },
+          select: { id: true },
+        });
+        if (existing) return this.getOrder(branchId, existing.id);
+      }
+      throw err;
+    }
+  }
+
+  /** The order previously created with this request id in this branch, or null. */
+  async findByRequestId(branchId: string, requestId: string) {
+    requireBranch(branchId);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(requestId)) return null;
+    const o = await this.prisma.order.findFirst({
+      where: { branchId, clientRequestId: requestId },
+      select: { id: true },
+    });
+    return o ? this.getOrder(branchId, o.id) : null;
+  }
+
+  private async createOrderOnce(
     branchId: string,
     userId: string,
     dto: CreateOrderDto,
@@ -650,6 +848,7 @@ export class OrdersService {
     items: CartItemDto[],
     options: { enforceModifierLimits?: boolean; websiteOnly?: boolean } = {},
   ) {
+    requireBranch(branchId);
     const menuItemIds = [...new Set(items.map((i) => i.menuItemId))];
     const modifierIds = [...new Set(items.flatMap((i) => i.modifierIds ?? []))];
 
@@ -715,6 +914,7 @@ export class OrdersService {
       ),
     );
 
+    let newKotIds: string[] = [];
     const updated = await this.prisma.$transaction(async (tx) => {
       const newItems = await Promise.all(
         lineInputs.map((line) =>
@@ -758,13 +958,15 @@ export class OrdersService {
         },
       });
 
-      await this.generateKots(tx, orderId, branchId, newItems);
+      newKotIds = await this.generateKots(tx, orderId, branchId, newItems);
 
       return result;
     }, { timeout: 30000, maxWait: 15000 });
 
     this.realtime.emitToBranch(branchId, 'order.updated', { id: orderId });
-    return this.getOrder(branchId, updated.id);
+    // newKotIds: the kitchen tickets this round created, so the cashier PC
+    // prints exactly those (not earlier rounds) in the same click.
+    return { ...(await this.getOrder(branchId, updated.id)), newKotIds };
   }
 
   // Realistic floor rule: once the kitchen has actually started cooking (or
@@ -782,6 +984,7 @@ export class OrdersService {
       type?: string;
     },
   ) {
+    requireBranch(branchId);
     const tab = filters.tab ?? 'active';
     const statusWhere: Prisma.OrderWhereInput =
       tab === 'all'
@@ -859,12 +1062,15 @@ export class OrdersService {
       printer?: string;
     } = {},
   ) {
+    requireBranch(branchId);
+    // Always scoped to the caller's branch: knowing an order id is not
+    // authorization to accept it.
     const order = await this.prisma.order.findFirst({
-      where: branchId ? { id: orderId, branchId } : { id: orderId },
+      where: { id: orderId, branchId },
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Order not found');
-    const effectiveBranchId = branchId || order.branchId;
+    const effectiveBranchId = branchId;
     if (order.status !== 'OPEN' || order.acceptance !== 'PENDING') {
       throw new ConflictException(
         order.acceptance === 'ACCEPTED'
@@ -906,25 +1112,29 @@ export class OrdersService {
       entityId: orderId,
       metadata: { orderNumber: order.orderNumber, type: order.type },
     });
-    try {
-      await this.notifications.notifyByPermission(branchId, 'kds.manage', {
-        type: 'order.new',
-        title: 'New online order',
-        body: `Order ${order.orderNumber} (${order.type.replace('_', ' ')})`,
-        entity: 'Order',
-        entityId: orderId,
+    // Not awaited: the cashier's Accept & KOT (and its print dialog) must not
+    // wait for push notifications to go out. Failures are only logged.
+    void Promise.resolve()
+      .then(() =>
+        this.notifications.notifyByPermission(branchId, 'kds.manage', {
+          type: 'order.new',
+          title: 'New online order',
+          body: `Order ${order.orderNumber} (${order.type.replace('_', ' ')})`,
+          entity: 'Order',
+          entityId: orderId,
+        }),
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to notify kitchen of accepted order ${orderId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
-    } catch (err) {
-      this.logger.warn(
-        `Failed to notify kitchen of accepted order ${orderId}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
 
     if (kot.via === 'browser') {
-      const tickets = await this.prisma.kot.count({
-        where: { orderId, status: { not: 'CANCELLED' } },
-      });
-      const orderDetails = await this.getOrder(branchId, orderId);
+      const [tickets, orderDetails] = await Promise.all([
+        this.prisma.kot.count({ where: { orderId, status: { not: 'CANCELLED' } } }),
+        this.getOrder(branchId, orderId),
+      ]);
       return {
         ...orderDetails,
         printStatus: tickets > 0 ? ('BROWSER' as const) : ('NO_TICKETS' as const),
@@ -1242,6 +1452,7 @@ export class OrdersService {
       declineIncoming?: boolean;
     },
   ) {
+    requireBranch(branchId);
     const reason = options.reason?.trim() || undefined;
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
@@ -1390,6 +1601,7 @@ export class OrdersService {
   }
 
   private async editableOrder(branchId: string, orderId: string) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       include: { items: true, payments: { select: { id: true } } },
@@ -1424,6 +1636,7 @@ export class OrdersService {
     userId: string,
     dto: UpdateOrderDto,
   ) {
+    requireBranch(branchId);
     const order = await this.editableOrder(branchId, orderId);
 
     if (dto.customerId) {
@@ -1751,6 +1964,7 @@ export class OrdersService {
   // and the payment summary show. Read-only: nothing is saved, no status
   // changes, so it can be run any number of times.
   async previewBill(branchId: string, orderId: string, adj: BillPreviewDto) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       include: { items: true, payments: true, customer: true },
@@ -1824,6 +2038,7 @@ export class OrdersService {
     orderId: string,
     adj: BillPreviewDto,
   ) {
+    requireBranch(branchId);
     const [order, view] = await Promise.all([
       this.getReceiptData(branchId, orderId),
       this.previewBill(branchId, orderId, adj),
@@ -1848,6 +2063,7 @@ export class OrdersService {
   }
 
   async recordBillPrinted(branchId: string, orderId: string, userId: string) {
+    requireBranch(branchId);
     await this.audit.record({
       userId,
       action: 'order.bill_printed',
@@ -1864,6 +2080,7 @@ export class OrdersService {
     dto: CheckoutDto,
     mayExceedDiscountCap = false,
   ) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       include: { items: true, customer: true, payments: true },
@@ -1898,26 +2115,11 @@ export class OrdersService {
     // was opened — walk-ins don't need a name up front, staff can add one
     // once the guest is ready to pay. Falls back to whatever was already on
     // the order (e.g. attached via QR order or set at cart time).
-    let effectiveCustomerId = order.customerId;
-    if (!effectiveCustomerId && dto.customerId) {
-      const customer = await this.prisma.customer.findFirst({
-        where: { id: dto.customerId, branchId },
-      });
-      if (!customer) throw new BadRequestException('Customer not found');
-      effectiveCustomerId = customer.id;
-    }
-    if (!effectiveCustomerId) {
-      // What the cashier typed at payment wins over what the order carried;
-      // with neither, nothing is created (a true walk-in stays anonymous).
-      effectiveCustomerId = await this.resolveOrCreateCustomer(branchId, {
-        name: dto.customerName || order.guestName,
-        phone: dto.customerPhone || order.deliveryPhone,
-      });
-    }
-    // If we now have a customer but the order doesn't have one linked yet,
-    // link it immediately (outside the tx) so the Customers section updates
-    // even if the payment transaction later fails.
-    if (effectiveCustomerId && !order.customerId) {
+    const effectiveCustomerId = await this.resolvePayingCustomer(branchId, order, dto);
+    // If we now have a customer the order isn't linked to yet, link it
+    // immediately (outside the tx) so the Customers section updates even if
+    // the payment transaction later fails.
+    if (effectiveCustomerId && effectiveCustomerId !== order.customerId) {
       await this.prisma.order.update({
         where: { id: orderId },
         data: { customerId: effectiveCustomerId },
@@ -2057,11 +2259,11 @@ export class OrdersService {
         // The bill's figures are fixed by the first payment, whether or not
         // it settles the bill.
         const lockedFigures = locked
-          ? (effectiveCustomerId && !order.customerId
+          ? (effectiveCustomerId && effectiveCustomerId !== order.customerId
               ? { customerId: effectiveCustomerId }
               : {})
           : {
-              ...(effectiveCustomerId && !order.customerId
+              ...(effectiveCustomerId && effectiveCustomerId !== order.customerId
                 ? { customerId: effectiveCustomerId }
                 : {}),
               discountAmount: bill.discountAmount,
@@ -2290,6 +2492,7 @@ export class OrdersService {
     userId: string,
     dto: RefundDto,
   ) {
+    requireBranch(branchId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
     });
@@ -2416,6 +2619,7 @@ export class OrdersService {
     targetOrderId: string,
     sourceOrderId: string,
   ) {
+    requireBranch(branchId);
     if (targetOrderId === sourceOrderId) {
       throw new BadRequestException('Cannot merge an order into itself');
     }
@@ -2699,7 +2903,7 @@ export class OrdersService {
     orderId: string,
     branchId: string,
     orderItems: { id: string; menuItemId: string }[],
-  ) {
+  ): Promise<string[]> {
     const stationLookup = await tx.menuItem.findMany({
       where: { id: { in: orderItems.map((i) => i.menuItemId) } },
       select: { id: true, stationId: true },
@@ -2720,6 +2924,7 @@ export class OrdersService {
     // a second time for a later round, and ticket numbers must stay unique
     // per order for kitchen staff to tell rounds apart.
     let ticketSeq = (await tx.kot.count({ where: { orderId } })) + 1;
+    const created: string[] = [];
     for (const [stationId, items] of itemsByStation) {
       const kot = await tx.kot.create({
         data: {
@@ -2729,11 +2934,13 @@ export class OrdersService {
           items: { create: items.map((item) => ({ orderItemId: item.id })) },
         },
       });
+      created.push(kot.id);
       this.realtime.emitToBranch(branchId, 'kot.created', {
         id: kot.id,
         stationId,
       });
     }
+    return created;
   }
 
   // Moves a kitchen ticket one step forward (NEW -> ACCEPTED -> PREPARING ->

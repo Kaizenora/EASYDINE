@@ -1,41 +1,27 @@
 "use client";
 
+import { EasyDineWordmark } from "@/components/brand/easydine-logo";
 import { cn } from "@/lib/utils";
-import { LogoImage } from "@/components/layout/logo-image";
 
+/**
+ * EasyDine product logo for public pages (auth, landing, docs): the approved
+ * horizontal wordmark. `size` is the visual height in px. The restaurant's
+ * own uploaded logo is shown by the app shell instead and is unaffected.
+ */
 export function Logo({
   className,
   size = 32,
-  withText = false,
-  src = "/logo.png",
 }: {
   className?: string;
   size?: number;
+  /** @deprecated kept for older call sites; the wordmark already contains the name. */
   withText?: boolean;
+  /** @deprecated product logo only; restaurant logos live in the app shell. */
   src?: string;
 }) {
   return (
-    <div className={cn("inline-flex items-center gap-2.5 select-none", className)}>
-      <div
-        className="relative flex items-center justify-center shrink-0 overflow-hidden rounded-xl bg-amber-500/10 p-0.5 border border-amber-500/20 shadow-sm"
-        style={{ width: size, height: size }}
-      >
-        <LogoImage
-          src={src}
-          alt="Restaurant Logo"
-          className="w-full h-full object-contain"
-        />
-      </div>
-      {withText && (
-        <div className="flex flex-col leading-none">
-          <span className="text-lg font-black tracking-tight text-foreground">
-            Easy<span className="text-primary">Dine</span>
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            EasyDine POS
-          </span>
-        </div>
-      )}
-    </div>
+    <span className={cn("inline-flex select-none items-center", className)}>
+      <EasyDineWordmark height={size} />
+    </span>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { getActivePrintScope, prefetchKotPage, reprintKot } from "@/lib/local-print";
+import { kotPageVersion } from "@/lib/printer-routing";
 import { ApiError } from "@/lib/api";
 import { CloudOff, Flame, Globe, Printer, RotateCcw, Star, Timer, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -13,7 +15,6 @@ import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import {
   NEXT_STATUS,
   useRejectKot,
-  useReprintKot,
   useSetKotPriority,
   useUpdateKotStatus,
   type KotTicket,
@@ -66,7 +67,31 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const elapsed = useElapsedMinutes(ticket.createdAt);
   const updateStatus = useUpdateKotStatus(branchId);
   const setPriority = useSetKotPriority(branchId);
-  const reprint = useReprintKot(branchId);
+  // This ticket only, through the KOT routing rule (helper direct print when
+  // reachable and mapped, otherwise the browser dialog). Never the server/LAN
+  // printer and never the order's other tickets.
+  const [printing, setPrinting] = useState(false);
+  const ticketVersion = kotPageVersion(ticket.items as { id?: string; quantity?: number; status?: string }[]);
+  const ticketReprint = ticket.printedCount > 0;
+  // This ticket's page is loaded in the background, so the print dialog
+  // opens the moment the printer icon is pressed.
+  useEffect(() => {
+    if (branchId) prefetchKotPage(ticket.orderId, { ...getActivePrintScope(), branchId }, ticketVersion, { kotIds: [ticket.id], reprint: ticketReprint });
+  }, [branchId, ticket.orderId, ticket.id, ticketVersion, ticketReprint]);
+  const printThisTicket = () => {
+    if (!branchId || printing) return;
+    setPrinting(true);
+    void reprintKot(ticket.orderId, { ...getActivePrintScope(), branchId }, {
+      kotIds: [ticket.id],
+      reprint: ticketReprint,
+      version: ticketVersion,
+    })
+      .then((e) => {
+        if (e.status === "FAILED" || e.status === "UNKNOWN") toast.error(e.message);
+        else if (e.status === "QUEUED") toast.success(e.message);
+      })
+      .finally(() => setPrinting(false));
+  };
   const { note, clear: clearNote, toast } = useNoteToast();
   const nextStatus = NEXT_STATUS[ticket.status];
   const isLate = elapsed >= 15;
@@ -74,6 +99,27 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<KotStatusDto | null>(null);
+  // Applied after the confirmation: shown immediately (optimistic), confirmed
+  // by the server in the background, rolled back with a message if refused.
+  const applyStatus = (target: KotStatusDto) => {
+    updateStatus.mutate(
+      { id: ticket.id, status: target },
+      {
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiError && err.message
+              ? `Ticket #${ticket.order.orderNumber}: ${err.message}`
+              : `Could not update ticket #${ticket.order.orderNumber}`,
+          ),
+      },
+    );
+  };
+  // Every status change asks first (owner's choice); on Confirm the board
+  // moves at once and the server confirms in the background.
+  const requestStatus = (target: KotStatusDto) => {
+    if (target === ticket.status) return;
+    setConfirmStatus(target);
+  };
   const reject = useRejectKot(branchId);
   const { data: me } = useCurrentUser();
   // Rejecting before cooking starts is for anyone on the kitchen screen; food
@@ -163,6 +209,11 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             <p className="font-medium text-foreground">
               {item.orderItem.quantity}× {item.orderItem.nameSnapshot}
             </p>
+            {(item.orderItem as any).menuItem?.comboComponents && (item.orderItem as any).menuItem.comboComponents.length > 0 && (
+              <p className="text-xs text-muted-foreground/80 italic">
+                Includes: {(item.orderItem as any).menuItem.comboComponents.map((c: any) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+              </p>
+            )}
             {item.orderItem.modifiers.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 {item.orderItem.modifiers.map((m) => m.nameSnapshot).join(", ")}
@@ -185,7 +236,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             disabled={updateStatus.isPending}
             onClick={() => {
               if (ticket.status !== "NEW" && ticket.status !== "ACCEPTED") {
-                setConfirmStatus("ACCEPTED");
+                requestStatus("ACCEPTED");
               }
             }}
             className={cn(
@@ -204,7 +255,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             disabled={updateStatus.isPending}
             onClick={() => {
               if (ticket.status !== "PREPARING") {
-                setConfirmStatus("PREPARING");
+                requestStatus("PREPARING");
               }
             }}
             className={cn(
@@ -223,7 +274,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             disabled={updateStatus.isPending}
             onClick={() => {
               if (ticket.status !== "READY") {
-                setConfirmStatus("READY");
+                requestStatus("READY");
               }
             }}
             className={cn(
@@ -246,7 +297,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               variant="outline"
               size="sm"
               disabled={updateStatus.isPending}
-              onClick={() => setConfirmStatus("ACCEPTED")}
+              onClick={() => requestStatus("ACCEPTED")}
               className="h-10 px-3 text-xs gap-1 font-medium text-muted-foreground hover:text-foreground"
               title="Move back to Ordered"
             >
@@ -261,7 +312,7 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               variant="outline"
               size="sm"
               disabled={updateStatus.isPending}
-              onClick={() => setConfirmStatus("PREPARING")}
+              onClick={() => requestStatus("PREPARING")}
               className="h-10 px-3 text-xs gap-1 font-medium text-muted-foreground hover:text-foreground"
               title="Move back to Preparing"
             >
@@ -276,12 +327,10 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               disabled={updateStatus.isPending}
               onClick={() => {
                 const target = (ticket.status === "NEW" || ticket.status === "ACCEPTED") ? "PREPARING" : "READY";
-                setConfirmStatus(target);
+                requestStatus(target);
               }}
             >
-              {updateStatus.isPending
-                ? "Updating…"
-                : (ticket.status === "NEW" || ticket.status === "ACCEPTED")
+              {(ticket.status === "NEW" || ticket.status === "ACCEPTED")
                   ? "Start Preparing →"
                   : "Mark Ready to Serve →"}
             </Button>
@@ -289,9 +338,9 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
             <Button
               className="h-10 flex-1 bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold"
               disabled={updateStatus.isPending}
-              onClick={() => setConfirmStatus("SERVED")}
+              onClick={() => requestStatus("SERVED")}
             >
-              {updateStatus.isPending ? "Updating…" : "✓ Served & Delivered"}
+              ✓ Served & Delivered
             </Button>
           )}
         </div>
@@ -313,19 +362,9 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
               <Button
                 onClick={() => {
                   if (confirmStatus) {
-                    updateStatus.mutate(
-                      { id: ticket.id, status: confirmStatus },
-                      {
-                        onSuccess: () => {
-                          toast.success(`Ticket #${ticket.order.orderNumber} updated to ${STATUS_NAMES[confirmStatus] || confirmStatus}`);
-                          setConfirmStatus(null);
-                        },
-                        onError: () => {
-                          toast.error("Could not update ticket status");
-                          setConfirmStatus(null);
-                        },
-                      }
-                    );
+                    // Closed at once; the board already shows the new step.
+                    applyStatus(confirmStatus);
+                    setConfirmStatus(null);
                   }
                 }}
               >
@@ -366,22 +405,8 @@ export function TicketCard({ ticket, branchId }: { ticket: KotTicket; branchId: 
           className="h-9 w-9 shrink-0"
           title={ticket.printedCount > 0 ? "Reprint ticket (marked REPRINT)" : "Print ticket"}
           aria-label={ticket.printedCount > 0 ? "Reprint ticket" : "Print ticket"}
-          disabled={reprint.isPending}
-          onClick={() =>
-            reprint.mutate(
-              { id: ticket.id, reprint: ticket.printedCount > 0 },
-              {
-                onSuccess: () =>
-                  toast.success(
-                    ticket.printedCount > 0 ? "Reprint sent to the kitchen printer" : "Ticket sent to the kitchen printer",
-                  ),
-                onError: (err) =>
-                  toast.error(
-                    err instanceof ApiError ? err.message : "Could not reach the server - printing needs the connection",
-                  ),
-              },
-            )
-          }
+          disabled={printing}
+          onClick={printThisTicket}
         >
           <Printer className="h-4 w-4" />
         </Button>

@@ -40,7 +40,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0F766E",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#0F766E" },
+    { media: "(prefers-color-scheme: dark)", color: "#141210" },
+  ],
   // Lets the bottom nav / sheets sit inside the notch + home-indicator safe areas.
   viewportFit: "cover",
 };

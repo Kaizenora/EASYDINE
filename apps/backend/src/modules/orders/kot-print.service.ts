@@ -80,10 +80,15 @@ export class KotPrintService {
     private readonly realtime: RealtimeGateway,
   ) {}
 
-  private load(branchId: string, where: { id?: string; orderId?: string }) {
+  private load(branchId: string, where: { id?: string; orderId?: string; ids?: string[] }) {
+    if (typeof branchId !== 'string' || branchId === '') {
+      throw new NotFoundException('KOT not found');
+    }
+    const { ids, ...rest } = where;
     return this.prisma.kot.findMany({
       where: {
-        ...where,
+        ...rest,
+        ...(ids ? { id: { in: ids } } : {}),
         order: { branchId },
         status: { not: 'CANCELLED' },
       },
@@ -105,6 +110,19 @@ export class KotPrintService {
     });
   }
 
+  /**
+   * Which order lines belong to these tickets of the order, for the
+   * browser-printed KOT page (?kotIds=). Tickets of another order or branch
+   * are simply not found.
+   */
+  async ticketLines(branchId: string, orderId: string, kotIds: string[]) {
+    const kots = await this.load(branchId, { orderId, ids: kotIds });
+    return {
+      tickets: kots.map((k) => ({ number: k.ticketNumber, station: k.station?.name ?? null })),
+      orderItemIds: new Set(kots.flatMap((k) => k.items.map((i) => i.orderItemId))),
+    };
+  }
+
   async printTicket(branchId: string, kotId: string, reprint: boolean) {
     const kots = await this.load(branchId, { id: kotId });
     if (kots.length === 0) throw new NotFoundException('KOT not found');
@@ -119,13 +137,15 @@ export class KotPrintService {
     device: DeviceKotOptions = {},
     /** A specific printer chosen on the cashier PC (server prints there instead of the branch printer). */
     target?: BranchPrinterTarget,
+    /** Only these tickets of the order (e.g. the round just sent, or one KDS ticket). */
+    kotIds?: string[],
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, branchId },
       select: { id: true },
     });
     if (!order) throw new NotFoundException('Order not found');
-    const kots = await this.load(branchId, { orderId });
+    const kots = await this.load(branchId, { orderId, ...(kotIds?.length ? { ids: kotIds } : {}) });
     if (kots.length === 0) {
       throw new ConflictException({
         code: 'NO_TICKETS',

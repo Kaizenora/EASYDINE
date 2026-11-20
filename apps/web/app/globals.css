@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *):not(.force-light, .force-light *));
 
 @theme inline {
   --color-background: var(--background);
@@ -60,8 +60,13 @@
   --color-nonveg: var(--destructive);
 }
 
-:root {
-  /* EasyDine: teal on cream. See DESIGN.md. */
+:root,
+.force-light {
+  /* EasyDine: teal on cream. See DESIGN.md. --brand-* are used by the
+     guest QR page, Powered-by and logo components. */
+  --brand-teal: #0F766E;
+  --brand-cream: #FBFAF7;
+  --brand-charcoal: #1C1917;
   --background: #FBFAF7;
   --foreground: #1C1917;
   --card: #FFFFFF;
@@ -107,6 +112,9 @@
 
 .dark {
   /* Dark counterpart for staff screens that opt in; same hues, lifted for contrast. */
+  --brand-teal: #2DD4BF;
+  --brand-cream: #F5F4F0;
+  --brand-charcoal: #141210;
   --background: #141210;
   --foreground: #F5F4F0;
   --card: #1C1A17;
@@ -153,10 +161,7 @@
    dark-mode setting, so contrast is predictable from standing distance. Only
    custom properties are redefined here (no element rules), so Tailwind
    utilities are unaffected. */
-/* .theme-light: public pages (landing, customer QR flow) that are always
-   light whatever the OS setting. */
-.kiosk-root,
-.theme-light {
+.kiosk-root {
   color-scheme: light;
   /* Always the light EasyDine palette, whatever the device setting. */
   --background: #FBFAF7;
@@ -288,7 +293,8 @@
    (rounded-*, bg-*, shadow-*) on a component still win over it — unlayered
    rules would silently beat every utility class.
    --------------------------------------------------------------------------- */
-:root {
+:root,
+.force-light {
   /* Cards are a 1px border, not a shadow; shadows mean "floating". */
   --shadow-card: none;
   --shadow-card-hover: 0 1px 2px rgb(0 0 0 / 0.06);

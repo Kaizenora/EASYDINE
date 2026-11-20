@@ -13,7 +13,7 @@ describe('PublicMenuService - First QR order guestPhone persistence', () => {
     qrToken: 'test-qr-token',
     floor: {
       branchId: 'branch-1',
-      branch: { id: 'branch-1', name: 'Main Branch' },
+      branch: { id: 'branch-1', name: 'Main Branch', restaurant: { approvalStatus: 'APPROVED' } },
     },
   };
 

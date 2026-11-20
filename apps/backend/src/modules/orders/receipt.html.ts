@@ -71,6 +71,7 @@ interface ReceiptOrder {
     lineTotal: number;
     taxRateSnapshot: number;
     modifiers: { nameSnapshot: string; priceAdjSnapshot: number }[];
+    comboDetails?: string[];
   }[];
   payments: {
     method: string;
@@ -87,6 +88,7 @@ export function buildReceiptHtml({
   order,
   paperSize = '80mm',
   isTest = false,
+  timeZone,
 }: {
   restaurantName: string;
   branch: {
@@ -103,10 +105,18 @@ export function buildReceiptHtml({
   order: ReceiptOrder;
   paperSize?: '58mm' | '80mm' | 'A4';
   isTest?: boolean;
+  /** IANA zone of the printing PC; the server itself may run in UTC. */
+  timeZone?: string;
 }): string {
   const sym = CURRENCY_SYMBOLS[currency] ?? `${currency} `;
   const money = (n: number) => `${sym}${Number(n).toFixed(2)}`;
-  const dateStr = new Date(order.createdAt).toLocaleString();
+  const dateStr = (() => {
+    try {
+      return new Date(order.createdAt).toLocaleString(undefined, timeZone ? { timeZone } : undefined);
+    } catch {
+      return new Date(order.createdAt).toLocaleString();
+    }
+  })();
   const taxLabel = resolveTaxLabel(branch.taxRegime, branch.taxLabel);
   // gstNumber is the pre-multi-region field every India install already
   // has populated; taxId is the new generic one. India falls back to the
@@ -121,9 +131,12 @@ export function buildReceiptHtml({
       const modifierLines = item.modifiers
         .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}${m.priceAdjSnapshot > 0 ? ` (+${money(m.priceAdjSnapshot)})` : ''}</div>`)
         .join('');
+      const comboLines = item.comboDetails && item.comboDetails.length > 0
+        ? item.comboDetails.map((c) => `<div class="sub">· ${esc(c)}</div>`).join('')
+        : '';
       return `
         <tr>
-          <td>${esc(item.nameSnapshot)}${modifierLines}${
+          <td>${esc(item.nameSnapshot)}${comboLines}${modifierLines}${
             Number(item.taxRateSnapshot) > 0
               ? `<div class="sub">${esc(taxLabel)} @ ${item.taxRateSnapshot}%</div>`
               : ''
@@ -228,6 +241,7 @@ export function buildReceiptHtml({
   .vf { text-align: center; font-size: 11px; }
   .vf svg { display: block; margin: 4px auto; }
   .footer { text-align: center; margin-top: 6px; font-size: 11px; }
+  .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
 ${paperSize === '58mm' ? `
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 2mm; color: #111; width: 54mm; }
   h1 { font-size: 13px; text-align: center; margin: 0 0 2px; }
@@ -316,6 +330,7 @@ ${paperSize === '58mm' ? `
         ? 'Bill only &mdash; not a receipt. Payment pending.'
         : 'Thank you! Visit again.'
     }</p>
+    <p class="powered">Powered by EasyDine</p>
   </div>
 </body>
 </html>`;

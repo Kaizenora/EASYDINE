@@ -40,6 +40,9 @@ import { api, ApiError } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import { getCashierPaperSize, openReceiptPrint } from "@/lib/print";
+import { printKotInFrame, reserveKotPrintFrame } from "@/lib/kot-print-dialog";
+import { settleReceiptHtml } from "@/lib/settle-receipt";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +50,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TableQrDialog } from "./table-qr-dialog";
-import { useUpdateTableStatus, type RestaurantTable } from "@/hooks/use-tables";
+import {
+  useRotateTakeawayQrToken,
+  useTakeawayQrToken,
+  useUpdateTableStatus,
+  type RestaurantTable,
+} from "@/hooks/use-tables";
+import { hasPermission, useCurrentUser } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
 import { QRCodeSVG } from "qrcode.react";
 import { tableLabel, type TableStatusDto } from "@easydine/types";
@@ -59,6 +68,8 @@ interface ModernTableGridProps {
 }
 
 interface SettleReceipt {
+  /** Set by servers that return it: then the full receipt page is printed. */
+  orderId?: string | null;
   billNumber: string;
   tableNumber: string;
   tableName: string;
@@ -102,6 +113,18 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settlePaymentMethod, setSettlePaymentMethod] = useState<"CASH" | "UPI" | "CARD">("UPI");
   const [takeawayQrOpen, setTakeawayQrOpen] = useState(false);
+  // Takeaway QR = /order/takeaway-<opaque token>; never the branch id.
+  const takeawayQr = useTakeawayQrToken(branchId, takeawayQrOpen);
+  const rotateTakeawayQr = useRotateTakeawayQrToken(branchId);
+  const { data: currentUser } = useCurrentUser();
+  const canRotateTakeawayQr = hasPermission(currentUser?.user, "tables.manage");
+  const takeawayPath = takeawayQr.data?.takeawayToken
+    ? `/order/takeaway-${takeawayQr.data.takeawayToken}`
+    : null;
+  const takeawayUrl =
+    takeawayPath && typeof window !== "undefined"
+      ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${takeawayPath}`
+      : null;
 
   // Post-settle Bill Receipt Dialog (User demanded: after confirming, bill must be visible then print option)
   const [receiptData, setReceiptData] = useState<SettleReceipt | null>(null);
@@ -113,6 +136,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     mutationFn: ({ tableId, method }: { tableId: string; method: "CASH" | "UPI" | "CARD" }) =>
       api.post<{
         success: boolean;
+        orderId?: string | null;
         billNumber?: string;
         orderNumber?: string;
         subtotal?: string;
@@ -137,12 +161,14 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           return;
         }
         const receipt: SettleReceipt = {
+          orderId: res.orderId ?? null,
           billNumber: res.billNumber,
           tableNumber: res.tableNumber || String(selectedTable.number),
           tableName: res.tableName || selectedTable.name || `Table ${selectedTable.number}`,
           customerName: res.customerName || selectedTable.customerName || "Guest",
           paymentMethod: res.paymentMethod || vars.method,
-          date: res.date || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          // This PC's clock: the server's own time string is in its zone (UTC).
+          date: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           subtotal: res.subtotal ?? "0.00",
           tax: res.tax ?? "0.00",
           totalAmount: res.totalAmount,
@@ -163,7 +189,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   // Acknowledge waiter call / bill request
   const resolveRequest = useMutation({
     mutationFn: (tableId: string) =>
-      api.post(`/tables/${tableId}/status`, { status: "OCCUPIED" }),
+      api.post(`/tables/${tableId}/status?branchId=${branchId || ""}`, { status: "OCCUPIED" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -199,7 +225,9 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     [tables]
   );
   const newOrderTables = useMemo(() =>
-    tables.filter((t) => (t as any).orderNumber && ((t.status as string) === "OCCUPIED" || (t.status as string) === "PREPARING")),
+    // Only orders that really wait for approval; staff orders and accepted
+    // ones never show the "waiting approval" banner.
+    tables.filter((t) => (t as any).orderNumber && (t as any).acceptance === "PENDING"),
     [tables]
   );
 
@@ -292,7 +320,10 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     if (tAny.serviceRequest === "BILL" || status === "BILL_REQUESTED") {
       return { text: "BILL REQUESTED", class: "bg-rose-500/20 text-rose-300 border-rose-500/40", pulse: false };
     }
-    if (status === "OCCUPIED" && tAny.orderNumber && (tAny.acceptance === "PENDING" || !tAny.acceptance)) {
+    // Only an order that really waits for approval (QR / online). A staff
+    // order (NOT_REQUIRED) or an accepted one is not "new"; an older server
+    // that does not send acceptance never shows every table as new either.
+    if (status === "OCCUPIED" && tAny.orderNumber && tAny.acceptance === "PENDING") {
       return { text: "NEW ORDER", class: "bg-amber-500/20 text-amber-300 border-amber-500/40", pulse: true };
     }
     if (status === "SERVED" || tAny.allServed) {
@@ -318,6 +349,15 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
     }
     return { text: "FREE", class: "bg-neutral-800 text-neutral-400 border-neutral-700", pulse: false };
   }
+
+  // An open bill on the table (items or an order number). An out-of-service
+  // table without one has nothing to settle.
+  const hasOpenBill = (table: RestaurantTable) => {
+    const tAny = table as any;
+    return Boolean(tAny.orderNumber) || (tAny.dishesCount ?? 0) > 0 || Number(tAny.totalAmount || 0) > 0;
+  };
+  const isOutOfServiceIdle = (table: RestaurantTable) =>
+    (table.status as string) === "OUT_OF_SERVICE" && !hasOpenBill(table);
 
   const isFree = (table: RestaurantTable) => {
     return (
@@ -428,7 +468,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
       {/* 2. DINE-IN FLOOR FILTER BAR, TAKEAWAY QR & SEARCH */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-sm font-bold text-white">Dine-in floor</span>
+          <span className="mr-1 text-sm font-bold text-foreground">Dine-in floor</span>
           {(["ALL", "ORDERING", "PREPARING", "BILL"] as const).map((f) => {
             const label =
               f === "ALL"
@@ -446,8 +486,8 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 className={cn(
                   "rounded-full px-3.5 py-1 text-xs font-semibold transition-all",
                   filter === f
-                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                    : "bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white"
+                    ? "bg-primary text-primary-foreground border border-primary"
+                    : "bg-card text-muted-foreground border border-border hover:text-foreground"
                 )}
               >
                 {label}
@@ -459,20 +499,20 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           <button
             type="button"
             onClick={() => setTakeawayQrOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+            className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-accent px-3 py-1 text-xs font-bold text-accent-foreground hover:bg-primary/15 transition-all"
           >
-            <QrCode className="h-3.5 w-3.5 text-amber-400" />
+            <QrCode className="h-3.5 w-3.5" />
             <span>🥡 Takeaway QR</span>
           </button>
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search table or guest"
-            className="h-9 rounded-xl border-neutral-800 bg-neutral-900/80 pl-9 text-xs text-white placeholder:text-neutral-500 focus-visible:border-amber-500"
+            className="h-9 rounded-xl border-input bg-card pl-9 text-xs text-foreground placeholder:text-muted-foreground focus-visible:border-primary"
           />
         </div>
       </div>
@@ -483,6 +523,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           const tAny = table as any;
           const badge = getStatusBadge(table);
           const free = isFree(table);
+          const outOfServiceIdle = isOutOfServiceIdle(table);
           const isNewOrder = badge.text === "NEW ORDER";
 
           // Customer info (Name who booked / seated)
@@ -643,7 +684,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                   </p>
                 ) : (
                   <p className="text-xs text-neutral-500 italic">
-                    {free ? "Available" : "No booking info"}
+                    {free ? "Available" : outOfServiceIdle ? "Not taking guests" : "No booking info"}
                   </p>
                 )}
                 <p className={cn("text-xs font-medium", free ? "text-neutral-500" : "text-amber-300/90")}>
@@ -656,7 +697,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 <span>
                   {statusHint && timeLine ? `${statusHint} · ${timeLine}` : timeLine || `Seats ${table.capacity || 4}`}
                 </span>
-                {!free && (
+                {!free && !outOfServiceIdle && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -734,13 +775,41 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
                 </Button>
               </div>
 
-              <Button
-                className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
-                onClick={() => setSettleDialogOpen(true)}
-              >
-                <Receipt className="mr-2 h-4 w-4" />
-                Settle bill & Mark table Free
-              </Button>
+              {isOutOfServiceIdle(selectedTable) ? (
+                <>
+                  <p className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-xs text-neutral-400">
+                    This table is out of service. Guests who scan its QR are asked to move to another table. There is no bill to settle.
+                  </p>
+                  <Button
+                    className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
+                    disabled={updateTableStatus.isPending}
+                    onClick={() => {
+                      handleStatusChange(selectedTable.id, "AVAILABLE");
+                      setSelectedTable(null);
+                    }}
+                  >
+                    Put table back in service
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  className="w-full rounded-xl bg-amber-500 font-bold text-black hover:bg-amber-400"
+                  onClick={() => {
+                    // Closing this dialog clears the selected table, which left
+                    // the settle box with no table (nothing happened). Reopen
+                    // it the same way the tile's "Settle bill" does.
+                    const t = selectedTable;
+                    setSelectedTable(null);
+                    setTimeout(() => {
+                      setSelectedTable(t);
+                      setSettleDialogOpen(true);
+                    }, 0);
+                  }}
+                >
+                  <Receipt className="mr-2 h-4 w-4" />
+                  Settle bill & Mark table Free
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>
@@ -885,8 +954,26 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
               <Button
                 className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
                 onClick={() => {
-                  window.print();
-                  toast.success("Receipt dispatched to printer.");
+                  // Bill-size print, never the whole page (window.print() printed
+                  // the dashboard on A4). With the order id: the full receipt
+                  // through the normal bill route (Print Helper or dialog).
+                  if (receiptData.orderId && branchId) {
+                    openReceiptPrint(receiptData.orderId, branchId);
+                    return;
+                  }
+                  const slot = reserveKotPrintFrame();
+                  void printKotInFrame(slot, "", "", {
+                    html: settleReceiptHtml(
+                      {
+                        ...receiptData,
+                        tableName: receiptData.tableName,
+                        restaurantName: settingsData?.restaurant?.name ?? undefined,
+                      },
+                      getCashierPaperSize(),
+                    ),
+                  }).then((r) => {
+                    if (r.status === "FAILED") toast.error("Could not open the print dialog for the bill.");
+                  });
                 }}
               >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
@@ -911,27 +998,57 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
           </DialogHeader>
 
           <div className="flex flex-col items-center justify-center py-4">
-            <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
-              <QRCodeSVG
-                value={`${typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_BASE_URL || window.location.origin) : ""}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`}
-                size={180}
-                level="M"
-              />
-            </div>
-            <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
-            <p className="text-[11px] text-neutral-500">
-              {typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}` : "/order/takeaway"}
-            </p>
+            {takeawayUrl ? (
+              <>
+                <div className="rounded-2xl bg-white p-4 shadow-xl border-4 border-amber-500/40">
+                  <QRCodeSVG value={takeawayUrl} size={180} level="M" />
+                </div>
+                <p className="mt-3 text-xs font-bold text-neutral-300">Scan to Order Takeaway</p>
+                <p className="break-all text-[11px] text-neutral-500">{takeawayUrl}</p>
+              </>
+            ) : (
+              <p className="py-16 text-xs text-neutral-400">
+                {takeawayQr.isError
+                  ? takeawayQr.error instanceof ApiError && takeawayQr.error.status === 404
+                    ? "Could not load the takeaway QR: the server does not have this feature yet (its latest update is not deployed). Please try again after the backend update."
+                    : `Could not load the takeaway QR${takeawayQr.error instanceof Error && takeawayQr.error.message ? ` (${takeawayQr.error.message})` : ""}. Please try again.`
+                  : "Loading takeaway QR..."}
+              </p>
+            )}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
+            {canRotateTakeawayQr && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
+                disabled={!takeawayUrl || rotateTakeawayQr.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Create a new takeaway QR? Printed takeaway QR codes of this branch will stop working.",
+                    )
+                  )
+                    return;
+                  rotateTakeawayQr.mutate(undefined, {
+                    onSuccess: () => toast.success("New takeaway QR created. Print and replace the old one."),
+                    onError: () => toast.error("Could not create a new takeaway QR"),
+                  });
+                }}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                New QR
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
               className="rounded-xl border-neutral-700 bg-neutral-900 text-xs text-white"
+              disabled={!takeawayUrl}
               onClick={() => {
-                const url = `${window.location.origin}${branchId ? `/order/takeaway-${branchId}` : "/order/takeaway"}`;
-                navigator.clipboard.writeText(url);
+                if (!takeawayUrl) return;
+                navigator.clipboard.writeText(takeawayUrl);
                 toast.success("Takeaway link copied to clipboard!");
               }}
             >
@@ -940,7 +1057,8 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
             <Button
               size="sm"
               className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
-              onClick={() => window.open(branchId ? `/order/takeaway-${branchId}` : "/order/takeaway", "_blank")}
+              disabled={!takeawayPath}
+              onClick={() => takeawayPath && window.open(takeawayPath, "_blank")}
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Open Takeaway Menu

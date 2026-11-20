@@ -8,6 +8,8 @@ import {
   permissionInclude,
 } from './effective-permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { getCachedSession, setCachedSession } from './session-cache';
+import { isApproved, notApprovedError } from './approval';
 
 interface JwtPayload {
   sub: string;
@@ -33,19 +35,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<SessionUser> {
-    const t0 = performance.now();
+    // Seen seconds ago: skip reloading user + role + permissions (see
+    // session-cache.ts; cleared on any staff/role/permission change).
+    const cached = getCachedSession(payload.sub);
+    if (cached) return cached;
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      include: permissionInclude,
+      include: { ...permissionInclude, restaurant: { select: { approvalStatus: true } } },
     });
-    const durationMs = (performance.now() - t0).toFixed(2);
-    console.log(`[auth-validate] duration=${durationMs}ms`);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Session no longer valid');
     }
+    // Enforced on every request, not only at login: a restaurant that is
+    // pending or rejected cannot use an older session either.
+    if (!isApproved(user.restaurant?.approvalStatus)) {
+      throw notApprovedError(user.restaurant?.approvalStatus);
+    }
 
-    return {
+    const session: SessionUser = {
       id: user.id,
       restaurantId: user.restaurantId,
       name: user.name,
@@ -53,5 +62,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       roleName: user.role.name,
       permissions: effectivePermissions(user),
     };
+    setCachedSession(session);
+    return session;
   }
 }

@@ -15,7 +15,7 @@ export default function MarketingHomePage() {
   return (
     // reducedMotion="user": the hero mock's entrance defers to the OS setting.
     <MotionConfig reducedMotion="user">
-      <div className="theme-light flex min-h-full flex-col bg-background text-foreground">
+      <div className="force-light flex min-h-full flex-col bg-background text-foreground">
         <AuthRedirectGate />
         <MarketingNav />
         <main id="main-content">

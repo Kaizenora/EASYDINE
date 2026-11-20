@@ -1,3 +1,4 @@
+import { isApproved, notApprovedError } from '../../auth/approval';
 import {
   CanActivate,
   ExecutionContext,
@@ -44,7 +45,7 @@ export class StaffApiKeyGuard implements CanActivate {
     const key = await this.prisma.staffApiKey.findUnique({
       where: { tokenHash },
       include: {
-        user: { include: permissionInclude },
+        user: { include: { ...permissionInclude, restaurant: { select: { approvalStatus: true } } } },
       },
     });
 
@@ -53,6 +54,9 @@ export class StaffApiKeyGuard implements CanActivate {
     }
     if (!key.user.isActive) {
       throw new UnauthorizedException('Staff account is not active');
+    }
+    if (!isApproved(key.user.restaurant?.approvalStatus)) {
+      throw notApprovedError(key.user.restaurant?.approvalStatus);
     }
 
     const sessionUser: SessionUser = {

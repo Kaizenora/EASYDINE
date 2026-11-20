@@ -6,6 +6,8 @@ import { AuditModule } from '../audit/audit.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { PlatformAdminController, PlatformAdminGuard } from './platform-admin.controller';
+import { PlatformAdminService } from './platform-admin.service';
 import { TwoFactorService } from './two-factor.service';
 
 @Module({
@@ -24,8 +26,8 @@ import { TwoFactorService } from './two-factor.service';
         }) as JwtModuleOptions,
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, TwoFactorService],
+  controllers: [AuthController, PlatformAdminController],
+  providers: [AuthService, JwtStrategy, TwoFactorService, PlatformAdminService, PlatformAdminGuard],
   exports: [AuthService],
 })
 export class AuthModule {}

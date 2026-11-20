@@ -12,22 +12,13 @@
 // app/order/[qrToken]/page.tsx for the two places this is wired up so far.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { DEFAULT_LOCALE, isLocale, type Locale } from "./locales";
+import { DEFAULT_LOCALE, isLocale, resolveInitialLocale, type Locale } from "./locales";
 import en from "./dictionaries/en.json";
-import es from "./dictionaries/es.json";
-import fr from "./dictionaries/fr.json";
+import hi from "./dictionaries/hi.json";
+import mr from "./dictionaries/mr.json";
 
-const DICTIONARIES: Record<Locale, Record<string, string>> = { en, es, fr };
+const DICTIONARIES: Record<Locale, Record<string, string>> = { en, hi, mr };
 const STORAGE_KEY = "easydine-locale";
-
-function detectBrowserLocale(): Locale {
-  if (typeof navigator === "undefined") return DEFAULT_LOCALE;
-  for (const lang of navigator.languages ?? [navigator.language]) {
-    const short = lang.slice(0, 2).toLowerCase();
-    if (isLocale(short)) return short;
-  }
-  return DEFAULT_LOCALE;
-}
 
 interface I18nContextValue {
   locale: Locale;
@@ -58,14 +49,37 @@ export function I18nProvider({
 
   useEffect(() => {
     if (fixedLocale) return;
-    const saved = localStorage.getItem(STORAGE_KEY);
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      // storage blocked: fall through to the browser language
+    }
+    const next = resolveInitialLocale(
+      saved,
+      typeof navigator === "undefined" ? [] : (navigator.languages ?? [navigator.language]),
+    );
+    // A removed language (es/fr) was saved: replace it with English for good.
+    if (saved && !isLocale(saved)) {
+      try {
+        localStorage.setItem(STORAGE_KEY, next);
+      } catch {
+        // ignore
+      }
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocaleState(isLocale(saved) ? saved : detectBrowserLocale());
+    setLocaleState(next);
   }, [fixedLocale]);
 
   const setLocale = useCallback(
     (next: Locale) => {
-      if (!fixedLocale) localStorage.setItem(STORAGE_KEY, next);
+      if (!fixedLocale) {
+        try {
+          localStorage.setItem(STORAGE_KEY, next);
+        } catch {
+          // storage blocked: the choice lasts for this page only
+        }
+      }
       setLocaleState(next);
     },
     [fixedLocale],
@@ -73,7 +87,7 @@ export function I18nProvider({
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) => {
-      const template = DICTIONARIES[locale][key] ?? DICTIONARIES[DEFAULT_LOCALE][key] ?? key;
+      const template = DICTIONARIES[locale]?.[key] ?? DICTIONARIES[DEFAULT_LOCALE][key] ?? key;
       if (!vars) return template;
       return Object.entries(vars).reduce(
         (out, [name, value]) => out.replaceAll(`{${name}}`, String(value)),
