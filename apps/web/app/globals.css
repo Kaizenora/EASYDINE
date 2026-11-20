@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter), "Inter", var(--font-roboto), "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-sans: var(--font-inter), "Inter", var(--font-devanagari), "Noto Sans Devanagari", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --font-heading: var(--font-inter), "Inter", var(--font-roboto), "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-heading: var(--font-space-grotesk), "Space Grotesk", var(--font-devanagari), "Noto Sans Devanagari", var(--font-inter), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,100 +43,118 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
+  --radius-4xl: 999px;
+  --color-tint: var(--accent);
+  --color-amber: var(--amber);
+  --color-status-available: var(--status-available);
+  --color-status-occupied: var(--status-occupied);
+  --color-status-cleaning: var(--status-cleaning);
+  --color-status-bill: var(--status-bill);
+  --color-veg: var(--success);
+  --color-nonveg: var(--destructive);
 }
 
 :root,
 .force-light {
-  /* EasyDine brand palette (2026-11-13): deep teal, cream, charcoal.
-     Success / warning / error stay clearly distinct from the brand teal. */
-  --brand-teal: #0D5D50;
-  --brand-cream: #F7F3EA;
-  --brand-charcoal: #1D1C1A;
-  --background: #F7F3EA;
-  --foreground: #1D1C1A;
-  --card: #FFFDF8;
-  --card-foreground: #1D1C1A;
-  --popover: #FFFDF8;
-  --popover-foreground: #1D1C1A;
-  --primary: #0D5D50;
-  --primary-hover: #0A4A40;
-  --primary-foreground: #FBF8F1;
-  --secondary: #EFE9DC;
-  --secondary-foreground: #1D1C1A;
-  --muted: #EFE9DC;
-  --muted-foreground: #5F594F;
-  --accent: #DCEDE8;
-  --accent-foreground: #0A4A40;
-  --destructive: #C0362C;
-  --success: #2E8540;
+  /* EasyDine: teal on cream. See DESIGN.md. --brand-* are used by the
+     guest QR page, Powered-by and logo components. */
+  --brand-teal: #0F766E;
+  --brand-cream: #FBFAF7;
+  --brand-charcoal: #1C1917;
+  --background: #FBFAF7;
+  --foreground: #1C1917;
+  --card: #FFFFFF;
+  --card-foreground: #1C1917;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1917;
+  --primary: #0F766E;
+  --primary-hover: #115E59;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F5F4F0;
+  --secondary-foreground: #1C1917;
+  --muted: #F5F4F0;
+  --muted-foreground: #57534E;
+  --accent: #F0FDFA;
+  --accent-foreground: #115E59;
+  --destructive: #B91C1C;
+  --success: #15803D;
   --warning: #B45309;
-  --info: #2563EB;
-  --border: #E2D9C7;
-  --input: #CFC5B0;
-  --ring: #0D5D50;
-  --chart-1: #0D5D50;
-  --chart-2: #2E8540;
-  --chart-3: #B45309;
-  --chart-4: #2563EB;
-  --chart-5: #6B6458;
+  --info: #0F766E;
+  --amber: #D97706;
+  --status-available: #15803D;
+  --status-occupied: #0F766E;
+  --status-cleaning: #B45309;
+  --status-bill: #B91C1C;
+  --border: #E7E5E0;
+  --input: #D6D3CD;
+  --ring: #0F766E;
+  --chart-1: #0F766E;
+  --chart-2: #15803D;
+  --chart-3: #D97706;
+  --chart-4: #57534E;
+  --chart-5: #A8A29E;
   --radius: 0.75rem;
-  --sidebar: #FFFDF8;
-  --sidebar-foreground: #1D1C1A;
-  --sidebar-primary: #0D5D50;
-  --sidebar-primary-foreground: #FBF8F1;
-  --sidebar-accent: #DCEDE8;
-  --sidebar-accent-foreground: #0A4A40;
-  --sidebar-border: #E2D9C7;
-  --sidebar-ring: #0D5D50;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1C1917;
+  --sidebar-primary: #0F766E;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F0FDFA;
+  --sidebar-accent-foreground: #115E59;
+  --sidebar-border: #E7E5E0;
+  --sidebar-ring: #0F766E;
 }
 
 .dark {
-  /* Dark: charcoal surfaces, cream text, a lighter teal for contrast. */
-  --brand-teal: #4FB3A0;
-  --brand-cream: #F4EFE5;
-  --brand-charcoal: #161614;
-  --background: #161614;
-  --foreground: #F4EFE5;
-  --card: #1F1E1B;
-  --card-foreground: #F4EFE5;
-  --popover: #1F1E1B;
-  --popover-foreground: #F4EFE5;
-  --primary: #4FB3A0;
-  --primary-hover: #65C4B2;
-  --primary-foreground: #0B1F1B;
-  --secondary: #2A2925;
-  --secondary-foreground: #F4EFE5;
-  --muted: #2A2925;
-  --muted-foreground: #ABA497;
-  --accent: #173530;
-  --accent-foreground: #8FD6C7;
-  --destructive: #F05A50;
-  --success: #4CC36F;
-  --warning: #F2A33A;
-  --info: #60A5FA;
-  --border: #34322D;
-  --input: #403D37;
-  --ring: #4FB3A0;
-  --chart-1: #4FB3A0;
-  --chart-2: #4CC36F;
-  --chart-3: #F2A33A;
-  --chart-4: #60A5FA;
-  --chart-5: #ABA497;
-  --sidebar: #1A1917;
-  --sidebar-foreground: #F4EFE5;
-  --sidebar-primary: #4FB3A0;
-  --sidebar-primary-foreground: #0B1F1B;
-  --sidebar-accent: #173530;
-  --sidebar-accent-foreground: #8FD6C7;
-  --sidebar-border: #2F2D29;
-  --sidebar-ring: #4FB3A0;
+  /* Dark counterpart for staff screens that opt in; same hues, lifted for contrast. */
+  --brand-teal: #2DD4BF;
+  --brand-cream: #F5F4F0;
+  --brand-charcoal: #141210;
+  --background: #141210;
+  --foreground: #F5F4F0;
+  --card: #1C1A17;
+  --card-foreground: #F5F4F0;
+  --popover: #1C1A17;
+  --popover-foreground: #F5F4F0;
+  --primary: #2DD4BF;
+  --primary-hover: #5EEAD4;
+  --primary-foreground: #042F2E;
+  --secondary: #262420;
+  --secondary-foreground: #F5F4F0;
+  --muted: #262420;
+  --muted-foreground: #A8A29E;
+  --accent: #10302D;
+  --accent-foreground: #99F6E4;
+  --destructive: #F87171;
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --info: #2DD4BF;
+  --amber: #FBBF24;
+  --status-available: #4ADE80;
+  --status-occupied: #2DD4BF;
+  --status-cleaning: #FBBF24;
+  --status-bill: #F87171;
+  --border: #2E2B27;
+  --input: #3A3631;
+  --ring: #2DD4BF;
+  --chart-1: #2DD4BF;
+  --chart-2: #4ADE80;
+  --chart-3: #FBBF24;
+  --chart-4: #A8A29E;
+  --chart-5: #57534E;
+  --sidebar: #181613;
+  --sidebar-foreground: #F5F4F0;
+  --sidebar-primary: #2DD4BF;
+  --sidebar-primary-foreground: #042F2E;
+  --sidebar-accent: #10302D;
+  --sidebar-accent-foreground: #99F6E4;
+  --sidebar-border: #2E2B27;
+  --sidebar-ring: #2DD4BF;
 }
 
 /* Customer kiosk (/kiosk/*): always the light palette, whatever the device's
@@ -145,32 +163,48 @@
    utilities are unaffected. */
 .kiosk-root {
   color-scheme: light;
-  --background: #F7F7F5;
-  --foreground: #18181B;
+  /* Always the light EasyDine palette, whatever the device setting. */
+  --background: #FBFAF7;
+  --foreground: #1C1917;
   --card: #FFFFFF;
-  --card-foreground: #18181B;
+  --card-foreground: #1C1917;
   --popover: #FFFFFF;
-  --popover-foreground: #18181B;
-  --primary: #6D4AFF;
+  --popover-foreground: #1C1917;
+  --primary: #0F766E;
+  --primary-hover: #115E59;
   --primary-foreground: #FFFFFF;
-  --secondary: #F1F1EF;
-  --secondary-foreground: #18181B;
-  --muted: #F1F1EF;
-  --muted-foreground: #52525B;
-  --accent: #F0EBFF;
-  --accent-foreground: #4C2EC7;
-  --destructive: #C43D4D;
-  --success: #18845B;
-  --warning: #A65C00;
-  --border: #D4D4D8;
-  --input: #A1A1AA;
-  --ring: #3C82F6;
-  /* Explicit system fallbacks so the kiosk never renders in a serif face if the
-     bundled web font is unavailable (offline start-up, blocked fonts CDN). */
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --primary-hover: #5B3BE8;
-  --info: #2863B8;
+  --secondary: #F5F4F0;
+  --secondary-foreground: #1C1917;
+  --muted: #F5F4F0;
+  --muted-foreground: #57534E;
+  --accent: #F0FDFA;
+  --accent-foreground: #115E59;
+  --destructive: #B91C1C;
+  --success: #15803D;
+  --warning: #B45309;
+  --info: #0F766E;
+  --amber: #D97706;
+  --status-available: #15803D;
+  --status-occupied: #0F766E;
+  --status-cleaning: #B45309;
+  --status-bill: #B91C1C;
+  --border: #E7E5E0;
+  --input: #D6D3CD;
+  --ring: #0F766E;
+  --chart-1: #0F766E;
+  --chart-2: #15803D;
+  --chart-3: #D97706;
+  --chart-4: #57534E;
+  --chart-5: #A8A29E;
+  --radius: 0.75rem;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1C1917;
+  --sidebar-primary: #0F766E;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F0FDFA;
+  --sidebar-accent-foreground: #115E59;
+  --sidebar-border: #E7E5E0;
+  --sidebar-ring: #0F766E;
 }
 
 /* The dashboard's coarse-pointer rule above sets a 44px floor on every
@@ -191,13 +225,15 @@
     @apply border-border outline-ring/50;
   }
   html, body {
-    font-family: var(--font-inter), "Inter", var(--font-roboto), "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+    font-family: var(--font-inter), "Inter", var(--font-devanagari), "Noto Sans Devanagari", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   }
   body {
     @apply bg-background text-foreground;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-inter), "Inter", var(--font-roboto), "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+    font-family: var(--font-space-grotesk), "Space Grotesk", var(--font-devanagari), "Noto Sans Devanagari", var(--font-inter), system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
   html {
     @apply font-sans;
@@ -261,9 +297,9 @@
 .force-light {
   /* Cards are a 1px border, not a shadow; shadows mean "floating". */
   --shadow-card: none;
-  --shadow-card-hover: 0 1px 2px rgb(24 24 27 / 0.06);
-  --shadow-float: 0 8px 24px rgb(24 24 27 / 0.10);
-  --gradient-primary: linear-gradient(var(--primary), var(--primary));
+  --shadow-card-hover: 0 1px 2px rgb(0 0 0 / 0.06);
+  /* One soft shadow only (DESIGN.md): floating layers use the same value. */
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.06);
   --motion-quick: 120ms;
   --motion-standard: 180ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -283,11 +319,12 @@
   body {
     background-color: var(--background);
   }
-  h1, h2, h3 {
-    letter-spacing: -0.015em;
+  /* Devanagari needs taller lines than Latin; applies when a page is in hi/mr. */
+  :lang(hi), :lang(mr) {
+    line-height: 1.6;
   }
   ::selection {
-    background: rgb(109 74 255 / 0.18);
+    background: rgb(15 118 110 / 0.18);
   }
   :focus-visible {
     outline: 2px solid var(--ring);
@@ -343,8 +380,17 @@
   [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
     background-color: var(--primary-hover);
   }
-  table {
+  table, .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+  html {
+    scrollbar-color: var(--input) transparent;
+    accent-color: var(--primary);
+    caret-color: var(--primary);
   }
 }
 
