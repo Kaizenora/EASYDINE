@@ -5,12 +5,19 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "orientation": "any",
-  "background_color": "#0d0e12",
-  "theme_color": "#E23744",
+  "background_color": "#F7F3EA",
+  "theme_color": "#0D5D50",
   "lang": "en",
-  "categories": ["business", "food", "productivity"],
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",

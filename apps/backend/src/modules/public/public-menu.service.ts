@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { isApproved } from '../../auth/approval';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { normalizePhone, type CartItemDto } from '@easydine/types';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { findCustomerByPhone } from '../customers/customer-phone';
@@ -7,6 +7,13 @@ import { usableBalance } from '../loyalty/loyalty';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { OrdersService } from '../orders/orders.service';
+
+/** Branch.takeawayToken is randomBytes(16).toString('hex'). */
+const TAKEAWAY_TOKEN_RE = /^[0-9a-f]{32}$/;
+
+/** Shown to a guest who scans the QR of a table staff marked Out of service. */
+export const OUT_OF_SERVICE_MESSAGE =
+  'This table is out of service. Please move to another table. Thank you.';
 
 /**
  * What a guest's phone gets back after placing a QR order. The order row
@@ -72,46 +79,26 @@ export class PublicMenuService {
   ) {}
 
   /**
-   * The branch a generic link (no branch in it) may stand for: only on an
-   * install that hosts a single restaurant. With several restaurants on one
-   * server a generic link must never land in somebody else's branch.
+   * Maps a public QR token to its branch. Takeaway QRs are
+   * `takeaway-<Branch.takeawayToken>`; the token is opaque (32 hex chars) and
+   * is the only thing that identifies the branch. There is deliberately no
+   * fallback: bare `takeaway` / `qr-takeaway` and `takeaway-<branchId>` must
+   * never resolve, or anyone could order at (and poll) another restaurant.
    */
-  async soleRestaurantBranch(extraWhere: Prisma.BranchWhereInput = {}) {
-    const restaurants = await this.prisma.restaurant.findMany({
-      select: { id: true },
-      take: 2,
-    });
-    if (restaurants.length !== 1) return null;
-    const where = {
-      restaurantId: restaurants[0].id,
-      isActive: true,
-      ...extraWhere,
-    };
-    return (
-      (await this.prisma.branch.findFirst({
-        where: { ...where, categories: { some: {} } },
-        orderBy: { createdAt: 'asc' },
-        include: { restaurant: true },
-      })) ??
-      (await this.prisma.branch.findFirst({
-        where,
-        orderBy: { createdAt: 'asc' },
-        include: { restaurant: true },
-      }))
-    );
-  }
-
   private async resolveTarget(qrToken: string) {
-    if (qrToken === 'takeaway' || qrToken.startsWith('takeaway-') || qrToken === 'qr-takeaway') {
-      // "takeaway-<branchId>" names its branch and must match it exactly: an
-      // unknown or switched-off branch is refused, never swapped for another.
-      const branch = qrToken.startsWith('takeaway-')
-        ? await this.prisma.branch.findFirst({
-            where: { id: qrToken.slice('takeaway-'.length), isActive: true },
-            include: { restaurant: true },
-          })
-        : await this.soleRestaurantBranch();
-      if (!branch) throw new NotFoundException('Restaurant branch not found');
+    if (qrToken.startsWith('takeaway')) {
+      const token = qrToken.startsWith('takeaway-') ? qrToken.slice('takeaway-'.length) : '';
+      if (!TAKEAWAY_TOKEN_RE.test(token)) {
+        throw new NotFoundException('This QR code is not recognized');
+      }
+      const branch = await this.prisma.branch.findUnique({
+        where: { takeawayToken: token },
+        include: { restaurant: true },
+      });
+      // A restaurant the platform has not approved serves no guests.
+      if (!branch || !branch.isActive || !isApproved(branch.restaurant?.approvalStatus)) {
+        throw new NotFoundException('This QR code is not recognized');
+      }
       return { isTakeaway: true, branch, table: null };
     }
 
@@ -119,12 +106,27 @@ export class PublicMenuService {
       where: { qrToken },
       include: { floor: { include: { branch: { include: { restaurant: true } } } } },
     });
-    if (!table) throw new NotFoundException('This QR code is not recognized');
+    if (!table || !isApproved(table.floor.branch.restaurant?.approvalStatus)) {
+      throw new NotFoundException('This QR code is not recognized');
+    }
     return { isTakeaway: false, branch: table.floor.branch, table };
   }
 
   async getMenuByQrToken(qrToken: string) {
     const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
+    // Out-of-service table: the guest gets the notice only, never the menu.
+    if (!isTakeaway && table?.status === 'OUT_OF_SERVICE') {
+      return {
+        restaurantName: (branch as any).restaurant?.name ?? branch.name,
+        branchName: branch.name,
+        tableName: table.name ?? `Table ${table.number}`,
+        tableNumber: table.number,
+        isTakeaway: false,
+        outOfService: true,
+        message: OUT_OF_SERVICE_MESSAGE,
+        categories: [],
+      };
+    }
     const categories = await this.menuCategoriesForBranch(branch.id);
     return {
       restaurantName: (branch as any).restaurant?.name ?? branch.name,
@@ -166,6 +168,10 @@ export class PublicMenuService {
   async checkIn(qrToken: string, guestName?: string, phone?: string) {
     const { isTakeaway, table } = await this.resolveTarget(qrToken);
     if (isTakeaway || !table) return { ok: true };
+    // Never flip an out-of-service table to OCCUPIED from a guest scan.
+    if (table.status === 'OUT_OF_SERVICE') {
+      return { ok: false, outOfService: true, message: OUT_OF_SERVICE_MESSAGE };
+    }
     const branchId = table.floor.branchId;
 
     // Scanning a QR and typing a name creates NO customer record: that only
@@ -200,8 +206,8 @@ export class PublicMenuService {
   }
 
   /** Customer-visible menu tree, shared by the table-QR page and the kiosk. */
-  menuCategoriesForBranch(branchId: string) {
-    return this.prisma.menuCategory.findMany({
+  async menuCategoriesForBranch(branchId: string) {
+    const categories = await this.prisma.menuCategory.findMany({
       where: { branchId, isActive: true, showOnWebsite: true },
       orderBy: { sortOrder: 'asc' },
       include: {
@@ -219,6 +225,21 @@ export class PublicMenuService {
             isVegan: true,
             spiceLevel: true,
             allergens: true,
+            isCombo: true,
+            comboComponents: {
+              select: {
+                id: true,
+                quantity: true,
+                componentItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    price: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
             modifierGroups: {
               orderBy: { sortOrder: 'asc' },
               select: {
@@ -246,6 +267,18 @@ export class PublicMenuService {
         },
       },
     });
+
+    // Hide combos if any component is unavailable / inactive
+    return categories.map((cat) => ({
+      ...cat,
+      items: cat.items.filter((item) => {
+        if (!item.isCombo) return true;
+        if (!item.comboComponents || item.comboComponents.length === 0) return true;
+        return item.comboComponents.every(
+          (c) => c.componentItem && c.componentItem.isActive,
+        );
+      }),
+    }));
   }
 
   async createOrder(
@@ -301,6 +334,11 @@ export class PublicMenuService {
 
     if (!table) {
       throw new NotFoundException('Table not found');
+    }
+    // Out of service: no new guest orders for this table. Orders that already
+    // exist are left alone (staff still see and settle them).
+    if (table.status === 'OUT_OF_SERVICE') {
+      throw new ConflictException(OUT_OF_SERVICE_MESSAGE);
     }
 
     // Dine-in Table Order

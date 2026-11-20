@@ -1,3 +1,4 @@
+import { isApproved } from '../auth/approval';
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -61,8 +62,12 @@ export class RealtimeGateway
       const payload = this.jwt.verify<{ sub: string }>(token);
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
+        include: { restaurant: { select: { approvalStatus: true } } },
       });
       if (!user || !user.isActive) throw new Error('Session no longer valid');
+      if (!isApproved(user.restaurant?.approvalStatus)) {
+        throw new Error('Restaurant account is not approved');
+      }
 
       const branchId = client.handshake.query.branchId;
       if (typeof branchId !== 'string' || !branchId) {
@@ -104,6 +109,12 @@ export class RealtimeGateway
   emitToUsers(userIds: string[], event: string, payload: unknown) {
     if (userIds.length === 0) return;
     this.server.to(userIds.map((id) => this.userRoom(id))).emit(event, payload);
+  }
+
+  /** Drops every live socket viewing these branches (a restaurant was rejected). */
+  disconnectBranches(branchIds: string[]) {
+    if (!this.server || branchIds.length === 0) return;
+    this.server.in(branchIds.map((id) => this.branchRoom(id))).disconnectSockets(true);
   }
 
   private branchRoom(branchId: string) {

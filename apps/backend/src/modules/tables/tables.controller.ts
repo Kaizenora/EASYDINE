@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -155,6 +156,30 @@ export class TablesController {
       body.status,
       body.assignedWaiterId,
     );
+  }
+
+  /** Takeaway QR token for the branch; issued on first use. */
+  @Auth('tables.view')
+  @Post('takeaway-qr')
+  async ensureTakeawayQr(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+  ) {
+    if (typeof branchId !== 'string' || !branchId) throw new BadRequestException('branchId is required');
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    return this.tablesService.getOrCreateTakeawayToken(branchId, 'ensure');
+  }
+
+  /** New takeaway QR token; every printed takeaway QR of the branch stops working. */
+  @Auth('tables.manage')
+  @Post('takeaway-qr/rotate')
+  async rotateTakeawayQr(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+  ) {
+    if (typeof branchId !== 'string' || !branchId) throw new BadRequestException('branchId is required');
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    return this.tablesService.getOrCreateTakeawayToken(branchId, 'rotate');
   }
 
   @Auth('tables.manage')

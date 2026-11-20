@@ -1,3 +1,4 @@
+import { isApproved } from '../../auth/approval';
 import {
   BadRequestException,
   ConflictException,
@@ -29,19 +30,11 @@ export class PublicKioskService {
   ) {}
 
   private async resolveBranch(kioskToken: string) {
-    // "/kiosk/default" and "/kiosk/kiosk": a convenience link for an install
-    // with one restaurant, and only for a branch whose kiosk is switched on.
-    if (kioskToken === 'default' || kioskToken === 'kiosk') {
-      const branch = await this.publicMenu.soleRestaurantBranch({
-        kioskToken: { not: null },
-      });
-      if (!branch) throw new NotFoundException('This kiosk is not available');
-      return branch;
-    }
-    // Otherwise only the opaque kiosk token opens a kiosk. A short/garbage
-    // value can never match (avoids a pointless query), and a branch id is
-    // not a credential: kiosk orders go straight to the kitchen, so switching
-    // the kiosk off in Settings (token = null) must really close it.
+    // Only the branch's own opaque kioskToken opens its kiosk. No "default"
+    // branch and no raw branch id: this endpoint is public, a default would
+    // pick an arbitrary branch across all restaurants, and branch ids are not
+    // secrets (they appear in staff URLs and API responses).
+    // A short/garbage token can never match; avoids a pointless query.
     if (!/^[a-f0-9]{32}$/.test(kioskToken)) {
       throw new NotFoundException('This kiosk is not available');
     }
@@ -49,7 +42,7 @@ export class PublicKioskService {
       where: { kioskToken },
       include: { restaurant: true },
     });
-    if (!branch || !branch.isActive) {
+    if (!branch || !branch.isActive || !isApproved(branch.restaurant?.approvalStatus)) {
       throw new NotFoundException('This kiosk is not available');
     }
     return branch;

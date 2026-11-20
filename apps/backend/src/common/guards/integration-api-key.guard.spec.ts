@@ -21,7 +21,7 @@ function setup(
   const prisma: any = {
     integrationApiKey: {
       findUnique: jest.fn(async ({ where }: any) =>
-        where.tokenHash === hash ? keyRow : null,
+        where.tokenHash === hash ? { restaurant: { approvalStatus: 'APPROVED' }, ...keyRow } : null,
       ),
       update: jest.fn(async () => ({})),
     },

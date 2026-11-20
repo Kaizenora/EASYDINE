@@ -1,7 +1,9 @@
 "use client";
 
 import { Check, Printer, MessageCircle, Pencil, Phone, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getActivePrintScope, prefetchKotPage } from "@/lib/local-print";
+import { kotPageVersion } from "@/lib/printer-routing";
 import { StatusNote, useNoteToast } from "@/components/ui/status-note";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -37,6 +39,14 @@ export function OrderDetailDialog({
 }) {
   const { data: order, isLoading } = useOrder(branchId, open ? orderId : null);
   const accept = useAcceptOrder(branchId);
+  // A waiting order's KOT page is loaded while this dialog is open, so the
+  // print dialog opens the moment Accept is confirmed.
+  const pendingKotVersion = order?.acceptance === "PENDING" ? kotPageVersion(order.items) : null;
+  useEffect(() => {
+    if (order && branchId && pendingKotVersion !== null) {
+      prefetchKotPage(order.id, { ...getActivePrintScope(), branchId }, pendingKotVersion);
+    }
+  }, [order, branchId, pendingKotVersion]);
   const reject = useRejectOrder(branchId);
   const { note, clear: clearNote, toast } = useNoteToast();
   const canCancelRole = useCanCancelOrders();
@@ -106,6 +116,11 @@ export function OrderDetailDialog({
                         <span className="font-medium text-foreground">
                           {item.quantity}× {item.nameSnapshot}
                         </span>
+                        {(item as any).menuItem?.comboComponents && (item as any).menuItem.comboComponents.length > 0 && (
+                          <span className="text-xs text-muted-foreground/90 italic">
+                            Includes: {(item as any).menuItem.comboComponents.map((c: any) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+                          </span>
+                        )}
                         {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
                           <span className="text-xs text-muted-foreground">
                             {item.modifiers.map((m) => m.nameSnapshot).join(", ")}
@@ -279,7 +294,7 @@ export function OrderDetailDialog({
               disabled={accept.isPending}
               onClick={() => {
                 setAcceptConfirmOpen(false);
-                run(() => accept.mutateAsync(order!.id), "✅ Order accepted & KOT sent to kitchen!");
+                run(() => accept.mutateAsync({ id: order!.id, scheduledFor: (order as any)?.scheduledFor ?? null, version: kotPageVersion(order!.items) }), "Order accepted. KOT requested — check the kitchen printer.");
               }}
             >
               <Check className="mr-1.5 h-4 w-4" /> Confirm & Send KOT

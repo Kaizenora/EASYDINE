@@ -105,6 +105,9 @@ export const createOrderSchema = z.object({
   delivery: deliveryInfoSchema.optional(),
   // Scheduled order: ISO time in the future; the kitchen starts then.
   scheduledFor: z.string().datetime().optional(),
+  // Client-generated idempotency key for this one logical order. A retry
+  // (timeout, refresh, reconnect) sends the SAME id and gets the same order.
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
   items: z.array(cartItemSchema).min(1),
 });
 export type CreateOrderDto = z.infer<typeof createOrderSchema>;

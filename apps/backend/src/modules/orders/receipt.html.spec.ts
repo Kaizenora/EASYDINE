@@ -94,3 +94,12 @@ describe('receipt loyalty lines', () => {
     expect(withLoyalty({ loyalty: { earned: 1, balance: 1 }, isProvisional: true })).not.toContain('Points earned');
   });
 });
+
+describe('EasyDine footer on the bill (HTML)', () => {
+  it('a bill says "Powered by EasyDine" in text, with no logo image', () => {
+    const html = buildReceiptHtml(base as any);
+    expect(html).toContain('Powered by EasyDine</p>');
+    expect(html).not.toContain('data:image/png');
+    expect(html).not.toContain('powered-logo');
+  });
+});

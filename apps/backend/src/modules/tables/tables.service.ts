@@ -57,6 +57,7 @@ export class TablesService {
             totalAmount: true,
             guestName: true,
             guestCount: true,
+            acceptance: true,
             customer: { select: { name: true, phone: true } },
             items: { select: { id: true, status: true, quantity: true } },
           },
@@ -137,6 +138,9 @@ export class TablesService {
           guestCount,
           orderNumber: activeOrder?.orderNumber || null,
           orderId: activeOrder?.id || null,
+          // Lets the table map tell an order waiting for approval (QR /
+          // online) from one already accepted or entered by staff.
+          acceptance: activeOrder?.acceptance ?? null,
           totalAmount,
           dishesCount,
           serviceRequest,
@@ -297,6 +301,42 @@ export class TablesService {
     return this.prisma.table.update({ where: { id }, data: { qrToken } });
   }
 
+  /**
+   * The branch's takeaway QR token (public link /order/takeaway-<token>).
+   * `ensure` returns the existing token or issues one; `rotate` always issues
+   * a new one, which invalidates every printed takeaway QR of this branch.
+   */
+  async getOrCreateTakeawayToken(branchId: string, action: 'ensure' | 'rotate') {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { takeawayToken: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+    if (action === 'ensure' && branch.takeawayToken) {
+      return { takeawayToken: branch.takeawayToken };
+    }
+    const takeawayToken = randomBytes(16).toString('hex');
+    if (action === 'ensure') {
+      // Two staff opening the dialog at once must not overwrite each
+      // other's freshly printed token: only write while it is still null.
+      const { count } = await this.prisma.branch.updateMany({
+        where: { id: branchId, takeawayToken: null },
+        data: { takeawayToken },
+      });
+      if (count === 0) {
+        const current = await this.prisma.branch.findUnique({
+          where: { id: branchId },
+          select: { takeawayToken: true },
+        });
+        if (current?.takeawayToken) return { takeawayToken: current.takeawayToken };
+        throw new NotFoundException('Branch not found');
+      }
+      return { takeawayToken };
+    }
+    await this.prisma.branch.update({ where: { id: branchId }, data: { takeawayToken } });
+    return { takeawayToken };
+  }
+
   private async assertFloorInBranch(branchId: string, floorId: string) {
     const floor = await this.prisma.floor.findFirst({
       where: { id: floorId, branchId },
@@ -349,6 +389,12 @@ export class TablesService {
       include: { items: true, customer: true, payments: true },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Out of service with no open bill: there is nothing to settle, and
+    // "settling" would only flip the table back to free with a zero bill.
+    if (!order && table.status === 'OUT_OF_SERVICE') {
+      throw new ConflictException('This table is out of service and has no open bill to settle.');
+    }
 
     let checkoutResult: any = null;
     let customerName = order?.customer?.name || order?.guestName || 'Guest';
@@ -410,6 +456,7 @@ export class TablesService {
       tableNumber: String(table.number),
       tableName: table.name || `Table ${table.number}`,
       billNumber,
+      orderId: order?.id ?? null,
       orderNumber: order?.orderNumber ?? null,
       customerName,
       paymentMethod: method,

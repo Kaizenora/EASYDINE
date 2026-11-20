@@ -1,5 +1,6 @@
 "use client";
 
+import { unsyncedForUser } from "@/lib/order-queue";
 import type { SessionUser } from "@easydine/types";
 import { Download, LogOut, Moon, Server, Sun, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -35,6 +36,23 @@ export function UserMenu({ user }: { user?: SessionUser }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  // Orders saved on this device that the server has not confirmed yet are kept
+  // for this account (never replayed by another one), but say so first.
+  const okToSignOut = () => {
+    let n = 0;
+    try {
+      n = user?.id ? unsyncedForUser(window.localStorage, user.id) : 0;
+    } catch {
+      n = 0;
+    }
+    return (
+      n === 0 ||
+      window.confirm(
+        `${n} order${n === 1 ? " is" : "s are"} saved on this device but not confirmed by the server yet. ` +
+          "They stay saved for your account and are sent when you sign in here again. Sign out anyway?",
+      )
+    );
+  };
 
   return (
     <div className="flex items-center gap-2">
@@ -64,14 +82,18 @@ export function UserMenu({ user }: { user?: SessionUser }) {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => logout.mutate(undefined, { onSuccess: () => router.push("/login") })}
+            onClick={() => {
+              if (okToSignOut()) logout.mutate(undefined, { onSuccess: () => router.push("/login") });
+            }}
           >
             <LogOut className="h-4 w-4" />
             Sign out
           </DropdownMenuItem>
           {isNativeApp() && (
             <DropdownMenuItem
-              onClick={() => logout.mutate(undefined, { onSuccess: () => changeServer() })}
+              onClick={() => {
+                if (okToSignOut()) logout.mutate(undefined, { onSuccess: () => changeServer() });
+              }}
             >
               <Server className="h-4 w-4" />
               Change server

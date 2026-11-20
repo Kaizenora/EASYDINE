@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { useCurrentUser } from "@/hooks/use-auth";
 import { BranchProvider, useBranch } from "@/hooks/use-branch";
+import { LocalPrinterScope } from "@/components/settings/local-printer-scope";
 import { useRealtime } from "@/hooks/use-realtime";
 import { NativeBridge } from "@/components/native/native-bridge";
 import { BtPrinterDialog } from "@/components/native/bt-printer-dialog";
@@ -28,16 +29,20 @@ function RealtimeBridge() {
 export default function DashboardGroupLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data, isLoading, isError } = useCurrentUser();
+  const { data, isLoading, isError, error } = useCurrentUser();
   const permissions = data?.user.permissions;
   const allowed = !permissions || canOpen(pathname ?? "", permissions, NAV_ITEMS);
   const fallback = permissions ? firstAllowedHref(permissions, NAV_ITEMS) : undefined;
 
   useEffect(() => {
     if (!isLoading && isError) {
-      router.replace("/login");
+      // A restaurant that is not (or no longer) approved: say so on the login page.
+      const code = (error as { code?: string } | null)?.code;
+      router.replace(
+        code === "ACCOUNT_PENDING" ? "/login?account=pending" : code === "ACCOUNT_REJECTED" ? "/login?account=rejected" : "/login",
+      );
     }
-  }, [isLoading, isError, router]);
+  }, [isLoading, isError, error, router]);
 
   // Direct URL to a page the role may not use (e.g. a waiter opening /dashboard
   // after login): send them to their first permitted screen.
@@ -66,6 +71,7 @@ export default function DashboardGroupLayout({ children }: { children: React.Rea
       <RealtimeBridge />
       <NativeBridge />
       <BtPrinterDialog />
+      <LocalPrinterScope />
       <AppShell user={data.user}>{children}</AppShell>
     </BranchProvider>
   );

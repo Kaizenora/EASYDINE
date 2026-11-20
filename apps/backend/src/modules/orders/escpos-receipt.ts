@@ -22,7 +22,6 @@ import {
   resolveProfile,
   type PrinterProfile,
 } from './escpos/encoder';
-
 export { resolveProfile, type PrinterProfile } from './escpos/encoder';
 
 // Preferred symbol first; used only when the selected code page can print it,
@@ -89,6 +88,7 @@ export interface EscposReceiptOrder {
     lineTotal: number;
     taxRateSnapshot: number;
     modifiers: { nameSnapshot: string; priceAdjSnapshot: number }[];
+    comboDetails?: string[];
   }[];
   payments: {
     method: string;
@@ -168,6 +168,9 @@ export function buildReceiptEscPosJob({
 
   for (const item of order.items) {
     w.text(item.nameSnapshot, { bold: true });
+    if (item.comboDetails && item.comboDetails.length > 0) {
+      for (const cd of item.comboDetails) w.text(`  · ${cd}`);
+    }
     for (const mod of item.modifiers) w.text(`  + ${mod.nameSnapshot}`);
     w.row(
       `${item.quantity} x ${money(item.unitPriceSnapshot)}`,
@@ -272,6 +275,7 @@ export function buildReceiptEscPosJob({
       : 'Thank you! Visit again.',
     { align: 'center' },
   );
+  w.text('Powered by EasyDine', { align: 'center' });
   return {
     buffer: w.finish({ drawer: openDrawer }),
     unsupportedChars: [...w.unsupported],
@@ -291,6 +295,7 @@ export interface EscposKotOrder {
     quantity: number;
     kitchenNote: string | null;
     modifiers: { nameSnapshot: string }[];
+    comboDetails?: string[];
   }[];
 }
 
@@ -348,6 +353,9 @@ export function buildKotEscPosJob({
       bold: true,
       size: 'tall',
     });
+    if (item.comboDetails && item.comboDetails.length > 0) {
+      for (const cd of item.comboDetails) w.text(`    · ${cd}`);
+    }
     for (const mod of item.modifiers) w.text(`    + ${mod.nameSnapshot}`);
     if (item.kitchenNote) {
       w.text(`    NOTE: ${item.kitchenNote}`, { bold: true });
@@ -356,6 +364,7 @@ export function buildKotEscPosJob({
   }
   w.rule('=');
   w.text(`${order.items.length} line(s), ${units} item(s)`);
+  w.text('Powered by EasyDine', { align: 'center' });
   return {
     buffer: w.finish(),
     unsupportedChars: [...w.unsupported],

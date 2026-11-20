@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { Auth } from '../common/decorators/auth.decorator';
 import { AuthService } from './auth.service';
+import { PLATFORM_ADMIN_COOKIE, PlatformAdminService } from './platform-admin.service';
 import { TwoFactorService } from './two-factor.service';
 
 const SESSION_COOKIE = 'easydine_session';
@@ -48,6 +49,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly twoFactor: TwoFactorService,
+    private readonly platformAdmin: PlatformAdminService,
   ) {}
 
   // Tighter than the app-wide default — unauthenticated and creates a full
@@ -59,9 +61,13 @@ export class AuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { token, user } = await this.authService.register(body as never);
-    this.setSessionCookie(res, token);
-    return { user };
+    const result = await this.authService.register(body as never);
+    if (result.pending) {
+      // Waiting for platform approval: no session, no product access.
+      return { pending: true, restaurantName: result.restaurantName };
+    }
+    this.setSessionCookie(res, result.token);
+    return { user: result.user };
   }
 
   // Tighter than the app-wide default (see register above) — login is a
@@ -73,6 +79,20 @@ export class AuthController {
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const dto = body as { email: string; password: string };
+    // The platform admin signs in on the same form, but gets its own session
+    // (separate cookie + audience) and never a restaurant session.
+    if (this.platformAdmin.isAdminLoginId(dto.email)) {
+      const adminToken = await this.platformAdmin.login(dto.password);
+      res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', secure: isCookieSecure() });
+      res.cookie(PLATFORM_ADMIN_COOKIE, adminToken, {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: isCookieSecure(),
+        maxAge: 8 * 60 * 60 * 1000,
+      });
+      return { platformAdmin: true };
+    }
     const { token, user } = await this.authService.login(body as never);
     this.setSessionCookie(res, token);
     return { user };

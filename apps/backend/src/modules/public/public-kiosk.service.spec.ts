@@ -11,7 +11,7 @@ const branch = {
   isActive: true,
   kioskDineInEnabled: true,
   kioskTakeawayEnabled: true,
-  restaurant: { currency: 'EUR' },
+  restaurant: { currency: 'EUR', approvalStatus: 'APPROVED' },
 };
 
 const dec = (v: string) => new Prisma.Decimal(v);
@@ -81,6 +81,34 @@ describe('PublicKioskService', () => {
       expect(prisma.branch.findUnique).not.toHaveBeenCalled();
     });
 
+    // Regression (6fdfc9d): "default"/"kiosk" resolved to the first active
+    // branch of ANY restaurant, and a raw branch id was accepted as a token.
+    it.each(['default', 'kiosk', 'b1', 'c' + 'm'.repeat(24)])(
+      'never resolves %s to a branch: no default branch, no raw branch id',
+      async (token) => {
+        const { service, prisma, ordersService } = build();
+        const anyBranch = jest.fn().mockResolvedValue(branch);
+        Object.assign(prisma.branch, { findFirst: anyBranch });
+        await expect(service.getMenu(token)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        await expect(service.createOrder(token, dto())).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        expect(anyBranch).not.toHaveBeenCalled();
+        expect(prisma.branch.findUnique).not.toHaveBeenCalled();
+        expect(ordersService.createOrder).not.toHaveBeenCalled();
+      },
+    );
+
+    it('looks the branch up by kioskToken alone', async () => {
+      const { service, prisma } = build();
+      await service.createOrder(TOKEN, dto());
+      expect(prisma.branch.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { kioskToken: TOKEN } }),
+      );
+    });
+
     it('rejects an unknown or inactive branch', async () => {
       const { service, prisma } = build();
       prisma.branch.findUnique.mockResolvedValueOnce(null);
@@ -97,28 +125,7 @@ describe('PublicKioskService', () => {
     });
   });
 
-  describe('generic link (/kiosk/default)', () => {
-    it('opens the only restaurant\'s kiosk-enabled branch', async () => {
-      const { service, prisma, publicMenu } = build();
-      publicMenu.soleRestaurantBranch.mockResolvedValueOnce({
-        ...branch,
-        name: 'Centro',
-        country: 'ES',
-        taxMode: 'INCLUSIVE',
-        taxRegime: 'ES_IVA',
-        taxLabel: null,
-        restaurant: { name: 'Bar', logoUrl: null, currency: 'EUR' },
-      });
-      await expect(service.getMenu('default')).resolves.toMatchObject({
-        currency: 'EUR',
-      });
-      // only a branch whose kiosk is switched on may be picked
-      expect(publicMenu.soleRestaurantBranch).toHaveBeenCalledWith({
-        kioskToken: { not: null },
-      });
-      expect(prisma.branch.findUnique).not.toHaveBeenCalled();
-    });
-
+  describe('generic link (/kiosk/default) is closed on a multi-restaurant server', () => {
     it('is refused when no kiosk is switched on or the server hosts several restaurants', async () => {
       const { service, ordersService } = build();
       for (const alias of ['default', 'kiosk']) {
@@ -266,7 +273,7 @@ describe('PublicKioskService', () => {
         taxMode: 'INCLUSIVE',
         taxRegime: 'ES_IVA',
         taxLabel: null,
-        restaurant: { name: 'Bar', logoUrl: null, currency: 'EUR' },
+        restaurant: { name: 'Bar', logoUrl: null, currency: 'EUR', approvalStatus: 'APPROVED' },
       });
       const menu = await service.getMenu(TOKEN);
       expect(menu).toMatchObject({

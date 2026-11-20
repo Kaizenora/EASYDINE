@@ -1,5 +1,6 @@
 ﻿import {
   BadRequestException,
+  NotFoundException,
   Body,
   Controller,
   ForbiddenException,
@@ -57,7 +58,15 @@ import {
 } from './escpos-usb';
 import { listWindowsPrinters } from './escpos-windows-spooler';
 import { listComPorts } from './escpos-com-port';
-import { KotPrintService } from './kot-print.service';
+import { KotPrintService, safeTimeZone } from './kot-print.service';
+import { serverWindowsPrinters, spoolerTargetFor } from './server-printers';
+import {
+  deviceKotResultSchema,
+  parseDeviceKotOptions,
+  parseKotVia,
+  parsePaper,
+  type DeviceKotResultBody,
+} from './device-print-params';
 import { upiForBill } from './upi';
 import {
   sendToBranchPrinter,
@@ -82,6 +91,17 @@ function branchPrinterProfile(branch: {
   });
 }
 
+/** "a,b,c" -> ids (at most 20, plain cuid-like tokens), or undefined when absent. */
+export function parseKotIds(raw: string | undefined): string[] | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const ids = String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^[A-Za-z0-9_-]{1,64}$/.test(s));
+  if (ids.length === 0 || ids.length > 20) throw new BadRequestException('kotIds is invalid');
+  return ids;
+}
+
 function toKotOrder(order: ReceiptData): EscposKotOrder {
   return {
     orderNumber: order.orderNumber,
@@ -96,6 +116,10 @@ function toKotOrder(order: ReceiptData): EscposKotOrder {
       quantity: item.quantity,
       kitchenNote: item.kitchenNote,
       modifiers: item.modifiers.map((m) => ({ nameSnapshot: m.nameSnapshot })),
+      comboDetails:
+        (item as any).menuItem?.comboComponents?.map(
+          (c: any) => `${c.quantity}× ${c.componentItem?.name ?? 'Item'}`,
+        ) ?? [],
     })),
   };
 }
@@ -159,6 +183,10 @@ function toEscposOrder(
         nameSnapshot: m.nameSnapshot,
         priceAdjSnapshot: Number(m.priceAdjSnapshot),
       })),
+      comboDetails:
+        (item as any).menuItem?.comboComponents?.map(
+          (c: any) => `${c.quantity}× ${c.componentItem?.name ?? 'Item'}`,
+        ) ?? [],
     })),
     payments: order.payments.map((p) => ({
       method: p.method,
@@ -245,6 +273,25 @@ export class OrdersController {
     });
   }
 
+  /**
+   * Reconciliation for the offline order queue: was the order with this
+   * client request id already saved in this branch? 404 = not saved (yet).
+   * Scoped to the caller's own branch like every order lookup.
+   */
+  @Auth('orders.create')
+  @Get('by-request')
+  async findByRequestId(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+    @Query('requestId') requestId: string,
+  ) {
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    if (typeof requestId !== 'string' || !requestId) throw new BadRequestException('requestId is required');
+    const order = await this.ordersService.findByRequestId(branchId, requestId);
+    if (!order) throw new NotFoundException('No order with this request id');
+    return order;
+  }
+
   @Auth('orders.create')
   @Get(':id')
   async getOrder(
@@ -263,9 +310,29 @@ export class OrdersController {
     @CurrentUser() user: SessionUser,
     @Query('branchId') branchId: string,
     @Body() body: unknown,
+    @Query('kotPage') kotPage?: string,
+    @Query('kotPaper') kotPaper?: string,
+    @Query('tz') tz?: string,
   ) {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
-    return this.ordersService.createOrder(branchId, user.id, body as never);
+    const order = await this.ordersService.createOrder(branchId, user.id, body as never);
+    // kotPage=1 (POS on a PC that prints through the browser dialog): the
+    // tickets this order created come back as a ready KOT page, so the print
+    // dialog opens right after the save instead of after a second request.
+    const kotIds = ((order as { kots?: { id: string }[] }).kots ?? []).map((k) => k.id);
+    if (kotPage === '1' && kotIds.length > 0) {
+      try {
+        const kotHtml = await this.renderKotPage(branchId, (order as { id: string }).id, {
+          tz,
+          paper: kotPaper,
+          kotIds,
+        });
+        return { ...order, kotHtml };
+      } catch {
+        // The order is saved either way; the client loads the page itself.
+      }
+    }
+    return order;
   }
 
   @Auth('orders.edit')
@@ -282,15 +349,48 @@ export class OrdersController {
     return this.ordersService.addItems(branchId, id, items);
   }
 
+  // kotVia=device: the cashier PC prints the tickets on its own saved Kitchen
+  // printer (kotFormat=escpos|html, kotPaper=58mm|80mm|A4, tz=IANA zone).
+  // kotVia=none: accept without printing anywhere (that PC's saved printer is
+  // missing). Default: the branch printer on the server, as before.
   @Auth('orders.accept')
   @Post(':id/accept')
   async accept(
     @CurrentUser() user: SessionUser,
     @Query('branchId') branchId: string,
     @Param('id') id: string,
+    @Query('kotVia') kotVia?: string,
+    @Query('kotFormat') kotFormat?: string,
+    @Query('kotPaper') kotPaper?: string,
+    @Query('tz') tz?: string,
+    @Query('kotPrinter') kotPrinter?: string,
   ) {
+    // Without a branch the order lookup would not be scoped to this tenant.
+    if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
-    return this.ordersService.acceptOrder(branchId, id, user.id);
+    const via = parseKotVia(kotVia);
+    const result = await this.ordersService.acceptOrder(branchId, id, user.id, {
+      via,
+      device: parseDeviceKotOptions({
+        format: kotFormat,
+        paper: kotPaper,
+        tz,
+      }),
+      printer: kotPrinter,
+    });
+    // Browser route: hand the KOT page back with the acceptance, so the
+    // cashier PC opens the print dialog at once instead of fetching
+    // GET :id/kot in a second round trip. Same page as that endpoint.
+    if (via === 'browser' && (result as { printStatus?: string }).printStatus === 'BROWSER') {
+      try {
+        const kotHtml = await this.renderKotPage(branchId, id, { tz, paper: kotPaper });
+        return { ...result, kotHtml };
+      } catch {
+        // The order is accepted either way; the client falls back to GET :id/kot.
+        return result;
+      }
+    }
+    return result;
   }
 
   @Auth('orders.accept')
@@ -477,7 +577,7 @@ export class OrdersController {
     const html = buildReceiptHtml({
       isTest: true,
       paperSize,
-      timezone: branch.restaurant.timezone,
+      timezone: branch.restaurant?.timezone,
       restaurantName: branch.restaurant.name,
       currency: branch.restaurant.currency,
       branch: {
@@ -546,7 +646,9 @@ export class OrdersController {
     const paperSize = query.paperSize === '58mm' || query.paperSize === 'A4' ? query.paperSize : '80mm';
     const html = buildReceiptHtml({
       paperSize,
-      timezone: order.branch.restaurant.timezone,
+      timezone: order.branch.restaurant?.timezone,
+      // tz = the printing PC's zone, so the bill shows local time, not UTC.
+      timeZone: safeTimeZone(query.tz),
       restaurantName: order.branch.restaurant.name,
       currency: order.branch.restaurant.currency,
       branch: {
@@ -570,6 +672,11 @@ export class OrdersController {
     res.type('html').send(html);
   }
 
+  // Kitchen ticket page (no prices), printed through the cashier PC's own
+  // browser print dialog. Read-only: opening or printing it marks nothing as
+  // printed, because a browser cannot confirm paper. tz = the cashier PC's
+  // time zone (the server may run in UTC), paper = 58mm | 80mm | A4,
+  // reprint=1 stamps the copy as a REPRINT.
   @Auth('orders.create')
   @Get(':id/kot')
   async kot(
@@ -577,15 +684,56 @@ export class OrdersController {
     @Query('branchId') branchId: string,
     @Param('id') id: string,
     @Res() res: Response,
+    @Query('tz') tz?: string,
+    @Query('paper') paper?: string,
+    @Query('reprint') reprint?: string,
+    @Query('kotIds') kotIdsRaw?: string,
   ) {
+    if (!branchId) throw new BadRequestException('branchId is required');
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
-    const order = await this.ordersService.getReceiptData(branchId, id);
-    const html = buildKotHtml({
-      branchName: order.branch.name,
-      timezone: order.branch.restaurant.timezone,
-      order: toKotOrder(order),
+    const html = await this.renderKotPage(branchId, id, {
+      tz,
+      paper,
+      reprint: reprint === '1' || reprint === 'true',
+      kotIds: parseKotIds(kotIdsRaw),
     });
+    res.setHeader('Cache-Control', 'no-store');
     res.type('html').send(html);
+  }
+
+  /** KOT page HTML (no prices). Caller must have checked branch access. */
+  private async renderKotPage(
+    branchId: string,
+    id: string,
+    opts: { tz?: string; paper?: string; reprint?: boolean; kotIds?: string[] },
+  ): Promise<string> {
+    const order = await this.ordersService.getReceiptData(branchId, id);
+    const kotOrder = toKotOrder(order);
+    // kotIds: only those kitchen tickets (the round just sent, or the one
+    // ticket a KDS screen reprints), never the rest of the order.
+    const kotIds = opts.kotIds;
+    const only = kotIds ? await this.kotPrint.ticketLines(branchId, id, kotIds) : null;
+    if (only && only.tickets.length === 0) throw new NotFoundException('KOT not found');
+    return buildKotHtml({
+      branchName: order.branch.name,
+      timezone: order.branch.restaurant?.timezone,
+      // Cancelled lines never go to the kitchen.
+      order: {
+        ...kotOrder,
+        items: kotOrder.items.filter(
+          (_, i) =>
+            order.items[i]?.status !== 'CANCELLED' &&
+            (!only || only.orderItemIds.has(order.items[i]!.id)),
+        ),
+      },
+      ticket:
+        only && only.tickets.length === 1
+          ? { number: only.tickets[0]!.number, station: only.tickets[0]!.station, reprint: 0 }
+          : undefined,
+      paper: parsePaper(opts.paper) ?? '80mm',
+      timeZone: safeTimeZone(opts.tz),
+      copyLabel: opts.reprint ? 'REPRINT' : undefined,
+    });
   }
 
   // --- Direct-USB thermal printing (ESC/POS) ---------------------------------
@@ -658,6 +806,8 @@ export class OrdersController {
     @Query('branchId') branchId?: string,
     @Query('kind') kind?: string,
     @Query('via') via?: string,
+    @Query('width') width?: string,
+    @Query('printer') printer?: string,
   ) {
     let profile = resolveProfile();
     let target: BranchPrinterTarget = {
@@ -670,12 +820,24 @@ export class OrdersController {
       profile = await this.ordersService.printerProfile(branchId);
       target = await this.ordersService.printerTarget(branchId);
     }
+    // A cashier PC testing its own printer uses its own paper width.
+    if ((via === 'device' || via === 'spooler') && (width === '58' || width === '80')) {
+      profile = resolveProfile({
+        paperWidthMm: Number(width),
+        codepage: profile.codepage,
+      });
+    }
     const buffer =
       kind === 'kot'
         ? buildKotTestSlip(profile).buffer
         : buildTestSlip(profile);
     if (via === 'device') {
       return { ok: true, profile, escpos: [buffer.toString('base64')] };
+    }
+    if (via === 'spooler') {
+      // A printer chosen on this server PC; must be installed, never a fallback.
+      await this.deliver(await this.chosenPrinter(printer), buffer);
+      return { ok: true, profile };
     }
     await this.deliver(target, buffer);
     return { ok: true, profile };
@@ -764,6 +926,9 @@ export class OrdersController {
     // via=device: hand the print data to the phone/tablet instead of printing
     // on the server's own printer (Bluetooth printers, phones, tablets).
     if (via === 'device') return this.deviceJob(job);
+    if (via === 'spooler') {
+      return this.sendJob(job, await this.chosenPrinter(query.printer));
+    }
     const billTarget = await this.ordersService.billPrinterTarget(order.branch.id);
     if (!billTarget) {
       throw new BadRequestException('Bill printer not set');
@@ -783,14 +948,76 @@ export class OrdersController {
     @Param('id') id: string,
     @Query('reprint') reprint?: string,
     @Query('via') via?: string,
+    @Query('format') format?: string,
+    @Query('paper') paper?: string,
+    @Query('tz') tz?: string,
+    @Query('track') track?: string,
+    @Query('printer') printer?: string,
+    @Query('kotIds') kotIdsRaw?: string,
   ) {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const kotIds = parseKotIds(kotIdsRaw);
+    if (via === 'spooler') {
+      // KOT on the Windows printer chosen on this server PC (exact name only).
+      const target = await this.chosenPrinter(printer);
+      return this.kotPrint.printOrder(
+        branchId,
+        id,
+        reprint === 'true',
+        false,
+        { ...parseDeviceKotOptions({ paper, tz }), format: 'escpos' },
+        target,
+        kotIds,
+      );
+    }
     return this.kotPrint.printOrder(
       branchId,
       id,
       reprint === 'true',
       via === 'device',
+      via === 'device'
+        ? {
+            ...parseDeviceKotOptions({ format, paper, tz }),
+            track: track === 'true',
+          }
+        : {},
+      undefined,
+      kotIds,
     );
+  }
+
+  // Printers installed in Windows on the PC that runs this server. Shown in
+  // Settings only when the browser is open on that same PC, so the cashier can
+  // pick the Bill / Kitchen printer without installing anything.
+  @Auth('bills.print')
+  @Get('print/local/printers')
+  async localPrinters(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId?: string,
+  ) {
+    if (branchId) await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    const { supported, printers } = await serverWindowsPrinters(true);
+    return { supported, printers: printers.map((name) => ({ name })) };
+  }
+
+  // The cashier PC reports what its local print bridge did with tickets it
+  // was handed (QUEUED / FAILED / UNKNOWN). Records only; never re-sends.
+  @Auth('orders.create')
+  @Post(':id/print/kot/device-result')
+  async printKotDeviceResult(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(deviceKotResultSchema)) body: DeviceKotResultBody,
+  ) {
+    if (!branchId) throw new BadRequestException('branchId is required');
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    return this.kotPrint.recordDeviceResult(branchId, id, {
+      results: body.results,
+      reprint: body.reprint,
+      printerName: body.printerName,
+      deviceId: body.deviceId ?? null,
+    });
   }
 
   // Kept for older clients; same behaviour as POST :id/print/kot.
@@ -811,6 +1038,20 @@ export class OrdersController {
     } catch (err) {
       if (err instanceof PrinterNotFoundError) {
         throw new ServiceUnavailableException(err.message);
+      }
+      throw err;
+    }
+  }
+
+  private async chosenPrinter(name: string | undefined) {
+    try {
+      return await spoolerTargetFor(name);
+    } catch (err) {
+      if (err instanceof PrinterNotFoundError) {
+        throw new ServiceUnavailableException({
+          code: 'PRINTER_MISSING',
+          message: err.message,
+        });
       }
       throw err;
     }

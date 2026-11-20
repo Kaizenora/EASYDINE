@@ -44,6 +44,9 @@ describe('kitchen ticket state machine', () => {
 
   it('never skips forward, jumps back two steps, returns to NEW or serves unready food', () => {
     expect(canTransitionKot('NEW', 'READY')).toBe(false);
+    expect(canTransitionKot('NEW', 'SERVED')).toBe(false);
+    expect(canTransitionKot('ACCEPTED', 'SERVED')).toBe(false);
+    expect(canTransitionKot('PREPARING', 'SERVED')).toBe(false);
     expect(canTransitionKot('ACCEPTED', 'READY')).toBe(false);
     expect(canTransitionKot('READY', 'ACCEPTED')).toBe(false);
     for (const from of ALL) expect(canTransitionKot(from, 'NEW')).toBe(false);

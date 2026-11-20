@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { EasyDineBadge } from "@/components/brand/easydine-logo";
 
 export function BrandFooter() {
   return (
@@ -20,7 +21,10 @@ export function BrandFooter() {
       </div>
 
       <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
-        <span>EasyDine POS</span>
+        <span className="flex items-center gap-1.5">
+          <EasyDineBadge size={16} title="EasyDine" />
+          EasyDine POS
+        </span>
         <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
           Online

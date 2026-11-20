@@ -8,6 +8,7 @@ import { ImportCsvDialog } from "@/components/imports/import-csv-dialog";
 import { BulkPriceDialog } from "@/components/menu/bulk-price-dialog";
 import { AddItemDialog } from "@/components/menu/add-item-dialog";
 import { ComboComponentsDialog } from "@/components/menu/combo-components-dialog";
+import { GamesSettingsDialog } from "@/components/menu/games-settings-dialog";
 import { EditCategoryDialog } from "@/components/menu/edit-category-dialog";
 import { EditItemDialog } from "@/components/menu/edit-item-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -202,6 +203,7 @@ export default function MenuPage() {
                 <BulkPriceDialog branchId={branchId} categories={categories ?? []} />
                 <ImportCsvDialog kind="menu" branchId={branchId} />
                 <AddItemDialog branchId={branchId} categories={categories ?? []} />
+                <GamesSettingsDialog branchId={branchId} />
               </div>
             )}
           </div>

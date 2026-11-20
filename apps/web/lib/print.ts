@@ -116,13 +116,43 @@ function printPageOnDevice(url: string, name: string) {
     .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Could not open the print dialog"));
 }
 
-/** Browser print of the bill (open order) or receipt (paid order). Read-only. */
+// When this cashier PC has a Bill printer saved (EasyDine Windows app, see
+// lib/local-print.ts), bills go there without a dialog. The router returns
+// false when nothing is saved, and the browser dialog below is used as before.
+type BillPrintRouter = (
+  orderId: string,
+  branchId: string,
+  adj: BillQuery,
+  fallbackDialog: () => void,
+) => boolean;
+let billPrintRouter: BillPrintRouter | null = null;
+export function registerBillPrintRouter(router: BillPrintRouter) {
+  billPrintRouter = router;
+}
+
+/** Bill (open order) or receipt (paid order): this PC's saved Bill printer, else the browser dialog. Read-only. */
+/** "&tz=<zone>" for bill pages, so they show this PC's local time (the server may run in UTC). */
+export function receiptTzParam(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz ? `&tz=${encodeURIComponent(tz)}` : "";
+  } catch {
+    return "";
+  }
+}
+
 export function openReceiptPrint(orderId: string, branchId: string, adj: BillQuery = {}) {
   if (!acquirePrintLock()) return;
+  if (billPrintRouter?.(orderId, branchId, adj, () => openReceiptDialog(orderId, branchId, adj))) return;
+  openReceiptDialog(orderId, branchId, adj);
+}
+
+/** The browser / OS print dialog fallback (the cashier picks the printer there). */
+export function openReceiptDialog(orderId: string, branchId: string, adj: BillQuery = {}) {
   const paperSize = getCashierPaperSize();
   // Only the native Android/iOS Capacitor app with a native printer plugin should use native device printing
   if (isNativeApp() && !!nativePrinter()) {
-    printPageOnDevice(`/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}`, "Bill");
+    printPageOnDevice(`/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}${receiptTzParam()}`, "Bill");
     return;
   }
   const frame = getPrintFrame();
@@ -138,7 +168,7 @@ export function openReceiptPrint(orderId: string, branchId: string, adj: BillQue
     }
   };
   // Force a reload even if printing the same order twice in a row.
-  frame.src = `/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}&t=${Date.now()}`;
+  frame.src = `/api/v1/orders/${orderId}/receipt?branchId=${branchId}${billQueryString(adj)}&paperSize=${paperSize}${receiptTzParam()}&t=${Date.now()}`;
 }
 
 export function openKotPrint(orderId: string, branchId: string) {

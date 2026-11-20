@@ -28,32 +28,69 @@ interface KotOrder {
     quantity: number;
     kitchenNote: string | null;
     modifiers: { nameSnapshot: string }[];
+    comboDetails?: string[];
   }[];
+}
+
+export type KotPaper = '58mm' | '80mm' | 'A4';
+
+/** Page CSS for the ticket's paper. 80 mm is the long-standing default. */
+function kotPageCss(paper: KotPaper): string {
+  if (paper === '58mm') {
+    return `body { width: 54mm; padding: 2mm; }
+  table { font-size: 14px; }
+  @page { size: 58mm auto; margin: 0; }
+  @media print { html, body { width: 54mm; } .no-print { display: none; } }`;
+  }
+  if (paper === 'A4') {
+    return `body { width: 100%; max-width: 170mm; margin: 0 auto; padding: 10mm; }
+  h1 { font-size: 22px; }
+  table { font-size: 20px; }
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print { html, body { width: 100%; max-width: 170mm; } .no-print { display: none; } }`;
+  }
+  return `@page { size: 80mm auto; margin: 0; }
+  @media print { html, body { width: 80mm; } .no-print { display: none; } }`;
 }
 
 export function buildKotHtml({
   branchName,
   order,
   timezone,
+  ticket,
+  paper = '80mm',
+  timeZone,
+  copyLabel,
 }: {
   branchName: string;
   order: KotOrder;
+  /** Restaurant's IANA zone (wins over the device zone when set). */
   timezone?: string | null;
+  /** Ticket number / station, and the REPRINT copy number (0 = first print). */
+  ticket?: { number: string; station: string | null; reprint: number };
+  paper?: KotPaper;
+  /** IANA zone of the device that prints it (server zone when omitted). */
+  timeZone?: string;
+  /** e.g. "REPRINT": stamped on copies printed again on request. */
+  copyLabel?: string;
 }): string {
-  const dateStr = formatLocalDateTime(order.createdAt, timezone);
+  const dateStr = formatLocalDateTime(order.createdAt, timezone || timeZone);
 
   const itemRows = order.items
     .map((item) => {
       const modifierLines = item.modifiers
         .map((m) => `<div class="sub">+ ${esc(m.nameSnapshot)}</div>`)
         .join('');
+      const comboLines = item.comboDetails && item.comboDetails.length > 0
+        ? item.comboDetails.map((c) => `<div class="sub">· ${esc(c)}</div>`).join('')
+        : '';
       const noteLine = item.kitchenNote
         ? `<div class="note">Note: ${esc(item.kitchenNote)}</div>`
         : '';
       return `
         <tr>
           <td class="qty">${item.quantity}×</td>
-          <td>${esc(item.nameSnapshot)}${modifierLines}${noteLine}</td>
+          <td>${esc(item.nameSnapshot)}${comboLines}${modifierLines}${noteLine}</td>
         </tr>`;
     })
     .join('');
@@ -62,7 +99,7 @@ export function buildKotHtml({
 <html>
 <head>
 <meta charset="utf-8">
-<title>KOT ${esc(order.orderNumber)}</title>
+<title>KOT ${esc(order.orderNumber || order.table?.label || '')}</title>
 <style>
   * { box-sizing: border-box; }
   html { margin: 0; }
@@ -78,11 +115,9 @@ export function buildKotHtml({
   .qty { font-weight: 700; white-space: nowrap; padding-right: 8px; width: 1%; }
   .sub { font-size: 13px; color: #444; padding-left: 4px; }
   .note { font-size: 13px; font-weight: 600; color: #111; padding-left: 4px; }
-  @page { size: 80mm auto; margin: 0; }
-  @media print {
-    html, body { width: 80mm; }
-    .no-print { display: none; }
-  }
+  .reprint { font-size: 16px; font-weight: 700; text-align: center; margin: 2px 0; }
+  .powered { text-align: center; margin-top: 4px; font-size: 9px; color: #777; letter-spacing: 0.3px; }
+  ${kotPageCss(paper)}
 </style>
 </head>
 <body>
@@ -91,11 +126,13 @@ export function buildKotHtml({
   </script>
   <div class="kot">
     <h1>Kitchen order</h1>
+    ${ticket?.reprint ? `<p class="reprint">*** REPRINT #${ticket.reprint} ***</p>` : copyLabel ? `<p class="reprint">*** ${esc(copyLabel)} ***</p>` : ''}
     <p class="center muted">${esc(branchName)}</p>
+    ${ticket ? `<p class="center muted">Ticket ${esc(ticket.number)}${ticket.station ? ` - ${esc(ticket.station)}` : ''}</p>` : ''}
     <hr class="rule">
     <p class="muted">
       ${esc(dateStr)}<br>
-      Order: #${esc(order.orderNumber)} · ${esc(order.type.replace('_', ' '))}
+      Order: ${order.orderNumber ? `#${esc(order.orderNumber)} · ` : ''}${esc(order.type.replace('_', ' '))}
       ${order.table ? `<br><strong>Table: ${esc(order.table.label)}</strong>` : ''}
       ${order.customer ? `<br>Guest: ${esc(order.customer.name)}` : ''}
     </p>
@@ -104,6 +141,7 @@ export function buildKotHtml({
       <tbody>${itemRows}</tbody>
     </table>
     <hr class="rule">
+    <p class="powered">Powered by EasyDine</p>
   </div>
 </body>
 </html>`;

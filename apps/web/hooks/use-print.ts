@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { billQueryString, type BillQuery } from "@/lib/print";
 import { canPrintOnDevice, printEscposOnDevice } from "@/lib/device-print";
+import { getActivePrintScope, getMappings, printBillLocal, reprintKotLocal, routeFor } from "@/lib/local-print";
 
 export interface PrinterDiagnostics {
   connection: "USB" | "NETWORK";
@@ -51,6 +52,20 @@ export function usePrintTestSlip(branchId?: string | null, kind?: "kot") {
 export function usePrintOrderUsb(branchId: string | null) {
   return useMutation({
     mutationFn: async ({ orderId, drawer, adjustments }: { orderId: string; drawer?: boolean; adjustments?: BillQuery }) => {
+      // This cashier PC's saved Bill printer (EasyDine Windows app) wins; a
+      // saved printer that went missing is an error, never another printer.
+      const scope = getActivePrintScope();
+      if (branchId && scope.branchId === branchId && getMappings(scope).bill) {
+        const route = await routeFor("bill", scope);
+        if (route.kind === "missing") {
+          throw new Error(`Bill NOT printed: the saved Bill printer "${route.printerName}" is not installed on this PC. Re-select it in Settings › Printers.`);
+        }
+        if (route.kind === "local") {
+          const e = await printBillLocal(orderId, branchId, route.mapping, adjustments, !!drawer);
+          if (e.status !== "QUEUED") throw new Error(e.message);
+          return { ok: true as const, unsupportedChars: [] as string[] };
+        }
+      }
       // In the phone app the bill goes to the phone's own Bluetooth printer;
       // everywhere else to the printer attached to the restaurant computer.
       const onDevice = canPrintOnDevice();
@@ -75,6 +90,15 @@ export interface KotPrintResult extends PrintJobResult {
 export function usePrintKot(branchId: string | null) {
   return useMutation({
     mutationFn: async ({ orderId, reprint }: { orderId: string; reprint?: boolean }) => {
+      // This cashier PC's saved Kitchen printer (EasyDine Windows app) wins.
+      const scope = getActivePrintScope();
+      if (branchId && scope.branchId === branchId && getMappings(scope).kitchen) {
+        const e = await reprintKotLocal(orderId, scope, !!reprint);
+        if (e) {
+          if (e.status !== "QUEUED") throw new Error(e.message);
+          return { ok: true as const, printed: [], unsupportedChars: [] } as KotPrintResult;
+        }
+      }
       const onDevice = canPrintOnDevice();
       const r = await api.post<KotPrintResult & { escpos?: string[] }>(
         `/orders/${orderId}/print/kot?branchId=${branchId}${reprint ? "&reprint=true" : ""}${onDevice ? "&via=device" : ""}`,
