@@ -32,22 +32,27 @@ describe('kitchen ticket state machine', () => {
     expect(path).toEqual(['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED']);
   });
 
-  // The one sanctioned shortcut: the KDS "Start preparing" button takes a NEW
-  // ticket straight to PREPARING (kitchen-accept is implied). This is the KOT
-  // state only; online-order acceptance is a separate gate (createOrder holds
-  // back the tickets of a PENDING order).
-  it('lets the kitchen start a NEW ticket directly', () => {
+  it('lets the kitchen start cooking a new ticket directly (accept + start in one tap)', () => {
     expect(canTransitionKot('NEW', 'PREPARING')).toBe(true);
   });
 
-  it('never skips any other step or goes backwards', () => {
+  it('lets a mis-tap be stepped back one step while the ticket is still in the kitchen', () => {
+    // the board's "Back" and "Back to Prep" buttons
+    expect(canTransitionKot('PREPARING', 'ACCEPTED')).toBe(true);
+    expect(canTransitionKot('READY', 'PREPARING')).toBe(true);
+  });
+
+  it('never skips forward, jumps back two steps, returns to NEW or serves unready food', () => {
     expect(canTransitionKot('NEW', 'READY')).toBe(false);
     expect(canTransitionKot('NEW', 'SERVED')).toBe(false);
     expect(canTransitionKot('ACCEPTED', 'SERVED')).toBe(false);
     expect(canTransitionKot('PREPARING', 'SERVED')).toBe(false);
     expect(canTransitionKot('ACCEPTED', 'READY')).toBe(false);
-    expect(canTransitionKot('PREPARING', 'ACCEPTED')).toBe(false);
-    expect(canTransitionKot('READY', 'PREPARING')).toBe(false);
+    expect(canTransitionKot('READY', 'ACCEPTED')).toBe(false);
+    for (const from of ALL) expect(canTransitionKot(from, 'NEW')).toBe(false);
+    expect(canTransitionKot('NEW', 'SERVED')).toBe(false);
+    expect(canTransitionKot('ACCEPTED', 'SERVED')).toBe(false);
+    expect(canTransitionKot('PREPARING', 'SERVED')).toBe(false);
   });
 
   it('has no way out of a terminal state', () => {

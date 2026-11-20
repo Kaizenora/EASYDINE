@@ -72,6 +72,8 @@ export interface EscposReceiptOrder {
   loyaltyPointsRedeemed: number;
   loyaltyDiscountAmount: number;
   totalAmount: number;
+  /** Points earned on this paid bill and the balance after it; set only when the restaurant's loyalty program is on. */
+  loyalty?: { earned: number; balance: number } | null;
   /** Discount as a percentage of the subtotal, printed next to the amount. */
   discountPercent?: number;
   /** A bill handed over before payment: no "paid in full" wording. */
@@ -238,6 +240,12 @@ export function buildReceiptEscPosJob({
     w.rule();
     w.row('Amount paid', money(order.amountPaid));
     w.row('Balance due', money(order.balanceDue), { bold: true });
+  }
+
+  if (order.loyalty && !order.isProvisional) {
+    w.rule();
+    w.row('Points earned', String(order.loyalty.earned));
+    w.row('Points balance', String(order.loyalty.balance), { bold: true });
   }
 
   if (order.verifactu && !order.isProvisional && branch.taxRegime === 'ES_IVA') {

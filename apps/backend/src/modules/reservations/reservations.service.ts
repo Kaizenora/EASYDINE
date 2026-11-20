@@ -11,6 +11,7 @@ import type {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
+import { formatLocalDateTime } from '../../common/time';
 import { WebhooksService } from '../webhooks/webhooks.service';
 
 export interface CreateReservationOptions {
@@ -124,9 +125,15 @@ export class ReservationsService {
           title: options.fromWebsite
             ? 'New online reservation'
             : 'New reservation',
-          body: `${created.customerName} — party of ${created.guestCount}, ${new Date(
+          body: `${created.customerName} — party of ${created.guestCount}, ${formatLocalDateTime(
             created.reservedAt,
-          ).toLocaleString()}`,
+            (
+              await this.prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { restaurant: { select: { timezone: true } } },
+              })
+            )?.restaurant.timezone,
+          )}`,
           entity: 'Reservation',
           entityId: created.id,
         },

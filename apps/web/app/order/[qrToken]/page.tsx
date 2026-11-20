@@ -29,6 +29,15 @@ import { playSuccessChime, vibrateSuccess } from "@/lib/celebrate";
 import { formatCurrency, formatOrderNumber } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import {
+  DeliveryRedirectBanner,
+  PaidPointsCard,
+  PointsChip,
+  ReviewButton,
+  usePaidSummary,
+  type PublicDeliveryRedirect,
+  type PublicLoyaltyConfig,
+} from "@/components/order/qr-extras";
 
 // Dish images fallbacks
 const DISH_IMAGE_FALLBACKS: Record<string, string> = {
@@ -179,6 +188,9 @@ interface PublicMenuResponse {
   outOfService?: boolean;
   message?: string;
   categories: PublicMenuCategory[];
+  loyalty?: PublicLoyaltyConfig;
+  deliveryRedirect?: PublicDeliveryRedirect | null;
+  reviewUrl?: string | null;
 }
 
 export default function LuxuryCustomerMenu({
@@ -323,6 +335,13 @@ export default function LuxuryCustomerMenu({
     gcTime: 0,
     staleTime: 0,
   });
+
+  // Points earned on the guest's own bill, once it has been paid.
+  const { data: paidSummary } = usePaidSummary(
+    qrToken,
+    activeOrderId,
+    !!justPaidSnapshot,
+  );
 
   // Mark session verified once we have enough info to decide what screen to show.
   // If there's a stale activeOrderId in sessionStorage, wait for the first status
@@ -939,6 +958,9 @@ export default function LuxuryCustomerMenu({
           </div>
         )}
 
+        <PaidPointsCard paid={paidSummary} />
+        <ReviewButton url={data?.reviewUrl} className="mt-2 w-full max-w-xs" />
+
         <button
           type="button"
           onClick={handleStartNewOrder}
@@ -1003,6 +1025,12 @@ export default function LuxuryCustomerMenu({
           <p className="mt-1 text-xs text-muted-foreground">
             {data?.tableName || "Table"} · {guestName} · placed {formatDeviceTime(activeOrder.placedAt) || formatDeviceTime(new Date().toISOString())}
           </p>
+          {data?.loyalty?.enabled && (
+            <div className="mt-2">
+              <PointsChip qrToken={qrToken} phone={guestPhone} loyalty={data.loyalty} />
+            </div>
+          )}
+          <ReviewButton url={data?.reviewUrl} className="mt-3 w-full" />
         </div>
 
         {/* Card 1: Vertical Progress Stepper (Images 1 & 2 match) */}
@@ -1363,6 +1391,11 @@ export default function LuxuryCustomerMenu({
               <span>·</span>
               <span>{guestName}</span>
             </div>
+            {data?.loyalty?.enabled && (
+              <div className="mt-1.5">
+                <PointsChip qrToken={qrToken} phone={guestPhone} loyalty={data.loyalty} />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1472,6 +1505,8 @@ export default function LuxuryCustomerMenu({
           </button>
         </div>
       </header>
+
+      <DeliveryRedirectBanner qrToken={qrToken} redirect={data?.deliveryRedirect} />
 
       {/* DISH SECTIONS (Image 3 match) */}
       <main className="px-4 py-4 space-y-6">
@@ -1765,7 +1800,13 @@ export default function LuxuryCustomerMenu({
                             return (
                               <label
                                 key={mod.id}
-                                onClick={() => toggleMod(group.id, mod.id, group.maxSelect)}
+                                // preventDefault: a <label> forwards its click to the
+                                // <input> inside, which bubbles back here as a second
+                                // click and would undo the selection just made.
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  toggleMod(group.id, mod.id, group.maxSelect);
+                                }}
                                 className={cn(
                                   "flex cursor-pointer items-center justify-between rounded-xl border p-3 text-xs transition-colors",
                                   isChecked

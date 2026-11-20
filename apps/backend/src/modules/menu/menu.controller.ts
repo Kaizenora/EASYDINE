@@ -23,7 +23,7 @@ import {
 } from '@easydine/types';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { ZodPartialValidationPipe, ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { BranchAccessService } from '../../common/services/branch-access.service';
 import {
   assertValidImageSignature,
@@ -186,6 +186,9 @@ export class MenuController {
 
   @Auth('menu.manage')
   @Patch('items/:id')
+  // Same rules as create (non-negative price, non-empty name, tax 0-100);
+  // unknown keys such as branchId / id are stripped, never written.
+  @UsePipes(new ZodPartialValidationPipe(menuItemSchema.partial()))
   async updateItem(
     @CurrentUser() user: SessionUser,
     @Query('branchId') branchId: string,

@@ -132,6 +132,9 @@ export function CheckoutPanel({
   };
   const [completed, setCompleted] = useState<CheckoutResult | null>(null);
   const { data: settings } = useDisplaySettings(branchId);
+  const loyaltyOn = settings?.restaurant.loyaltyEnabled !== false;
+  const minRedeem = settings?.restaurant.loyaltyMinRedeemPoints ?? 0;
+  const pointValue = Number(settings?.restaurant.loyaltyPointValue) > 0 ? Number(settings?.restaurant.loyaltyPointValue) : 1;
 
   // What the guest has typed in, as numbers. Once a payment has been taken the
   // server locks the figures, so these stop mattering (and are not sent).
@@ -316,6 +319,12 @@ export function CheckoutPanel({
         {Number(completed.loyaltyDiscountAmount) > 0 && (
           <p className="text-xs text-muted-foreground">
             {completed.loyaltyPointsRedeemed} points redeemed
+          </p>
+        )}
+        {completed.loyalty && (
+          <p className="rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-foreground" data-testid="points-summary">
+            {completed.loyalty.earned > 0 ? `+${completed.loyalty.earned} points earned · ` : ""}
+            Balance {completed.loyalty.balance} points
           </p>
         )}
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -568,7 +577,7 @@ export function CheckoutPanel({
         </div>
       </div>
 
-      {customer && customer.loyaltyPoints > 0 && !locked && (
+      {loyaltyOn && customer && customer.loyaltyPoints > 0 && !locked && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="points">Redeem loyalty points</Label>
@@ -576,7 +585,9 @@ export function CheckoutPanel({
               type="button"
               className="text-xs font-medium text-primary hover:underline"
               onClick={() =>
-                setPointsToRedeem(String(Math.min(customer.loyaltyPoints, Math.floor(bill?.totalDue ?? 0))))
+                setPointsToRedeem(
+                  String(Math.min(customer.loyaltyPoints, Math.floor((bill?.totalDue ?? 0) / pointValue))),
+                )
               }
             >
               Max ({customer.loyaltyPoints} available)
@@ -591,6 +602,9 @@ export function CheckoutPanel({
             value={pointsToRedeem}
             onChange={(e) => setPointsToRedeem(e.target.value)}
           />
+          {minRedeem > 0 && (
+            <p className="text-xs text-muted-foreground">Minimum {minRedeem} points to redeem.</p>
+          )}
         </div>
       )}
 

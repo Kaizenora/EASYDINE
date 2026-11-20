@@ -36,6 +36,8 @@ export interface CreatedOrder {
 
 /** What a checkout call answers with: the order plus where its settlement stands. */
 export interface CheckoutResult extends CreatedOrder {
+  /** Points earned on this bill and the customer's balance after it; null when not applicable. */
+  loyalty?: { earned: number; balance: number } | null;
   settlement: {
     amountDue: number;
     amountPaid: number;

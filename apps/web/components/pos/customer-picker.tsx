@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AddCustomerDialog } from "@/components/customers/add-customer-dialog";
 import { Input } from "@/components/ui/input";
 import { useCustomers, type Customer } from "@/hooks/use-customers";
+import { useDisplaySettings } from "@/hooks/use-settings";
 
 export function CustomerPicker({
   branchId,
@@ -16,6 +17,8 @@ export function CustomerPicker({
   onSelect: (customer: Customer | null) => void;
 }) {
   const [search, setSearch] = useState("");
+  const { data: settings } = useDisplaySettings(branchId);
+  const loyaltyOn = settings?.restaurant.loyaltyEnabled !== false;
   const { data: matches } = useCustomers(branchId, search.length >= 2 ? search : undefined);
 
   if (customer) {
@@ -24,7 +27,7 @@ export function CustomerPicker({
         <div className="flex items-center gap-2 text-sm">
           <UserRound className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-foreground">{customer.name ?? customer.phone}</span>
-          <span className="text-xs text-muted-foreground">{customer.loyaltyPoints} pts</span>
+          {loyaltyOn && <span className="text-xs text-muted-foreground">{customer.loyaltyPoints} pts</span>}
         </div>
         <button
           type="button"

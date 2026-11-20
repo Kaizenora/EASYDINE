@@ -6,6 +6,51 @@ import { z } from "zod";
 // limit the layout was built around rather than letting it overflow.
 export const RESTAURANT_NAME_MAX_LENGTH = 40;
 
+// A web address that is safe to open from the customer menu: http(s) only (no
+// javascript:, data: etc.). Blank means "not set" and is stored as null.
+export const optionalWebUrl = z
+  .union([z.literal(""), z.string().trim().max(2048)])
+  .transform((v) => (v === "" ? null : v))
+  .refine(
+    (v) => {
+      if (v === null) return true;
+      try {
+        const u = new URL(v);
+        return u.protocol === "https:" || u.protocol === "http:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "Enter a full web address starting with https://" },
+  )
+  .optional()
+  .nullable();
+
+// Reusable WhatsApp messages. {name} and {points} are filled from the customer.
+export const WHATSAPP_TEMPLATE_KEYS = ["greeting", "offer", "points"] as const;
+export const whatsappTemplatesSchema = z.object({
+  greeting: z.string().max(1000).optional(),
+  offer: z.string().max(1000).optional(),
+  points: z.string().max(1000).optional(),
+});
+export type WhatsappTemplates = z.infer<typeof whatsappTemplatesSchema>;
+
+export const DEFAULT_WHATSAPP_TEMPLATES: Required<WhatsappTemplates> = {
+  greeting: "Hi {name}, thank you for dining with us! We'd love to see you again soon.",
+  offer: "Hi {name}, we have a new offer for you. Visit us soon and enjoy it!",
+  points: "Hi {name}, you have {points} loyalty points with us. Use them on your next visit!",
+};
+
+/** Fill {name} / {points}; unknown {tokens} are left as typed. */
+export function renderWhatsappTemplate(
+  template: string,
+  vars: { name?: string | null; points?: number | null },
+): string {
+  return template
+    .replace(/\{name\}/gi, (vars.name ?? "").trim() || "there")
+    .replace(/\{points\}/gi, String(vars.points ?? 0));
+}
+
 export const restaurantSettingsSchema = z.object({
   name: z.string().min(1).max(RESTAURANT_NAME_MAX_LENGTH).optional(),
   legalName: z.string().optional(),
@@ -25,6 +70,18 @@ export const restaurantSettingsSchema = z.object({
   upiPayeeName: z.string().trim().max(60).optional().nullable(),
   loyaltyPointValue: z.coerce.number().min(0).optional(),
   loyaltyEarnPerCurrency: z.coerce.number().int().positive().optional(),
+  loyaltyEnabled: z.boolean().optional(),
+  loyaltyMinOrderAmount: z.coerce.number().min(0).max(1000000).optional(),
+  loyaltyMinRedeemPoints: z.coerce.number().int().min(0).max(1000000).optional(),
+  // 0 = points never expire.
+  loyaltyExpiryDays: z.coerce.number().int().min(0).max(3650).optional(),
+  // Customer-menu extras. Links must be web addresses and are opened in a new
+  // tab; empty clears the field.
+  deliveryRedirectEnabled: z.boolean().optional(),
+  zomatoUrl: optionalWebUrl,
+  swiggyUrl: optionalWebUrl,
+  reviewUrl: optionalWebUrl,
+  whatsappTemplates: whatsappTemplatesSchema.optional().nullable(),
   referralEnabled: z.boolean().optional(),
   referralSharerPoints: z.coerce.number().int().min(0).max(100000).optional(),
   referralReferredPoints: z.coerce.number().int().min(0).max(100000).optional(),

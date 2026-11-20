@@ -1,3 +1,4 @@
+import { formatLocalDateTime } from '../../common/time';
 // Self-printing HTML kitchen ticket — same iframe+window.print() pattern as
 // receipt.html.ts, deliberately a separate template rather than reusing
 // buildReceiptHtml with a "hide prices" flag: a KOT is read by kitchen
@@ -52,17 +53,10 @@ function kotPageCss(paper: KotPaper): string {
   @media print { html, body { width: 80mm; } .no-print { display: none; } }`;
 }
 
-function safeLocaleString(d: Date, timeZone?: string): string {
-  try {
-    return d.toLocaleString(undefined, timeZone ? { timeZone } : undefined);
-  } catch {
-    return d.toLocaleString();
-  }
-}
-
 export function buildKotHtml({
   branchName,
   order,
+  timezone,
   ticket,
   paper = '80mm',
   timeZone,
@@ -70,6 +64,8 @@ export function buildKotHtml({
 }: {
   branchName: string;
   order: KotOrder;
+  /** Restaurant's IANA zone (wins over the device zone when set). */
+  timezone?: string | null;
   /** Ticket number / station, and the REPRINT copy number (0 = first print). */
   ticket?: { number: string; station: string | null; reprint: number };
   paper?: KotPaper;
@@ -78,7 +74,7 @@ export function buildKotHtml({
   /** e.g. "REPRINT": stamped on copies printed again on request. */
   copyLabel?: string;
 }): string {
-  const dateStr = safeLocaleString(new Date(order.createdAt), timeZone);
+  const dateStr = formatLocalDateTime(order.createdAt, timezone || timeZone);
 
   const itemRows = order.items
     .map((item) => {

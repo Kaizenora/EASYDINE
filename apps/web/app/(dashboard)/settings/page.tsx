@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_WHATSAPP_TEMPLATES } from "@easydine/types";
 import { useBranch } from "@/hooks/use-branch";
 import { useNotificationMute } from "@/hooks/use-notification-mute";
 import {
@@ -189,6 +191,17 @@ function GeneralSettingsForm({
   const [loyaltyEarnPerCurrency, setLoyaltyEarnPerCurrency] = useState(
     String(restaurant.loyaltyEarnPerCurrency),
   );
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(restaurant.loyaltyEnabled ?? true);
+  const [loyaltyMinOrder, setLoyaltyMinOrder] = useState(String(Number(restaurant.loyaltyMinOrderAmount ?? 0)));
+  const [loyaltyMinRedeem, setLoyaltyMinRedeem] = useState(String(restaurant.loyaltyMinRedeemPoints ?? 0));
+  const [loyaltyExpiryDays, setLoyaltyExpiryDays] = useState(String(restaurant.loyaltyExpiryDays ?? 0));
+  const [redirectEnabled, setRedirectEnabled] = useState(!!restaurant.deliveryRedirectEnabled);
+  const [zomatoUrl, setZomatoUrl] = useState(restaurant.zomatoUrl ?? "");
+  const [swiggyUrl, setSwiggyUrl] = useState(restaurant.swiggyUrl ?? "");
+  const [reviewUrl, setReviewUrl] = useState(restaurant.reviewUrl ?? "");
+  const [tplGreeting, setTplGreeting] = useState(restaurant.whatsappTemplates?.greeting ?? "");
+  const [tplOffer, setTplOffer] = useState(restaurant.whatsappTemplates?.offer ?? "");
+  const [tplPoints, setTplPoints] = useState(restaurant.whatsappTemplates?.points ?? "");
   const [referralEnabled, setReferralEnabled] = useState(!!restaurant.referralEnabled);
   const [referralSharerPoints, setReferralSharerPoints] = useState(String(restaurant.referralSharerPoints ?? 15));
   const [referralReferredPoints, setReferralReferredPoints] = useState(String(restaurant.referralReferredPoints ?? 10));
@@ -233,6 +246,15 @@ function GeneralSettingsForm({
         upiPayeeName: upiPayeeName.trim() || null,
         loyaltyPointValue: Number(loyaltyPointValue) || 0,
         loyaltyEarnPerCurrency: Number(loyaltyEarnPerCurrency) || 1,
+        loyaltyEnabled,
+        loyaltyMinOrderAmount: Math.max(Number(loyaltyMinOrder) || 0, 0),
+        loyaltyMinRedeemPoints: Math.max(Math.floor(Number(loyaltyMinRedeem) || 0), 0),
+        loyaltyExpiryDays: Math.max(Math.floor(Number(loyaltyExpiryDays) || 0), 0),
+        deliveryRedirectEnabled: redirectEnabled,
+        zomatoUrl: zomatoUrl.trim(),
+        swiggyUrl: swiggyUrl.trim(),
+        reviewUrl: reviewUrl.trim(),
+        whatsappTemplates: { greeting: tplGreeting, offer: tplOffer, points: tplPoints },
         referralEnabled,
         referralSharerPoints: Math.max(Math.floor(Number(referralSharerPoints) || 0), 0),
         referralReferredPoints: Math.max(Math.floor(Number(referralReferredPoints) || 0), 0),
@@ -395,43 +417,192 @@ function GeneralSettingsForm({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 border-t border-border pt-4">
-            <h3 className="text-sm font-medium text-foreground">Loyalty program</h3>
-            <p className="text-xs text-muted-foreground">
-              How customers earn and redeem points at checkout.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="r-loyalty-earn">Earn 1 point per</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{currency}</span>
-                <Input
-                  id="r-loyalty-earn"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={loyaltyEarnPerCurrency}
-                  onChange={(e) => setLoyaltyEarnPerCurrency(e.target.value)}
-                  required
-                />
+          <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Loyalty program</h3>
+                <p className="text-xs text-muted-foreground">
+                  Customers earn points when a bill is paid and can redeem them at checkout. Turn it off to
+                  stop earning and redeeming and hide points everywhere.
+                </p>
               </div>
+              <Switch
+                id="r-loyalty-enabled"
+                aria-label="Enable loyalty program"
+                checked={loyaltyEnabled}
+                onCheckedChange={setLoyaltyEnabled}
+              />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="r-loyalty-value">1 point redeems for</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{currency}</span>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-loyalty-earn">Earn 1 point per</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{currency}</span>
+                  <Input
+                    id="r-loyalty-earn"
+                    type="number"
+                    min="1"
+                    step="1"
+                    disabled={!loyaltyEnabled}
+                    value={loyaltyEarnPerCurrency}
+                    onChange={(e) => setLoyaltyEarnPerCurrency(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-loyalty-value">1 point redeems for</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{currency}</span>
+                  <Input
+                    id="r-loyalty-value"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    disabled={!loyaltyEnabled}
+                    value={loyaltyPointValue}
+                    onChange={(e) => setLoyaltyPointValue(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-loyalty-min-order">Minimum bill to earn points</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{currency}</span>
+                  <Input
+                    id="r-loyalty-min-order"
+                    type="number"
+                    min="0"
+                    step="1"
+                    disabled={!loyaltyEnabled}
+                    value={loyaltyMinOrder}
+                    onChange={(e) => setLoyaltyMinOrder(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-loyalty-min-redeem">Minimum points to redeem</Label>
                 <Input
-                  id="r-loyalty-value"
+                  id="r-loyalty-min-redeem"
                   type="number"
                   min="0"
-                  step="0.01"
-                  value={loyaltyPointValue}
-                  onChange={(e) => setLoyaltyPointValue(e.target.value)}
-                  required
+                  step="1"
+                  disabled={!loyaltyEnabled}
+                  value={loyaltyMinRedeem}
+                  onChange={(e) => setLoyaltyMinRedeem(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <Label htmlFor="r-loyalty-expiry">Points expire after (days)</Label>
+                <Input
+                  id="r-loyalty-expiry"
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="sm:max-w-[12rem]"
+                  disabled={!loyaltyEnabled}
+                  value={loyaltyExpiryDays}
+                  onChange={(e) => setLoyaltyExpiryDays(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  0 means points never expire. Otherwise a customer&apos;s balance lapses this many days after
+                  they last earned points.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+            <div>
+              <h3 className="text-sm font-medium text-foreground">Customer menu links</h3>
+              <p className="text-xs text-muted-foreground">
+                Shown to guests on the QR menu. Leave a field empty to hide it.
+              </p>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label htmlFor="r-redirect-enabled">Zomato / Swiggy banner</Label>
+                <p className="text-xs text-muted-foreground">
+                  A small dismissible &ldquo;Also order from us&rdquo; banner with buttons to your pages.
+                </p>
+              </div>
+              <Switch
+                id="r-redirect-enabled"
+                aria-label="Show Zomato and Swiggy banner"
+                checked={redirectEnabled}
+                onCheckedChange={setRedirectEnabled}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-zomato">Zomato link</Label>
+                <Input
+                  id="r-zomato"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://www.zomato.com/..."
+                  disabled={!redirectEnabled}
+                  value={zomatoUrl}
+                  onChange={(e) => setZomatoUrl(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-swiggy">Swiggy link</Label>
+                <Input
+                  id="r-swiggy"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://www.swiggy.com/..."
+                  disabled={!redirectEnabled}
+                  value={swiggyUrl}
+                  onChange={(e) => setSwiggyUrl(e.target.value)}
                 />
               </div>
             </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="r-review">Review link</Label>
+              <Input
+                id="r-review"
+                type="url"
+                inputMode="url"
+                placeholder="https://g.page/r/your-restaurant/review"
+                value={reviewUrl}
+                onChange={(e) => setReviewUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Paste your Google review link. Guests get a &ldquo;Review us&rdquo; button after they order.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
+            <div>
+              <h3 className="text-sm font-medium text-foreground">WhatsApp message templates</h3>
+              <p className="text-xs text-muted-foreground">
+                Used from the Customers page. <code>{"{name}"}</code> and <code>{"{points}"}</code> are filled in
+                from the customer. Leave a box empty to use the built-in message.
+              </p>
+            </div>
+            {(
+              [
+                ["r-tpl-greeting", "Greeting", tplGreeting, setTplGreeting, DEFAULT_WHATSAPP_TEMPLATES.greeting],
+                ["r-tpl-offer", "New offer", tplOffer, setTplOffer, DEFAULT_WHATSAPP_TEMPLATES.offer],
+                ["r-tpl-points", "Loyalty points update", tplPoints, setTplPoints, DEFAULT_WHATSAPP_TEMPLATES.points],
+              ] as const
+            ).map(([id, label, value, set, placeholder]) => (
+              <div key={id} className="flex flex-col gap-2">
+                <Label htmlFor={id}>{label}</Label>
+                <Textarea
+                  id={id}
+                  rows={2}
+                  maxLength={1000}
+                  placeholder={placeholder}
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                />
+              </div>
+            ))}
           </div>
 
           <div className="flex flex-col gap-3 rounded-lg border border-border p-4">

@@ -1,3 +1,4 @@
+import { formatLocalDateTime } from '../../common/time';
 // Self-printing HTML receipt — ported from easydine-pos's
 // backend/src/lib/receipt.js (same 80mm-thermal-safe layout rules: @page
 // margin 0, left-aligned body, box-sizing border-box so 80mm stays 80mm
@@ -57,6 +58,8 @@ interface ReceiptOrder {
   loyaltyPointsRedeemed: number;
   loyaltyDiscountAmount: number;
   totalAmount: number;
+  /** Points earned on this paid bill and the balance after it; set only when the restaurant's loyalty program is on. */
+  loyalty?: { earned: number; balance: number } | null;
   /** Discount as a percentage of the subtotal, printed next to the amount. */
   discountPercent?: number;
   /** A bill handed over before payment: no "paid in full" wording. */
@@ -88,8 +91,10 @@ export function buildReceiptHtml({
   order,
   paperSize = '80mm',
   isTest = false,
+  timezone,
   timeZone,
 }: {
+  timezone?: string | null;
   restaurantName: string;
   branch: {
     name: string;
@@ -110,13 +115,8 @@ export function buildReceiptHtml({
 }): string {
   const sym = CURRENCY_SYMBOLS[currency] ?? `${currency} `;
   const money = (n: number) => `${sym}${Number(n).toFixed(2)}`;
-  const dateStr = (() => {
-    try {
-      return new Date(order.createdAt).toLocaleString(undefined, timeZone ? { timeZone } : undefined);
-    } catch {
-      return new Date(order.createdAt).toLocaleString();
-    }
-  })();
+  // Restaurant zone first, then the printing device's, then Asia/Kolkata.
+  const dateStr = formatLocalDateTime(order.createdAt, timezone || timeZone);
   const taxLabel = resolveTaxLabel(branch.taxRegime, branch.taxLabel);
   // gstNumber is the pre-multi-region field every India install already
   // has populated; taxId is the new generic one. India falls back to the
@@ -312,6 +312,11 @@ ${paperSize === '58mm' ? `
         : ''
     }
     ${settlementRows}
+    ${
+      order.loyalty && !order.isProvisional
+        ? `<hr class="rule"><table class="totals"><tr><td>Points earned</td><td class="num">${order.loyalty.earned}</td></tr><tr><td><strong>Points balance</strong></td><td class="num"><strong>${order.loyalty.balance}</strong></td></tr></table>`
+        : ''
+    }
     ${
       order.verifactu && !order.isProvisional && branch.taxRegime === 'ES_IVA'
         ? `<hr class="rule"><div class="vf"><strong>Factura simplificada ${esc(order.verifactu.invoiceNumber)}</strong><div>${esc(order.verifactu.heading)}</div>${qrSvg(order.verifactu.url, '35mm')}<div>${esc(order.verifactu.legend)}</div><strong>${esc(order.verifactu.short)}</strong></div>`

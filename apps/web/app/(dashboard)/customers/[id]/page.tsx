@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBranch } from "@/hooks/use-branch";
+import { useDisplaySettings } from "@/hooks/use-settings";
 import { useCustomer, useDeleteCustomer } from "@/hooks/use-customers";
 import { ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
@@ -20,6 +21,8 @@ import { formatCurrency } from "@/lib/format";
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { branchId } = useBranch();
+  const { data: settings } = useDisplaySettings(branchId);
+  const loyaltyOn = settings?.restaurant.loyaltyEnabled !== false;
   const { data: customer, isLoading } = useCustomer(branchId, id);
   const router = useRouter();
   const deleteCustomer = useDeleteCustomer(branchId);
@@ -78,17 +81,19 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {loyaltyOn && (
         <Card className="flex items-center gap-3 p-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning/10 text-warning">
-            <Star className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Loyalty points</p>
-            <p className="text-xl font-semibold tabular-nums text-foreground">
-              {customer.loyaltyPoints}
-            </p>
-          </div>
-        </Card>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning/10 text-warning">
+              <Star className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Loyalty points</p>
+              <p className="text-xl font-semibold tabular-nums text-foreground">
+                {customer.loyaltyPoints}
+              </p>
+            </div>
+          </Card>
+        )}
         <Card className="flex items-center gap-3 p-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success">
             <Gift className="h-5 w-5" />

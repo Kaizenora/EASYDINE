@@ -95,6 +95,9 @@ describe('OrdersService.resolvePayingCustomer', () => {
   });
 });
 
+// Placing or checking in a QR order creates no customer: that happens only
+// when the bill is paid (OrdersService.checkout). The phone kept on the order
+// must still be normalised, never cut to its first 10 digits.
 describe('QR guest phone is normalised, not cut to the first 10 digits', () => {
   const TOKEN = 'a'.repeat(32);
   function makePublic() {
@@ -119,21 +122,21 @@ describe('QR guest phone is normalised, not cut to the first 10 digits', () => {
   it('takeaway QR: +91 number saved as the 10-digit mobile', async () => {
     const { svc, ordersService } = makePublic();
     await svc.createOrder(`takeaway-${TOKEN}`, items, 'Rahul', '+91 98765 43210');
-    expect(ordersService.resolveOrCreateCustomer).toHaveBeenCalledWith('b1', { name: 'Rahul', phone: '9876543210' });
-    expect(ordersService.createOrder.mock.calls[0][2]).toMatchObject({ guestPhone: '9876543210', customerId: 'cust-1' });
+    expect(ordersService.resolveOrCreateCustomer).not.toHaveBeenCalled();
+    expect(ordersService.createOrder.mock.calls[0][2]).toMatchObject({ guestPhone: '9876543210' });
   });
 
   it('dine-in QR: 0-prefixed number saved as the 10-digit mobile', async () => {
     const { svc, ordersService } = makePublic();
     await svc.createOrder('table-token', items, 'Priya', '09876543210');
-    expect(ordersService.resolveOrCreateCustomer).toHaveBeenCalledWith('b1', { name: 'Priya', phone: '9876543210' });
+    expect(ordersService.resolveOrCreateCustomer).not.toHaveBeenCalled();
+    expect(ordersService.createOrder.mock.calls[0][2]).toMatchObject({ guestPhone: '9876543210' });
   });
 
-  it('check-in with a name only does not create a customer (the order saves it, no duplicate)', async () => {
+  it('check-in creates no customer, with or without a phone (only payment does)', async () => {
     const { svc, ordersService } = makePublic();
     await svc.checkIn('table-token', 'Sid');
-    expect(ordersService.resolveOrCreateCustomer).not.toHaveBeenCalled();
     await svc.checkIn('table-token', 'Sid', '+91 74993 00147');
-    expect(ordersService.resolveOrCreateCustomer).toHaveBeenCalledWith('b1', { name: 'Sid', phone: '7499300147' });
+    expect(ordersService.resolveOrCreateCustomer).not.toHaveBeenCalled();
   });
 });

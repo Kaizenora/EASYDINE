@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
   Injectable,
@@ -36,6 +37,12 @@ export class SettingsService {
         upiPayeeName: true,
         loyaltyPointValue: true,
         loyaltyEarnPerCurrency: true,
+        loyaltyEnabled: true,
+        loyaltyMinOrderAmount: true,
+        loyaltyMinRedeemPoints: true,
+        loyaltyExpiryDays: true,
+        reviewUrl: true,
+        whatsappTemplates: true,
         maxManualDiscountPercent: true,
         requireDiscountReason: true,
       },
@@ -79,9 +86,22 @@ export class SettingsService {
     userId: string,
     dto: RestaurantSettingsDto,
   ) {
+    const { whatsappTemplates, ...rest } = dto;
     const updated = await this.prisma.restaurant.update({
       where: { id: restaurantId },
-      data: dto,
+      data: {
+        ...rest,
+        // Blank templates fall back to the built-in defaults on the client.
+        ...(whatsappTemplates !== undefined && {
+          whatsappTemplates: whatsappTemplates
+            ? (Object.fromEntries(
+                Object.entries(whatsappTemplates).filter(
+                  ([, v]) => typeof v === 'string' && v.trim() !== '',
+                ),
+              ) as Prisma.InputJsonObject)
+            : Prisma.DbNull,
+        }),
+      },
     });
     await this.audit.record({
       userId,

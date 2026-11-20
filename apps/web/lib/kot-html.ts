@@ -55,17 +55,21 @@ function kotPageCss(paper: KotPaper): string {
   @media print { html, body { width: 80mm; } .no-print { display: none; } }`;
 }
 
-function safeLocaleString(d: Date, timeZone?: string): string {
+// Same as the server's formatLocalDateTime (apps/backend/src/common/time.ts):
+// restaurant zone first, then the printing device's, then Asia/Kolkata.
+function formatLocalDateTime(d: Date | string, timeZone: string | null | undefined): string {
+  const date = new Date(d);
   try {
-    return d.toLocaleString(undefined, timeZone ? { timeZone } : undefined);
+    return date.toLocaleString('en-IN', { timeZone: timeZone || 'Asia/Kolkata' });
   } catch {
-    return d.toLocaleString();
+    return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
   }
 }
 
 export function buildKotHtml({
   branchName,
   order,
+  timezone,
   ticket,
   paper = '80mm',
   timeZone,
@@ -73,6 +77,8 @@ export function buildKotHtml({
 }: {
   branchName: string;
   order: KotOrder;
+  /** Restaurant's IANA zone (wins over the device zone when set). */
+  timezone?: string | null;
   /** Ticket number / station, and the REPRINT copy number (0 = first print). */
   ticket?: { number: string; station: string | null; reprint: number };
   paper?: KotPaper;
@@ -81,7 +87,7 @@ export function buildKotHtml({
   /** e.g. "REPRINT": stamped on copies printed again on request. */
   copyLabel?: string;
 }): string {
-  const dateStr = safeLocaleString(new Date(order.createdAt), timeZone);
+  const dateStr = formatLocalDateTime(order.createdAt, timezone || timeZone);
 
   const itemRows = order.items
     .map((item) => {

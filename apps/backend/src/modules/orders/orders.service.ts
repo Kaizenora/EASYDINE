@@ -52,7 +52,14 @@ import {
   adjustOnlinePrice,
   type OnlinePriceAdjust,
 } from '../../common/online-price';
+import { findCustomerByPhone } from '../customers/customer-phone';
 import { ReferralsService } from '../referrals/referrals.service';
+import {
+  pointsForSpend,
+  redeemRuleViolation,
+  usableBalance,
+} from '../loyalty/loyalty';
+import { expireStaleBalance } from '../loyalty/loyalty-ledger';
 import { VerifactuService } from '../verifactu/verifactu.service';
 
 const KOT_FORWARD_STATUSES = [
@@ -379,12 +386,7 @@ export class OrdersService {
         return row.id as string;
       }
       await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${branchId}:${phone}`}, 0))`;
-      const rows: { id: string; name: string | null; phone: string | null }[] =
-        await client.$queryRaw`SELECT id, name, phone FROM customers
-          WHERE "branchId" = ${branchId} AND phone IS NOT NULL
-            AND right(regexp_replace(phone, '[^0-9]', '', 'g'), ${phone.length}::int) = ${phone}
-          ORDER BY "createdAt" ASC, id ASC LIMIT 1`;
-      const found = rows[0];
+      const found = await findCustomerByPhone(client, branchId, phone);
       if (found) {
         if (
           meaningfulName &&
@@ -416,7 +418,9 @@ export class OrdersService {
         ? await this.prisma.$transaction((t) => work(t))
         : await work(this.prisma);
 
-    if (created) {
+    // Inside a caller's transaction the row is not visible to anyone yet (and
+    // may still roll back): the caller announces it after its commit.
+    if (created && !tx) {
       this.realtime.emitToBranch(branchId, 'customer.updated', { id });
     }
     return id;
@@ -510,17 +514,9 @@ export class OrdersService {
       ...new Set(dto.items.flatMap((i) => i.modifierIds ?? [])),
     ];
 
-    if (!dto.customerId) {
-      const phone =
-        (dto as any).guestPhone ?? (dto as any).delivery?.deliveryPhone;
-      const resolvedId = await this.resolveOrCreateCustomer(branchId, {
-        name: dto.guestName,
-        phone,
-      });
-      if (resolvedId) {
-        dto.customerId = resolvedId;
-      }
-    }
+    // A name / phone typed on an order that has not been paid is kept on the
+    // order itself (guestName / deliveryPhone). It only becomes a record in the
+    // Customers section when the order is actually paid - see checkout().
 
     const [branch, menuItems, modifiers, table, customer] = await Promise.all([
       this.prisma.branch.findUnique({
@@ -1013,7 +1009,14 @@ export class OrdersService {
       include: {
         table: true,
         customer: true,
-        items: true,
+        // The cashier's order panel lists each dish with its add-ons and
+        // its veg / non-veg mark, so both have to come with the line.
+        items: {
+          include: {
+            modifiers: true,
+            menuItem: { select: { isVeg: true } },
+          },
+        },
         kots: {
           select: {
             id: true,
@@ -1939,9 +1942,21 @@ export class OrdersService {
     // Points a guest asked to use when ordering online apply here unless staff
     // choose otherwise; they are capped at the balance so an out-of-date
     // request can never block taking payment.
+    const usable = order.customer
+      ? usableBalance(branch.restaurant, order.customer)
+      : 0;
+    // An explicit request that breaks the restaurant's rules is refused; a
+    // guest's saved online request that no longer qualifies (program off,
+    // under the minimum) just drops to zero so it can never block payment.
+    const explicit = adj.loyaltyPointsToRedeem;
+    if (explicit !== undefined) {
+      const broken = redeemRuleViolation(branch.restaurant, explicit);
+      if (broken) throw new BadRequestException(broken);
+    }
+    const savedRequest = Math.min(order.requestedRedeemPoints, usable);
     const pointsToRedeem =
-      adj.loyaltyPointsToRedeem ??
-      Math.min(order.requestedRedeemPoints, order.customer?.loyaltyPoints ?? 0);
+      explicit ??
+      (redeemRuleViolation(branch.restaurant, savedRequest) ? 0 : savedRequest);
     if (pointsToRedeem > 0 && !customerId) {
       throw new BadRequestException(
         'Cannot redeem loyalty points without a customer on the order',
@@ -2109,22 +2124,31 @@ export class OrdersService {
       where: { id: branchId },
       include: { restaurant: true },
     });
-    const loyaltyEarnPerCurrency = branch.restaurant.loyaltyEarnPerCurrency;
 
     // A customer can be attached at billing time instead of when the order
     // was opened — walk-ins don't need a name up front, staff can add one
     // once the guest is ready to pay. Falls back to whatever was already on
     // the order (e.g. attached via QR order or set at cart time).
-    const effectiveCustomerId = await this.resolvePayingCustomer(branchId, order, dto);
-    // If we now have a customer the order isn't linked to yet, link it
-    // immediately (outside the tx) so the Customers section updates even if
-    // the payment transaction later fails.
-    if (effectiveCustomerId && effectiveCustomerId !== order.customerId) {
-      await this.prisma.order.update({
-        where: { id: orderId },
-        data: { customerId: effectiveCustomerId },
-      }).catch(() => { /* non-critical — tx will also set it */ });
+    let effectiveCustomerId = order.customerId;
+    if (!effectiveCustomerId && dto.customerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { id: dto.customerId, branchId },
+      });
+      if (!customer) throw new BadRequestException('Customer not found');
+      effectiveCustomerId = customer.id;
     }
+    // Typed / guest details (no picked customer) become a Customers record
+    // only when this payment actually settles the bill, inside the same
+    // transaction that marks the order PAID: a failed, declined or still
+    // part-paid bill never creates or links a customer. What the cashier typed
+    // at payment wins over what the order carried; with neither, nothing is
+    // created (a true walk-in stays anonymous).
+    const typedCustomerName = dto.customerName?.trim() || undefined;
+    const typedCustomerPhone = normalizePhone(dto.customerPhone) ?? undefined;
+    const paidCustomerDetails = {
+      name: typedCustomerName || order.guestName,
+      phone: typedCustomerPhone || order.deliveryPhone,
+    };
 
     const { bill, locked, paid, auto, pointsToRedeem } = await this.resolveBill(
       branchId,
@@ -2157,6 +2181,12 @@ export class OrdersService {
       await this.prisma.$transaction(async (tx) => {
         let actualPointsRedeemed = order.loyaltyPointsRedeemed;
         let loyaltyDiscountAmount = Number(order.loyaltyDiscountAmount);
+        let pointsEarnedNow = 0;
+        // A balance past its expiry window lapses (and is logged) before it
+        // can be redeemed or topped up.
+        if (effectiveCustomerId) {
+          await expireStaleBalance(tx, effectiveCustomerId, branch.restaurant);
+        }
 
         if (!locked) {
           loyaltyDiscountAmount = 0;
@@ -2256,6 +2286,14 @@ export class OrdersService {
           });
         }
 
+        if (settlement.fullyPaid && !effectiveCustomerId) {
+          effectiveCustomerId = await this.resolveOrCreateCustomer(
+            branchId,
+            paidCustomerDetails,
+            tx,
+          );
+        }
+
         // The bill's figures are fixed by the first payment, whether or not
         // it settles the bill.
         const lockedFigures = locked
@@ -2282,9 +2320,22 @@ export class OrdersService {
             };
 
         if (!settlement.fullyPaid) {
+          // Part-paid: remember what the cashier typed on the order so the
+          // final payment can save it, but create no customer record yet.
           await tx.order.update({
             where: { id: orderId, status: 'OPEN' },
-            data: { ...lockedFigures, payments: { create: paymentRows } },
+            data: {
+              ...lockedFigures,
+              ...(!effectiveCustomerId && typedCustomerName
+                ? { guestName: typedCustomerName }
+                : {}),
+              ...(!effectiveCustomerId &&
+              typedCustomerPhone &&
+              order.type !== 'DELIVERY'
+                ? { deliveryPhone: typedCustomerPhone }
+                : {}),
+              payments: { create: paymentRows },
+            },
           });
           return;
         }
@@ -2311,14 +2362,19 @@ export class OrdersService {
         // actually paid — an atomic increment (race-free by construction, no
         // read-then-write window) rather than a computed `set`.
         if (effectiveCustomerId) {
-          const netSpend = round2(
-            bill.subtotal - bill.discountAmount - loyaltyDiscountAmount,
+          // What the guest paid for food: the bill after discounts and
+          // redeemed points, without tip or delivery.
+          const spend = round2(
+            bill.totalDue - bill.tipAmount - bill.deliveryFee,
           );
-          const pointsEarned = 0; // Stopped awarding points per master brief
+          const pointsEarned = pointsForSpend(branch.restaurant, spend);
           if (pointsEarned > 0) {
             await tx.customer.update({
               where: { id: effectiveCustomerId },
-              data: { loyaltyPoints: { increment: pointsEarned } },
+              data: {
+                loyaltyPoints: { increment: pointsEarned },
+                loyaltyLastEarnedAt: new Date(),
+              },
             });
             await this.referrals.recordOrderPoints(tx, {
               branchId,
@@ -2327,6 +2383,7 @@ export class OrdersService {
               earned: pointsEarned,
               redeemed: 0,
             });
+            pointsEarnedNow = pointsEarned;
           }
           // First paid purchase of a referred customer: pays both sides, once.
           await this.referrals.onOrderPaid(tx, {
@@ -2353,6 +2410,7 @@ export class OrdersService {
             ...lockedFigures,
             status: 'PAID',
             billedAt: new Date(),
+            loyaltyPointsEarned: pointsEarnedNow,
             payments: { create: paymentRows },
           },
         });
@@ -2446,6 +2504,7 @@ export class OrdersService {
     }
     return {
       ...updated,
+      loyalty: await this.loyaltySummary(updated),
       settlement: {
         amountDue: bill.totalDue,
         amountPaid: round2(paid + settlement.paidNow),
@@ -2454,6 +2513,26 @@ export class OrdersService {
         fullyPaid: settlement.fullyPaid,
       },
     };
+  }
+
+  // What a paid bill earned and what the customer now holds, for the cashier's
+  // confirmation screen. Null when unpaid, no customer, or the program is off.
+  private async loyaltySummary(order: {
+    status: string;
+    customerId: string | null;
+    branchId: string;
+    loyaltyPointsEarned: number;
+  }) {
+    if (order.status !== 'PAID' || !order.customerId) return null;
+    const row = await this.prisma.customer.findUnique({
+      where: { id: order.customerId },
+      select: {
+        loyaltyPoints: true,
+        branch: { select: { restaurant: { select: { loyaltyEnabled: true } } } },
+      },
+    });
+    if (!row?.branch.restaurant.loyaltyEnabled) return null;
+    return { earned: order.loyaltyPointsEarned, balance: row.loyaltyPoints };
   }
 
   // Current settlement state of an order, for answering a replayed request.
@@ -2468,6 +2547,7 @@ export class OrdersService {
     const total = Number(updated.totalAmount);
     return {
       ...updated,
+      loyalty: await this.loyaltySummary(updated),
       settlement: {
         amountDue: total,
         amountPaid,
@@ -2987,6 +3067,11 @@ export class OrdersService {
     if (target === 'PREPARING' && !kot.acceptedAt) stamps.acceptedAt = now;
     if (target === 'READY') stamps.readyAt = now;
     if (target === 'SERVED') stamps.servedAt = now;
+    // Stepped back from "ready" (a mis-tap corrected on the board): it is not
+    // ready any more, so the ready time must not linger on the ticket.
+    if (kot.status === 'READY' && target === 'PREPARING') {
+      stamps.readyAt = null;
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const moved = await tx.kot.updateMany({

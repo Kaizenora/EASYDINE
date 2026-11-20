@@ -1,16 +1,18 @@
 "use client";
 
-import { Gift, Pencil, Star, Trash2 } from "lucide-react";
+import { Gift, MessageCircle, Pencil, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "@/lib/toast";
 import { AddCustomerDialog } from "@/components/customers/add-customer-dialog";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
+import { canWhatsapp, WhatsappDialog } from "@/components/customers/whatsapp-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBranch } from "@/hooks/use-branch";
+import { useDisplaySettings } from "@/hooks/use-settings";
 import { useBackfillCustomersFromOrders, useCustomers, useDeleteCustomer, type Customer } from "@/hooks/use-customers";
 import { ApiError } from "@/lib/api";
 import { QueryError } from "@/components/ui/query-error";
@@ -23,6 +25,9 @@ export default function CustomersPage() {
   const { data: customers, isLoading, error, refetch, isFetching } = useCustomers(branchId, search || undefined);
   const deleteCustomer = useDeleteCustomer(branchId);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [messaging, setMessaging] = useState<Customer | null>(null);
+  const { data: settings } = useDisplaySettings(branchId);
+  const loyaltyOn = settings?.restaurant.loyaltyEnabled !== false;
 
   const onDelete = (e: React.MouseEvent, customer: Customer) => {
     e.preventDefault();
@@ -77,16 +82,33 @@ export default function CustomersPage() {
                 </span>
               </div>
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5" />
-                  {c.loyaltyPoints} pts
-                </span>
+                {loyaltyOn && (
+                  <span className="flex items-center gap-1">
+                    <Star className="h-3.5 w-3.5" />
+                    {c.loyaltyPoints} pts
+                  </span>
+                )}
                 {Number(c.walletBalance) > 0 && (
                   <span className="flex items-center gap-1">
                     <Gift className="h-3.5 w-3.5" />₹{c.walletBalance}
                   </span>
                 )}
                 <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-success disabled:opacity-40"
+                    title={canWhatsapp(c) ? "Message on WhatsApp" : "Add a phone number to use WhatsApp"}
+                    aria-label={`WhatsApp ${c.name ?? "customer"}`}
+                    disabled={!canWhatsapp(c)}
+                    onClick={(e: any) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMessaging(c);
+                    }}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -122,6 +144,16 @@ export default function CustomersPage() {
           </div>
         )}
       </Card>
+
+      {messaging && (
+        <WhatsappDialog
+          key={messaging.id}
+          customer={messaging}
+          templates={settings?.restaurant.whatsappTemplates}
+          loyaltyEnabled={loyaltyOn}
+          onClose={() => setMessaging(null)}
+        />
+      )}
 
       {editingCustomer && (
         <EditCustomerDialog

@@ -48,6 +48,7 @@ function build() {
   };
   const publicMenu = {
     menuCategoriesForBranch: jest.fn().mockResolvedValue([]),
+    soleRestaurantBranch: jest.fn().mockResolvedValue(null),
   };
   const service = new PublicKioskService(
     prisma as never,
@@ -121,6 +122,29 @@ describe('PublicKioskService', () => {
       await expect(service.getMenu(TOKEN)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('generic link (/kiosk/default) is closed on a multi-restaurant server', () => {
+    it('is refused when no kiosk is switched on or the server hosts several restaurants', async () => {
+      const { service, ordersService } = build();
+      for (const alias of ['default', 'kiosk']) {
+        await expect(service.getMenu(alias)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        await expect(service.createOrder(alias, dto())).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      }
+      expect(ordersService.createOrder).not.toHaveBeenCalled();
+    });
+
+    it('a branch id is not a kiosk credential', async () => {
+      const { service, prisma } = build();
+      await expect(
+        service.getMenu('cmabcdefghijklmnopqrstuvw'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.branch.findUnique).not.toHaveBeenCalled();
     });
   });
 

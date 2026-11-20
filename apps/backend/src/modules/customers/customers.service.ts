@@ -4,13 +4,42 @@ import type {
   CustomerAddressUpdateDto,
   CustomerDto,
 } from '@easydine/types';
+import { expireStaleBalance } from '../loyalty/loyalty-ledger';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(branchId: string, search?: string) {
+  // Lapse any balances past this restaurant's expiry window so the list and
+  // profile never show points a customer can no longer use. No-op (one cheap
+  // read) when the restaurant has no expiry.
+  private async lapseStaleBalances(branchId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { restaurant: true },
+    });
+    const rules = branch?.restaurant;
+    if (!rules?.loyaltyEnabled || rules.loyaltyExpiryDays <= 0) return;
+    const cutoff = new Date(Date.now() - rules.loyaltyExpiryDays * 86_400_000);
+    const stale = await this.prisma.customer.findMany({
+      where: {
+        branchId,
+        loyaltyPoints: { gt: 0 },
+        loyaltyLastEarnedAt: { lt: cutoff },
+      },
+      select: { id: true },
+      take: 500,
+    });
+    for (const c of stale) {
+      await this.prisma.$transaction((tx) =>
+        expireStaleBalance(tx, c.id, rules),
+      );
+    }
+  }
+
+  async list(branchId: string, search?: string) {
+    await this.lapseStaleBalances(branchId);
     return this.prisma.customer.findMany({
       where: {
         branchId,
@@ -29,6 +58,7 @@ export class CustomersService {
   }
 
   async getById(branchId: string, id: string) {
+    await this.lapseStaleBalances(branchId);
     const customer = await this.prisma.customer.findFirst({
       where: { id, branchId },
       include: {
