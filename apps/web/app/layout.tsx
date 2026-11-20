@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Roboto } from "next/font/google";
+import { Inter, Noto_Sans_Devanagari, Space_Grotesk } from "next/font/google";
 import { AppProviders } from "@/components/providers/app-providers";
 import "./globals.css";
 
@@ -9,16 +9,25 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const roboto = Roboto({
-  weight: ["400", "500", "700"],
+const spaceGrotesk = Space_Grotesk({
+  weight: ["600", "700"],
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-roboto",
+  variable: "--font-space-grotesk",
+});
+
+// Hindi + Marathi. Sits after the Latin face in every stack, so Devanagari
+// glyphs fall through to it while Latin text keeps Inter / Space Grotesk.
+const devanagari = Noto_Sans_Devanagari({
+  weight: ["400", "500", "600", "700"],
+  subsets: ["devanagari"],
+  display: "swap",
+  variable: "--font-devanagari",
 });
 
 export const metadata: Metadata = {
   title: "EasyDine",
-  description: "Offline-first restaurant management system",
+  description: "QR table ordering and billing for restaurants. Dine smarter, not harder.",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -31,7 +40,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6D4AFF",
+  themeColor: "#0F766E",
   // Lets the bottom nav / sheets sit inside the notch + home-indicator safe areas.
   viewportFit: "cover",
 };
@@ -44,17 +53,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${roboto.variable} h-full antialiased`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${devanagari.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Roboto:wght@300;400;500;700;900&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body className="min-h-full flex flex-col font-sans">
         <AppProviders>{children}</AppProviders>
       </body>

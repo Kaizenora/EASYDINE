@@ -1,84 +1,40 @@
-"use client";
-
-import { ArrowRight, Github } from "lucide-react";
-import { motion } from "motion/react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { downloadHref } from "@/lib/downloads";
-import { PosMockup } from "@/components/marketing/pos-mockup";
-
-const words = ["Restaurant", "software", "you", "actually", "own."];
+import { ArrowDown } from "lucide-react";
+import { HeroMock } from "@/components/marketing/hero-mock";
+import { DEMO_HREF } from "@/components/marketing/links";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden px-4 pt-20 pb-24 sm:px-6 sm:pt-28">
-      {/* Ambient gradient glow — transform/opacity only, no layout cost */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] bg-[radial-gradient(60%_50%_at_50%_0%,color-mix(in_oklch,var(--primary),transparent_88%),transparent)]"
-      />
-
-      <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground"
-        >
-          <span className="size-1.5 rounded-full bg-success" />
-          Open source · AGPL-3.0 · self-hosted
-        </motion.div>
-
-        <h1 className="flex flex-wrap justify-center gap-x-3 text-4xl font-semibold tracking-tight text-foreground sm:text-6xl">
-          {words.map((word, i) => (
-            <motion.span
-              key={word}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] }}
-              className={word === "own." ? "text-primary" : undefined}
+    <section className="px-4 pt-12 pb-16 sm:px-6 lg:pt-20 lg:pb-24">
+      <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1fr_auto] lg:gap-16">
+        <div className="max-w-xl">
+          <h1 className="text-balance font-heading text-[32px] leading-[1.1] font-bold tracking-[-0.02em] text-foreground sm:text-[40px]">
+            Dine smarter, not harder.
+          </h1>
+          <p className="mt-4 text-pretty text-xl leading-relaxed text-muted-foreground">
+            QR ordering and billing for restaurants.
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={DEMO_HREF}
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
             >
-              {word}
-            </motion.span>
-          ))}
-        </h1>
+              Book a demo
+            </a>
+            <a
+              href="#how-it-works"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card px-6 text-base font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              See how it works
+              <ArrowDown className="size-4" aria-hidden />
+            </a>
+          </div>
+          <p className="mt-6 text-sm text-muted-foreground">
+            Works in the phone browser, no app to install. In English,{" "}
+            <span lang="hi">हिंदी</span> and <span lang="mr">मराठी</span>.
+          </p>
+        </div>
 
-        <motion.p
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-6 max-w-2xl text-balance text-lg text-muted-foreground sm:text-xl"
-        >
-          POS, kitchen display, tables, reservations, inventory, and CRM — one
-          self-hosted stack that runs on your own LAN. No subscription, no
-          forced cloud dependency, no vendor lock-in. Your orders, your
-          customers&rsquo; data, your server.
-        </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.48, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-9 flex flex-col items-center gap-3 sm:flex-row"
-        >
-          <Button size="lg" className="h-11 px-6 text-[15px]" render={<Link href="/signup" />}>
-            Get started free
-            <ArrowRight className="size-4" data-icon="inline-end" />
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            className="h-11 px-6 text-[15px]"
-            render={<a href={downloadHref("github")} />}
-          >
-            <Github className="size-4" data-icon="inline-start" />
-            View on GitHub
-          </Button>
-        </motion.div>
-      </div>
-
-      <div className="mt-16 sm:mt-20">
-        <PosMockup />
+        <HeroMock />
       </div>
     </section>
   );

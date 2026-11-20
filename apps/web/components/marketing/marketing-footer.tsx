@@ -1,78 +1,66 @@
+import { Instagram, Mail } from "lucide-react";
 import Link from "next/link";
-import { Logo } from "@/components/layout/logo";
-import { downloadHref } from "@/lib/downloads";
+import { EasyDineMark } from "@/components/brand/easydine-mark";
+import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/components/marketing/links";
 
-const columns = [
-  {
-    title: "Product",
-    links: [
-      { href: "#features", label: "Features" },
-      { href: "#security", label: "Security" },
-      { href: "#get-started", label: "Get started" },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { href: downloadHref("github"), label: "GitHub" },
-      { href: "/docs/api", label: "API & MCP" },
-      { href: "/docs/accessibility", label: "Accessibility statement" },
-      { href: "/docs/compliance-india", label: "India compliance notes" },
-    ],
-  },
-  {
-    title: "Account",
-    links: [
-      { href: "/login", label: "Sign in" },
-      { href: "/signup", label: "Create account" },
-    ],
-  },
+const LINKS = [
+  { href: "/login", label: "Sign in" },
+  { href: "/docs/accessibility", label: "Accessibility" },
+  { href: "/docs/compliance-india", label: "India compliance notes" },
 ];
 
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-border/60 px-4 py-14 sm:px-6">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-10 sm:grid-cols-[1.5fr_repeat(3,1fr)]">
-          <div>
-            <Link href="/" className="flex items-center gap-2.5">
-              <Logo size={28} />
-              <span className="text-sm font-semibold text-foreground">EasyDine</span>
-            </Link>
-            <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-              Offline-first restaurant management, self-hosted on your own
-              server. Built by EasyDine Infotech Private Limited.
-            </p>
-          </div>
-
-          {columns.map((col) => (
-            <div key={col.title}>
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {col.title}
-              </h3>
-              <ul className="mt-3 flex flex-col gap-2.5">
-                {col.links.map((l) => (
-                  <li key={l.label}>
-                    <a
-                      href={l.href}
-                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+    <footer className="border-t border-border px-4 py-12 sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-10 md:flex-row md:justify-between">
+        <div>
+          <EasyDineMark size={32} />
+          <p className="mt-3 text-sm text-muted-foreground">Dine smarter, not harder.</p>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row">
-          <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} EasyDine Infotech Private Limited. Licensed AGPL-3.0.
-          </p>
-          <p className="text-xs text-muted-foreground">Made in India.</p>
+        <div className="grid gap-8 sm:grid-cols-2 sm:gap-16">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Contact</h2>
+            <ul className="mt-3 space-y-2 text-sm">
+              <li>
+                <a
+                  href={`mailto:${CONTACT_EMAIL}`}
+                  className="inline-flex items-center gap-2 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  <Mail className="size-4" aria-hidden />
+                  {CONTACT_EMAIL}
+                </a>
+              </li>
+              <li>
+                <a
+                  href={INSTAGRAM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  <Instagram className="size-4" aria-hidden />@{INSTAGRAM_HANDLE}
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">EasyDine</h2>
+            <ul className="mt-3 space-y-2 text-sm">
+              {LINKS.map((l) => (
+                <li key={l.href}>
+                  <Link
+                    href={l.href}
+                    className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
+      <p className="mx-auto mt-10 max-w-6xl text-xs text-muted-foreground">© {new Date().getFullYear()} EasyDine</p>
     </footer>
   );
 }

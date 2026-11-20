@@ -1,102 +1,60 @@
-import {
-  ChefHat,
-  GitBranch,
-  Gift,
-  Package,
-  Plug,
-  QrCode,
-  ShieldCheck,
-  UtensilsCrossed,
-  WifiOff,
-} from "lucide-react";
-import { Reveal, RevealGroup, RevealItem } from "@/components/marketing/reveal";
+import { ChefHat, Gift, Languages, Printer, QrCode, Store } from "lucide-react";
 
-const features = [
+const FEATURES = [
   {
-    icon: UtensilsCrossed,
-    title: "Dine-in POS & billing",
-    description:
-      "Modifiers, combos, split & merge bills, tips, gift cards, multi-payment checkout, and tax-inclusive GST pricing done right.",
+    icon: QrCode,
+    title: "QR ordering",
+    body: "Every table gets its own QR card. Guests order from their own phone and each order arrives with its table number.",
   },
   {
     icon: ChefHat,
-    title: "Live Kitchen Display",
-    description:
-      "KOTs auto-routed to the right kitchen station, reprint & priority controls, and per-station prep-time reporting.",
+    title: "Live kitchen display",
+    body: "New orders appear on the kitchen screen as soon as they are placed, oldest first, with guest preferences highlighted.",
   },
   {
-    icon: QrCode,
-    title: "Tables & reservations",
-    description:
-      "Visual floor plan, booking with waitlist, table transfer, and per-table QR codes for a read-only public menu.",
-  },
-  {
-    icon: Package,
-    title: "Inventory & procurement",
-    description:
-      "Ingredients, weighted-average recipe costing, purchase orders, goods receipt with batch/lot tracking, and FIFO waste logging.",
+    icon: Printer,
+    title: "Billing and KOT print",
+    body: "Print KOTs and GST bills on 80mm thermal or A4 printers. Reprint any bill when a guest asks for it.",
   },
   {
     icon: Gift,
-    title: "CRM, loyalty & gift cards",
-    description:
-      "Customer profiles, earn-and-redeem loyalty points, gift card issuance, and full visit history.",
+    title: "Loyalty points",
+    body: "Repeat guests earn points on their bills. You decide how many points a rupee earns and what they are worth.",
   },
   {
-    icon: WifiOff,
-    title: "Offline-first by design",
-    description:
-      "The whole stack runs on one local server. Order-taking, billing, KDS, and printing keep working with the WAN cable unplugged.",
+    icon: Languages,
+    title: "Three languages",
+    body: "The guest menu works in English, Hindi and Marathi. Guests switch language with one tap.",
   },
   {
-    icon: ShieldCheck,
-    title: "RBAC on every action",
-    description:
-      "Granular, individually toggleable permissions and strict multi-tenant isolation — never a hardcoded role check.",
-  },
-  {
-    icon: GitBranch,
-    title: "Open source, no lock-in",
-    description:
-      "AGPL-3.0 licensed. Self-host on Docker, CasaOS/ZimaOS, or a Windows client — your data never has to leave your building.",
-  },
-  {
-    icon: Plug,
-    title: "API & MCP integrations",
-    description:
-      "Connect an MCP client like Claude Desktop with your own permissions, or issue a scoped API key so your website can browse the menu, place orders, and book tables through EasyDine directly.",
+    icon: Store,
+    title: "More than one outlet",
+    body: "Run several branches from one login, each with its own menu, tables and reports.",
   },
 ];
 
 export function Features() {
   return (
-    <section id="features" className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
-      <Reveal className="mx-auto max-w-2xl text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Everything a real dine-in operation needs
+    <section id="features" className="scroll-mt-16 px-4 py-16 sm:px-6 lg:py-24">
+      <div className="mx-auto max-w-6xl">
+        <h2 className="font-heading text-2xl font-bold tracking-[-0.02em] text-foreground sm:text-[32px]">
+          What EasyDine does
         </h2>
-        <p className="mt-4 text-lg text-muted-foreground">
-          Not a retail POS bolted onto a restaurant — purpose-built for
-          dine-in, takeaway, and kitchen operations from day one.
+        <p className="mt-3 max-w-2xl text-base text-muted-foreground">
+          One system from the table to the kitchen to the bill.
         </p>
-      </Reveal>
-
-      <RevealGroup className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {features.map((f) => (
-          <RevealItem
-            key={f.title}
-            className="group rounded-2xl border border-border/60 bg-card p-6 transition-colors hover:border-primary/40"
-          >
-            <div className="inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110">
-              <f.icon className="size-5" />
-            </div>
-            <h3 className="mt-4 text-[15px] font-semibold text-foreground">{f.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {f.description}
-            </p>
-          </RevealItem>
-        ))}
-      </RevealGroup>
+        <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f) => (
+            <li key={f.title} className="rounded-xl border border-border bg-card p-6">
+              <div className="flex items-center gap-3">
+                <f.icon className="size-5 shrink-0 text-primary" aria-hidden />
+                <h3 className="font-heading text-xl font-semibold tracking-[-0.02em] text-foreground">{f.title}</h3>
+              </div>
+              <p className="mt-3 text-base leading-relaxed text-muted-foreground">{f.body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
