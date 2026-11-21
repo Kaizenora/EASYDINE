@@ -44,7 +44,7 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="force-light relative isolate flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10">
+    <main className="force-light relative isolate flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground [color-scheme:light]">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="ed-blob top-[-8%] left-[12%] size-[360px] bg-[#C5E58A]" />
         <div className="ed-blob top-[4%] left-[38%] size-[320px] bg-[#F6DE5C] opacity-60" style={{ animationDelay: "-7s" }} />
