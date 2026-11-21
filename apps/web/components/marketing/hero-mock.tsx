@@ -1,22 +1,28 @@
-"use client";
-
-import { Minus, Plus, ShoppingBag } from "lucide-react";
-import { motion } from "motion/react";
+import { ArrowDownRight, Minus, Plus, ShoppingBag } from "lucide-react";
 import { TableQrCard } from "@/components/brand/table-qr-card";
 import { cn } from "@/lib/utils";
 
 // Sample data only: a made-up restaurant and menu, labelled as a sample
-// under the mock. Prices add up (240 + 2 x 60 = 360).
+// where it is shown. Prices add up (240 + 2 x 60 = 360). Photos are the same
+// food photos the guest menu uses as fallbacks.
+const PHOTO = {
+  starters: "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=500&auto=format&fit=crop&q=80",
+  main: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500&auto=format&fit=crop&q=80",
+  rice: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80",
+  breads: "https://images.unsplash.com/photo-1626074353765-517a681e40be?w=500&auto=format&fit=crop&q=80",
+  drinks: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&auto=format&fit=crop&q=80",
+  dessert: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=500&auto=format&fit=crop&q=80",
+  table: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&auto=format&fit=crop&q=80",
+};
+export const SAMPLE_PHOTOS = PHOTO;
+
 const DISHES = [
-  { name: "Paneer Tikka", price: 240, veg: true, qty: 1 },
-  { name: "Chicken 65", price: 280, veg: false, qty: 0 },
-  { name: "Masala Papad", price: 60, veg: true, qty: 2 },
-  { name: "Tomato Soup", price: 150, veg: true, qty: 0 },
+  { name: "Paneer Tikka", price: 240, veg: true, qty: 1, img: PHOTO.starters },
+  { name: "Tandoori Chicken", price: 320, veg: false, qty: 0, img: PHOTO.breads },
+  { name: "Fresh Lime Soda", price: 60, veg: true, qty: 2, img: PHOTO.drinks },
 ];
 
 const CATEGORIES = ["Starters", "Mains", "Breads", "Drinks"];
-
-const ease = [0.16, 1, 0.3, 1] as const;
 
 function VegMark({ veg }: { veg: boolean }) {
   return (
@@ -24,135 +30,144 @@ function VegMark({ veg }: { veg: boolean }) {
       role="img"
       aria-label={veg ? "Veg" : "Non-veg"}
       className={cn(
-        "inline-flex size-3 shrink-0 items-center justify-center rounded-[2px] border",
+        "inline-flex size-2.5 shrink-0 items-center justify-center rounded-[2px] border bg-white",
         veg ? "border-veg" : "border-nonveg",
       )}
     >
-      <span className={cn("size-1.5 rounded-full", veg ? "bg-veg" : "bg-nonveg")} />
+      <span className={cn("size-1 rounded-full", veg ? "bg-veg" : "bg-nonveg")} />
     </span>
   );
 }
 
-function PhoneMenu() {
+/** Phone frame around a sample of the guest menu, in the guest menu's style. */
+export function PhoneMenu({ className }: { className?: string }) {
   return (
-    <div className="w-[300px] rounded-[36px] border border-foreground/80 bg-foreground p-2 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-      <div className="relative overflow-hidden rounded-[28px] bg-card">
-        {/* header */}
-        <div className="border-b border-border px-4 pt-5 pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-heading text-[15px] font-bold tracking-[-0.02em] text-foreground">
-              Saffron Thali House
-            </p>
-            <div className="flex rounded-full border border-border p-0.5 text-[10px] font-medium">
-              <span className="rounded-full bg-primary px-1.5 py-0.5 text-primary-foreground">EN</span>
-              <span lang="hi" className="px-1.5 py-0.5 text-muted-foreground">हि</span>
-              <span lang="mr" className="px-1.5 py-0.5 text-muted-foreground">मर</span>
-            </div>
+    <div
+      aria-hidden
+      className={cn(
+        "w-[260px] rounded-[40px] bg-[#111] p-2 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.45)] ring-1 ring-black/40",
+        className,
+      )}
+    >
+      <div className="relative overflow-hidden rounded-[32px] bg-[#FAF9F4]">
+        <div className="absolute top-2 left-1/2 h-5 w-20 -translate-x-1/2 rounded-full bg-[#111]" />
+        <div className="px-3.5 pt-9 pb-2">
+          <div className="flex items-center justify-between">
+            <p className="font-heading text-[13px] font-semibold text-[#1A1A1A]">Saffron Thali House</p>
+            <span className="rounded-full border border-[#1A1A1A] px-2 py-0.5 text-[9px]" lang="hi">
+              हिंदी
+            </span>
           </div>
-          <span className="mt-1.5 inline-flex rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
-            Table T4
-          </span>
-          <div className="mt-3 flex gap-1.5 text-[11px] font-medium">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={PHOTO.table} alt="" className="mt-2.5 h-24 w-full rounded-xl object-cover" />
+          <div className="mt-2.5 flex gap-1 text-[9px]">
             {CATEGORIES.map((c, i) => (
               <span
                 key={c}
-                className={cn(
-                  "rounded-full px-2.5 py-1",
-                  i === 0 ? "bg-foreground text-background" : "border border-border text-muted-foreground",
-                )}
+                className={cn("rounded-full px-2 py-1", i === 0 ? "bg-[#1A1A1A] text-white" : "text-[#1A1A1A]")}
               >
                 {c}
               </span>
             ))}
           </div>
+          <div className="mt-1 h-0.5 rounded-full bg-black/5">
+            <div className="h-full w-2/3 rounded-full bg-black/40" />
+          </div>
         </div>
 
-        {/* dishes */}
-        <ul className="divide-y divide-border px-4">
+        <ul className="flex flex-col gap-1.5 px-3.5 pb-14">
           {DISHES.map((d) => (
-            <li key={d.name} className="flex items-center gap-3 py-3">
-              <span
-                aria-hidden
-                className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted font-heading text-xl font-bold text-muted-foreground"
-              >
-                {d.name[0]}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
+            <li key={d.name} className="flex h-[64px] overflow-hidden rounded-lg bg-[#111] text-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={d.img} alt="" className="h-full w-[64px] shrink-0 object-cover" />
+              <div className="flex min-w-0 flex-1 flex-col justify-between px-2.5 py-1.5">
+                <div className="flex items-center gap-1">
                   <VegMark veg={d.veg} />
-                  <p className="truncate text-[13px] font-semibold text-foreground">{d.name}</p>
+                  <p className="truncate text-[10px]">{d.name}</p>
                 </div>
-                <p className="tabular mt-0.5 text-[13px] text-muted-foreground">₹{d.price}</p>
+                <div className="flex items-center justify-between">
+                  <span className="tabular text-[10px]">₹{d.price}</span>
+                  {d.qty > 0 ? (
+                    <span className="flex h-5 items-center rounded-full bg-[#D7F551] text-[#1A1A1A]">
+                      <Minus className="mx-1 size-2.5" />
+                      <span className="tabular text-[9px] font-semibold">{d.qty}</span>
+                      <Plus className="mx-1 size-2.5" />
+                    </span>
+                  ) : (
+                    <span className="flex h-5 items-center rounded-full bg-white px-2 text-[9px] font-semibold text-[#1A1A1A]">
+                      Add
+                    </span>
+                  )}
+                </div>
               </div>
-              {d.qty > 0 ? (
-                <span className="flex h-7 items-center rounded-lg bg-primary text-primary-foreground">
-                  <Minus className="mx-1.5 size-3" aria-hidden />
-                  <span className="tabular w-3 text-center text-xs font-semibold">{d.qty}</span>
-                  <Plus className="mx-1.5 size-3" aria-hidden />
-                </span>
-              ) : (
-                <span className="flex h-7 items-center rounded-lg border border-primary/40 px-3 text-xs font-semibold text-primary">
-                  Add
-                </span>
-              )}
             </li>
           ))}
         </ul>
 
-        {/* cart bar */}
-        <motion.div
-          initial={{ scale: 0.96 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.7, ease }}
-          className="mx-3 mb-3 flex items-center justify-between rounded-xl bg-primary px-3.5 py-2.5 text-primary-foreground"
-        >
-          <span className="text-[12px]">
-            <span className="tabular font-semibold">3 items</span>
-            <span className="opacity-80"> · </span>
-            <span className="tabular font-semibold">₹360</span>
-          </span>
-          <span className="flex items-center gap-1.5 text-[12px] font-semibold">
-            <ShoppingBag className="size-3.5" aria-hidden />
+        <div className="absolute inset-x-3 bottom-3 flex items-center justify-between rounded-full bg-[#111] py-1.5 pr-1.5 pl-3.5 text-white">
+          <span className="tabular text-[10px]">3 items · ₹360</span>
+          <span className="flex items-center gap-1 rounded-full bg-[#D7F551] px-2.5 py-1 text-[9px] font-semibold text-[#1A1A1A]">
+            <ShoppingBag className="size-2.5" />
             View cart
           </span>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
 }
 
-function TableCard() {
-  const props = { url: "https://easydinein.vercel.app", table: "T4", restaurantName: "Saffron Thali House" };
+/**
+ * A small screen for the showcase strip: one dish, the guest menu's black
+ * card style. `tone` sets the screen's own background colour.
+ */
+export function PhoneScreen({
+  restaurant,
+  dish,
+  price,
+  img,
+  tone,
+}: {
+  restaurant: string;
+  dish: string;
+  price: number;
+  img: string;
+  tone: string;
+}) {
   return (
-    <>
-      <TableQrCard {...props} width={168} className="sm:hidden" />
-      <TableQrCard {...props} width={184} className="hidden sm:block" />
-    </>
+    <div aria-hidden className="w-[210px] shrink-0 rounded-[34px] bg-[#111] p-1.5 shadow-[0_25px_50px_-25px_rgba(0,0,0,0.5)] sm:w-[230px]">
+      <div className="relative h-[400px] overflow-hidden rounded-[28px] sm:h-[440px]" style={{ background: tone }}>
+        <div className="absolute top-2 left-1/2 h-4 w-16 -translate-x-1/2 rounded-full bg-[#111]" />
+        <p className="px-4 pt-9 font-heading text-[14px] font-medium text-white">{restaurant}</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={img} alt="" className="mx-3 mt-3 h-[58%] w-[calc(100%-1.5rem)] rounded-2xl object-cover" />
+        <div className="absolute inset-x-3 bottom-3 flex items-end justify-between rounded-2xl bg-black/80 p-3 text-white">
+          <span className="text-[12px] leading-tight">{dish}</span>
+          <span className="tabular text-[12px]">₹{price}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function HeroMock() {
+/** Hero media card: the printed table QR card, with a link to the steps. */
+export function HeroMediaCard() {
+  const props = { url: "https://easydinein.vercel.app", table: "T4", restaurantName: "Saffron Thali House" };
   return (
-    <figure className="relative mx-auto w-fit">
-      <div aria-hidden className="relative flex flex-col items-start sm:block sm:pl-[164px]">
-        <motion.div
-          initial={{ y: 12 }}
-          animate={{ y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2, ease }}
-        >
-          <PhoneMenu />
-        </motion.div>
-        <motion.div
-          initial={{ y: 12 }}
-          animate={{ y: 0 }}
-          transition={{ duration: 0.6, ease }}
-          className="relative z-10 -mt-6 ml-4 sm:absolute sm:-bottom-6 sm:left-0 sm:mt-0 sm:ml-0"
-        >
-          <TableCard />
-        </motion.div>
+    <figure className="group relative w-fit rounded-[28px] border border-white/70 bg-white/70 p-3 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.30)] backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_40px_70px_-30px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-[20px] bg-[#FAF9F4] p-5">
+        <div aria-hidden>
+          <TableQrCard {...props} width={176} />
+        </div>
       </div>
-      <figcaption className="mt-8 text-center text-xs text-muted-foreground">
-        Sample restaurant and menu. The QR opens easydinein.vercel.app.
+      <figcaption>
+        <a
+          href="#how-it-works"
+          className="mt-3 flex items-center justify-center gap-1.5 rounded-full py-2 text-[15px] text-foreground transition-colors hover:bg-black/[0.04]"
+        >
+          See how it works
+          <ArrowDownRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:translate-y-0.5" aria-hidden />
+        </a>
+        <p className="pb-1 text-center text-[11px] text-muted-foreground">Sample table card. The QR opens easydinein.vercel.app.</p>
       </figcaption>
     </figure>
   );

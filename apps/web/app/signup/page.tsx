@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, type RegisterDto } from "@easydine/types";
-import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -21,7 +20,6 @@ export default function SignupPage() {
   const router = useRouter();
   const register = useRegister();
   const { note, clear, toast } = useNoteToast();
-  const prefersReducedMotion = useReducedMotion();
   // New restaurants wait for platform approval: no session until then.
   const [pending, setPending] = useState<string | null>(null);
   const {
@@ -46,17 +44,12 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(50%_50%_at_50%_0%,color-mix(in_oklch,var(--primary),transparent_90%),transparent)]"
-      />
-      <motion.div
-        initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-sm"
-      >
+    <main className="force-light relative isolate flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="ed-blob top-[-8%] left-[12%] size-[360px] bg-[#C5E58A]" />
+        <div className="ed-blob top-[4%] left-[38%] size-[320px] bg-[#F6DE5C] opacity-60" style={{ animationDelay: "-7s" }} />
+      </div>
+      <div className="ed-enter w-full max-w-md rounded-[32px] border border-white/70 bg-white/70 p-7 shadow-[0_30px_60px_-35px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:p-9">
         <div className="mb-10 flex flex-col items-center gap-2 text-center">
           <Link href="/" aria-label="EasyDine home">
             <Logo size={40} />
@@ -135,7 +128,7 @@ export default function SignupPage() {
           </div>
 
           <StatusNote note={note} onClear={clear} />
-          <Button type="submit" className="mt-2 h-11" disabled={register.isPending}>
+          <Button type="submit" className="mt-2 h-12 rounded-full text-base" disabled={register.isPending}>
             {register.isPending ? "Creating your account…" : "Create account"}
           </Button>
         </form>
@@ -147,7 +140,7 @@ export default function SignupPage() {
             Sign in
           </Link>
         </p>
-      </motion.div>
+      </div>
     </main>
   );
 }

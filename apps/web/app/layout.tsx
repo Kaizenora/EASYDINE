@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Sans_Devanagari, Space_Grotesk } from "next/font/google";
+import { Inter, Noto_Sans_Devanagari, Poppins } from "next/font/google";
 import { AppProviders } from "@/components/providers/app-providers";
 import "./globals.css";
 
@@ -9,15 +9,16 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const spaceGrotesk = Space_Grotesk({
-  weight: ["600", "700"],
+// Headings: geometric sans. 300 for the oversized light hero headlines.
+const poppins = Poppins({
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-space-grotesk",
+  variable: "--font-poppins",
 });
 
 // Hindi + Marathi. Sits after the Latin face in every stack, so Devanagari
-// glyphs fall through to it while Latin text keeps Inter / Space Grotesk.
+// glyphs fall through to it while Latin text keeps Inter / Poppins.
 const devanagari = Noto_Sans_Devanagari({
   weight: ["400", "500", "600", "700"],
   subsets: ["devanagari"],
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0F766E" },
+    { media: "(prefers-color-scheme: light)", color: "#FAF9F4" },
     { media: "(prefers-color-scheme: dark)", color: "#141210" },
   ],
   // Lets the bottom nav / sheets sit inside the notch + home-indicator safe areas.
@@ -56,7 +57,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${spaceGrotesk.variable} ${devanagari.variable} h-full antialiased`}
+      className={`${inter.variable} ${poppins.variable} ${devanagari.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans">

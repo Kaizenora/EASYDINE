@@ -1,66 +1,59 @@
-import { Instagram, Mail } from "lucide-react";
 import Link from "next/link";
 import { EasyDineWordmark } from "@/components/brand/easydine-logo";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_URL } from "@/components/marketing/links";
 
-const LINKS = [
+const SITE_MAP = [
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#features", label: "Features" },
   { href: "/login", label: "Sign in" },
   { href: "/docs/accessibility", label: "Accessibility" },
   { href: "/docs/compliance-india", label: "India compliance notes" },
 ];
 
+const linkClass = "text-[14px] font-light text-foreground/75 transition-colors duration-200 hover:text-foreground";
+
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-border px-4 py-12 sm:px-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 md:flex-row md:justify-between">
-        <div>
-          <EasyDineWordmark height={24} />
-          <p className="mt-3 text-sm text-muted-foreground">Dine smarter, not harder.</p>
+    <footer className="mt-auto">
+      <div className="mx-auto flex max-w-4xl flex-col gap-12 px-6 py-16 sm:flex-row sm:justify-between">
+        <div className="max-w-xs">
+          <EasyDineWordmark height={26} />
+          <p className="mt-4 text-[16px] leading-snug text-foreground/85">Dine smarter, not harder.</p>
         </div>
 
-        <div className="grid gap-8 sm:grid-cols-2 sm:gap-16">
+        <div className="grid grid-cols-2 gap-12 sm:gap-16">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Contact</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              <li>
-                <a
-                  href={`mailto:${CONTACT_EMAIL}`}
-                  className="inline-flex items-center gap-2 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  <Mail className="size-4" aria-hidden />
-                  {CONTACT_EMAIL}
-                </a>
-              </li>
-              <li>
-                <a
-                  href={INSTAGRAM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  <Instagram className="size-4" aria-hidden />@{INSTAGRAM_HANDLE}
-                </a>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">EasyDine</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {LINKS.map((l) => (
+            <h2 className="font-heading text-[15px] font-medium text-foreground">Site map</h2>
+            <ul className="mt-4 space-y-3">
+              {SITE_MAP.map((l) => (
                 <li key={l.href}>
-                  <Link
-                    href={l.href}
-                    className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                  >
+                  <Link href={l.href} className={linkClass}>
                     {l.label}
                   </Link>
                 </li>
               ))}
             </ul>
           </div>
+          <div>
+            <h2 className="font-heading text-[15px] font-medium text-foreground">Socials</h2>
+            <ul className="mt-4 space-y-3">
+              <li>
+                <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                  Instagram <span className="text-foreground/50">@{INSTAGRAM_HANDLE}</span>
+                </a>
+              </li>
+              <li>
+                <a href={`mailto:${CONTACT_EMAIL}`} className={`${linkClass} break-all`}>
+                  {CONTACT_EMAIL}
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
-      <p className="mx-auto mt-10 max-w-6xl text-xs text-muted-foreground">© {new Date().getFullYear()} EasyDine</p>
+      <div className="border-t border-foreground/80">
+        <p className="px-6 py-4 text-center text-[13px] text-foreground/80">© {new Date().getFullYear()} EasyDine</p>
+      </div>
     </footer>
   );
 }

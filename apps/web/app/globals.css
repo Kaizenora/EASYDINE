@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), "Inter", var(--font-devanagari), "Noto Sans Devanagari", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --font-heading: var(--font-space-grotesk), "Space Grotesk", var(--font-devanagari), "Noto Sans Devanagari", var(--font-inter), system-ui, sans-serif;
+  --font-heading: var(--font-poppins), "Poppins", var(--font-devanagari), "Noto Sans Devanagari", var(--font-inter), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -57,31 +57,45 @@
   --color-status-cleaning: var(--status-cleaning);
   --color-status-bill: var(--status-bill);
   --color-veg: var(--success);
+  --color-lime: var(--lime);
+  --color-lime-hover: var(--lime-hover);
+  --color-lime-foreground: var(--lime-foreground);
+  --color-sage: var(--sage);
+  --color-gold: var(--gold);
+  --color-ink: var(--ink);
   --color-nonveg: var(--destructive);
 }
 
 :root,
 .force-light {
-  /* EasyDine: teal on cream. See DESIGN.md. --brand-* are used by the
-     guest QR page, Powered-by and logo components. */
+  /* EasyDine editorial: ink on warm cream, lime used sparingly for the main
+     action and headline highlights. Teal survives in the logo artwork and as
+     the "info"/occupied hue. --brand-* are used by the guest QR page,
+     Powered-by and logo components. */
   --brand-teal: #0F766E;
-  --brand-cream: #FBFAF7;
-  --brand-charcoal: #1C1917;
-  --background: #FBFAF7;
-  --foreground: #1C1917;
+  --brand-cream: #FAF9F4;
+  --brand-charcoal: #1A1A1A;
+  --ink: #1A1A1A;
+  --lime: #D7F551;
+  --lime-hover: #C9EB2E;
+  --lime-foreground: #1A1A1A;
+  --sage: #DCEBD3;
+  --gold: #F4C534;
+  --background: #FAF9F4;
+  --foreground: #1A1A1A;
   --card: #FFFFFF;
-  --card-foreground: #1C1917;
+  --card-foreground: #1A1A1A;
   --popover: #FFFFFF;
-  --popover-foreground: #1C1917;
-  --primary: #0F766E;
-  --primary-hover: #115E59;
+  --popover-foreground: #1A1A1A;
+  --primary: #1A1A1A;
+  --primary-hover: #3A3A3A;
   --primary-foreground: #FFFFFF;
-  --secondary: #F5F4F0;
-  --secondary-foreground: #1C1917;
-  --muted: #F5F4F0;
-  --muted-foreground: #57534E;
-  --accent: #F0FDFA;
-  --accent-foreground: #115E59;
+  --secondary: #F2F1EA;
+  --secondary-foreground: #1A1A1A;
+  --muted: #F2F1EA;
+  --muted-foreground: #5F5D57;
+  --accent: #F3FAD6;
+  --accent-foreground: #3B4A08;
   --destructive: #B91C1C;
   --success: #15803D;
   --warning: #B45309;
@@ -91,9 +105,9 @@
   --status-occupied: #0F766E;
   --status-cleaning: #B45309;
   --status-bill: #B91C1C;
-  --border: #E7E5E0;
-  --input: #D6D3CD;
-  --ring: #0F766E;
+  --border: #E8E6DE;
+  --input: #D6D3CA;
+  --ring: #1A1A1A;
   --chart-1: #0F766E;
   --chart-2: #15803D;
   --chart-3: #D97706;
@@ -101,13 +115,13 @@
   --chart-5: #A8A29E;
   --radius: 0.75rem;
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #1C1917;
-  --sidebar-primary: #0F766E;
+  --sidebar-foreground: #1A1A1A;
+  --sidebar-primary: #1A1A1A;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F0FDFA;
-  --sidebar-accent-foreground: #115E59;
-  --sidebar-border: #E7E5E0;
-  --sidebar-ring: #0F766E;
+  --sidebar-accent: #F3FAD6;
+  --sidebar-accent-foreground: #3B4A08;
+  --sidebar-border: #E8E6DE;
+  --sidebar-ring: #1A1A1A;
 }
 
 .dark {
@@ -115,15 +129,21 @@
   --brand-teal: #2DD4BF;
   --brand-cream: #F5F4F0;
   --brand-charcoal: #141210;
+  --ink: #1A1A1A;
+  --lime: #D7F551;
+  --lime-hover: #E3FA7A;
+  --lime-foreground: #1A1A1A;
+  --sage: #1F2A1C;
+  --gold: #F4C534;
   --background: #141210;
   --foreground: #F5F4F0;
   --card: #1C1A17;
   --card-foreground: #F5F4F0;
   --popover: #1C1A17;
   --popover-foreground: #F5F4F0;
-  --primary: #2DD4BF;
-  --primary-hover: #5EEAD4;
-  --primary-foreground: #042F2E;
+  --primary: #D7F551;
+  --primary-hover: #E3FA7A;
+  --primary-foreground: #1A1A1A;
   --secondary: #262420;
   --secondary-foreground: #F5F4F0;
   --muted: #262420;
@@ -141,7 +161,7 @@
   --status-bill: #F87171;
   --border: #2E2B27;
   --input: #3A3631;
-  --ring: #2DD4BF;
+  --ring: #D7F551;
   --chart-1: #2DD4BF;
   --chart-2: #4ADE80;
   --chart-3: #FBBF24;
@@ -149,12 +169,12 @@
   --chart-5: #57534E;
   --sidebar: #181613;
   --sidebar-foreground: #F5F4F0;
-  --sidebar-primary: #2DD4BF;
-  --sidebar-primary-foreground: #042F2E;
+  --sidebar-primary: #D7F551;
+  --sidebar-primary-foreground: #1A1A1A;
   --sidebar-accent: #10302D;
   --sidebar-accent-foreground: #99F6E4;
   --sidebar-border: #2E2B27;
-  --sidebar-ring: #2DD4BF;
+  --sidebar-ring: #D7F551;
 }
 
 /* Customer kiosk (/kiosk/*): always the light palette, whatever the device's
@@ -164,21 +184,30 @@
 .kiosk-root {
   color-scheme: light;
   /* Always the light EasyDine palette, whatever the device setting. */
-  --background: #FBFAF7;
-  --foreground: #1C1917;
+  --brand-teal: #0F766E;
+  --brand-cream: #FAF9F4;
+  --brand-charcoal: #1A1A1A;
+  --ink: #1A1A1A;
+  --lime: #D7F551;
+  --lime-hover: #C9EB2E;
+  --lime-foreground: #1A1A1A;
+  --sage: #DCEBD3;
+  --gold: #F4C534;
+  --background: #FAF9F4;
+  --foreground: #1A1A1A;
   --card: #FFFFFF;
-  --card-foreground: #1C1917;
+  --card-foreground: #1A1A1A;
   --popover: #FFFFFF;
-  --popover-foreground: #1C1917;
-  --primary: #0F766E;
-  --primary-hover: #115E59;
+  --popover-foreground: #1A1A1A;
+  --primary: #1A1A1A;
+  --primary-hover: #3A3A3A;
   --primary-foreground: #FFFFFF;
-  --secondary: #F5F4F0;
-  --secondary-foreground: #1C1917;
-  --muted: #F5F4F0;
-  --muted-foreground: #57534E;
-  --accent: #F0FDFA;
-  --accent-foreground: #115E59;
+  --secondary: #F2F1EA;
+  --secondary-foreground: #1A1A1A;
+  --muted: #F2F1EA;
+  --muted-foreground: #5F5D57;
+  --accent: #F3FAD6;
+  --accent-foreground: #3B4A08;
   --destructive: #B91C1C;
   --success: #15803D;
   --warning: #B45309;
@@ -188,9 +217,9 @@
   --status-occupied: #0F766E;
   --status-cleaning: #B45309;
   --status-bill: #B91C1C;
-  --border: #E7E5E0;
-  --input: #D6D3CD;
-  --ring: #0F766E;
+  --border: #E8E6DE;
+  --input: #D6D3CA;
+  --ring: #1A1A1A;
   --chart-1: #0F766E;
   --chart-2: #15803D;
   --chart-3: #D97706;
@@ -198,13 +227,13 @@
   --chart-5: #A8A29E;
   --radius: 0.75rem;
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #1C1917;
-  --sidebar-primary: #0F766E;
+  --sidebar-foreground: #1A1A1A;
+  --sidebar-primary: #1A1A1A;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F0FDFA;
-  --sidebar-accent-foreground: #115E59;
-  --sidebar-border: #E7E5E0;
-  --sidebar-ring: #0F766E;
+  --sidebar-accent: #F3FAD6;
+  --sidebar-accent-foreground: #3B4A08;
+  --sidebar-border: #E8E6DE;
+  --sidebar-ring: #1A1A1A;
 }
 
 /* The dashboard's coarse-pointer rule above sets a 44px floor on every
@@ -231,9 +260,9 @@
     @apply bg-background text-foreground;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-space-grotesk), "Space Grotesk", var(--font-devanagari), "Noto Sans Devanagari", var(--font-inter), system-ui, sans-serif;
+    font-family: var(--font-poppins), "Poppins", var(--font-devanagari), "Noto Sans Devanagari", var(--font-inter), system-ui, sans-serif;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
   }
   html {
     @apply font-sans;
@@ -300,8 +329,8 @@
   --shadow-card-hover: 0 1px 2px rgb(0 0 0 / 0.06);
   /* One soft shadow only (DESIGN.md): floating layers use the same value. */
   --shadow-float: 0 1px 2px rgb(0 0 0 / 0.06);
-  --motion-quick: 120ms;
-  --motion-standard: 180ms;
+  --motion-quick: 150ms;
+  --motion-standard: 240ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 .dark {
@@ -324,7 +353,7 @@
     line-height: 1.6;
   }
   ::selection {
-    background: rgb(15 118 110 / 0.18);
+    background: rgb(215 245 81 / 0.55);
   }
   :focus-visible {
     outline: 2px solid var(--ring);
@@ -369,16 +398,20 @@
     box-shadow: var(--shadow-card-hover);
     border-color: var(--input);
   }
-  [data-slot="button"][data-variant="default"],
-  button[data-slot="button"].bg-primary {
-    /* Flat brand fill; hover/press change colour only. */
+  [data-slot="button"][data-variant="default"] {
+    /* Primary action: flat lime pill-ish fill with ink text. */
     background-image: none;
-    background-color: var(--primary);
+    background-color: var(--lime);
+    color: var(--lime-foreground);
     box-shadow: none;
-    transition: background-color var(--motion-quick) var(--ease-standard);
+    transition: background-color var(--motion-standard) var(--ease-standard), transform var(--motion-standard) var(--ease-standard);
   }
   [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
-    background-color: var(--primary-hover);
+    background-color: var(--lime-hover);
+  }
+  button[data-slot="button"].bg-primary {
+    background-image: none;
+    box-shadow: none;
   }
   table, .tabular {
     font-variant-numeric: tabular-nums;
@@ -409,6 +442,88 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Editorial motion kit (plain CSS, no animation library). Used by the public
+   pages and the guest menu; see components/marketing/reveal.tsx.
+   --------------------------------------------------------------------------- */
+@keyframes ed-fade-up {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ed-marquee {
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@keyframes ed-blob {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(4%, -6%, 0) scale(1.08); }
+  100% { transform: translate3d(-5%, 4%, 0) scale(0.96); }
+}
+
+@layer components {
+  /* Page-load entrance: add .ed-enter and an optional --delay. */
+  .ed-enter {
+    animation: ed-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--delay, 0ms);
+  }
+  /* Scroll reveal: Reveal toggles .is-visible once the block enters view. */
+  .ed-reveal {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+    transition:
+      opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: var(--delay, 0ms);
+  }
+  .ed-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  /* Lime chip behind a headline word. */
+  .ed-chip {
+    background: var(--lime);
+    color: var(--lime-foreground);
+    border-radius: 0.32em;
+    padding: 0 0.16em 0.04em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    box-shadow: 0 6px 18px -8px rgb(160 200 20 / 0.55);
+  }
+  /* Soft pastel blobs floating behind hero content. */
+  .ed-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(70px);
+    opacity: 0.75;
+    pointer-events: none;
+    animation: ed-blob 16s ease-in-out infinite alternate;
+  }
+  .ed-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: ed-marquee var(--marquee-duration, 45s) linear infinite;
+  }
+  .ed-marquee:hover .ed-marquee-track {
+    animation-play-state: paused;
+  }
+  .ed-no-scrollbar {
+    scrollbar-width: none;
+  }
+  .ed-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ed-reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .ed-marquee-track,
+  .ed-blob {
+    animation: none !important;
   }
 }
 
