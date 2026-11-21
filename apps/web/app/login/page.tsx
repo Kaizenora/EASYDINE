@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginDto } from "@easydine/types";
-import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -33,7 +32,6 @@ function LoginForm() {
   const [needsCode, setNeedsCode] = useState(false);
   // Shown inline under the form (a toast vanishes before it can be read).
   const [error, setError] = useState<string | null>(null);
-  const prefersReducedMotion = useReducedMotion();
   // A restaurant that is not approved (from a sign-in attempt, or redirected
   // here from the dashboard) sees the approval notice, never the app.
   const fromUrl = useSearchParams().get("account");
@@ -82,17 +80,12 @@ function LoginForm() {
   };
 
   return (
-    <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-background px-4">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(50%_50%_at_50%_0%,color-mix(in_oklch,var(--primary),transparent_90%),transparent)]"
-      />
-      <motion.div
-        initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-sm"
-      >
+    <main className="force-light relative isolate flex flex-1 items-center justify-center overflow-hidden bg-background px-4 py-10">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="ed-blob top-[-8%] left-[12%] size-[360px] bg-[#C5E58A]" />
+        <div className="ed-blob top-[4%] left-[38%] size-[320px] bg-[#F6DE5C] opacity-60" style={{ animationDelay: "-7s" }} />
+      </div>
+      <div className="ed-enter w-full max-w-md rounded-[32px] border border-white/70 bg-white/70 p-7 shadow-[0_30px_60px_-35px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:p-9">
         <div className="mb-10 flex flex-col items-center gap-2 text-center">
           <Link href="/" aria-label="EasyDine home">
             <Logo size={40} />
@@ -173,7 +166,7 @@ function LoginForm() {
             </div>
           )}
 
-          <Button type="submit" className="mt-2 h-12 text-base" disabled={login.isPending}>
+          <Button type="submit" className="mt-2 h-12 rounded-full text-base" disabled={login.isPending}>
             {login.isPending ? "Signing in…" : "Sign in"}
           </Button>
         </form>
@@ -184,7 +177,7 @@ function LoginForm() {
             Create an account
           </Link>
         </p>
-      </motion.div>
+      </div>
     </main>
   );
 }

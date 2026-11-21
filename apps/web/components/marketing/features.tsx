@@ -1,4 +1,6 @@
 import { ChefHat, Gift, Languages, Printer, QrCode, Store } from "lucide-react";
+import { PhoneMenu } from "@/components/marketing/hero-mock";
+import { Reveal } from "@/components/marketing/reveal";
 
 const FEATURES = [
   {
@@ -33,27 +35,51 @@ const FEATURES = [
   },
 ];
 
-export function Features() {
+function Feature({ f, delay }: { f: (typeof FEATURES)[number]; delay: number }) {
   return (
-    <section id="features" className="scroll-mt-16 px-4 py-16 sm:px-6 lg:py-24">
+    <li>
+      <Reveal delay={delay}>
+        <div className="group rounded-[24px] px-6 py-6 text-center transition-all duration-300 hover:-translate-y-1 hover:bg-[#C9E3BC]/70">
+          <f.icon className="mx-auto size-9 text-foreground" strokeWidth={1.25} aria-hidden />
+          <h3 className="mt-4 font-heading text-[20px] font-normal tracking-[-0.01em] text-foreground">{f.title}</h3>
+          <p className="mx-auto mt-2 max-w-[34ch] text-[15px] leading-relaxed font-light text-foreground/75">{f.body}</p>
+        </div>
+      </Reveal>
+    </li>
+  );
+}
+
+export function Features() {
+  const left = FEATURES.slice(0, 3);
+  const right = FEATURES.slice(3);
+  return (
+    <section id="features" className="scroll-mt-28 bg-sage px-5 py-24 sm:px-8 lg:py-32">
       <div className="mx-auto max-w-6xl">
-        <h2 className="font-heading text-2xl font-bold tracking-[-0.02em] text-foreground sm:text-[32px]">
-          What EasyDine does
-        </h2>
-        <p className="mt-3 max-w-2xl text-base text-muted-foreground">
-          One system from the table to the kitchen to the bill.
-        </p>
-        <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <li key={f.title} className="rounded-xl border border-border bg-card p-6">
-              <div className="flex items-center gap-3">
-                <f.icon className="size-5 shrink-0 text-primary" aria-hidden />
-                <h3 className="font-heading text-xl font-semibold tracking-[-0.02em] text-foreground">{f.title}</h3>
-              </div>
-              <p className="mt-3 text-base leading-relaxed text-muted-foreground">{f.body}</p>
-            </li>
-          ))}
-        </ul>
+        <Reveal>
+          <h2 className="text-center font-heading text-[34px] leading-tight font-light tracking-[-0.02em] text-foreground sm:text-[44px]">
+            What EasyDine does
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-center text-[16px] font-light text-foreground/70">
+            One system from the table to the kitchen to the bill.
+          </p>
+        </Reveal>
+
+        <div className="mt-16 grid items-center gap-6 lg:grid-cols-[1fr_auto_1fr] lg:gap-10">
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            {left.map((f, i) => (
+              <Feature key={f.title} f={f} delay={i * 100} />
+            ))}
+          </ul>
+          <Reveal className="order-first mx-auto lg:order-none" delay={150}>
+            <PhoneMenu className="transition-transform duration-500 hover:-translate-y-2 hover:rotate-[-1deg]" />
+            <p className="mt-5 text-center text-xs text-foreground/55">Sample restaurant and menu.</p>
+          </Reveal>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            {right.map((f, i) => (
+              <Feature key={f.title} f={f} delay={i * 100 + 50} />
+            ))}
+          </ul>
+        </div>
       </div>
     </section>
   );

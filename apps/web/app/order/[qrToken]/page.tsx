@@ -2,7 +2,7 @@
 
 import { PoweredByEasyDine } from "@/components/order/powered-by";
 import { VoiceOrder, type VoiceAddLine } from "@/components/order/voice-order";
-import { useI18n } from "@/lib/i18n/context";
+import { LOCALES, useI18n } from "@/lib/i18n/context";
 import { GamesDialog, getStoredGameSettings } from "@/components/order/games";
 import { RECOGNITION_LANG, type VoiceMenuItem } from "@/lib/voice-order";
 import {
@@ -10,7 +10,9 @@ import {
   BellRing,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock,
+  Menu as MenuIcon,
   Mic,
   Minus,
   PenTool,
@@ -247,7 +249,7 @@ export default function LuxuryCustomerMenu({
   const [customizingItem, setCustomizingItem] = useState<{ item: PublicMenuItem; categoryName: string } | null>(null);
   const [selectedModifierIds, setSelectedModifierIds] = useState<string[]>([]);
   // The app's language drives speech recognition: en -> en-IN, hi -> hi-IN, mr -> mr-IN.
-  const { locale } = useI18n();
+  const { locale, setLocale } = useI18n();
   const [cookingNote, setCookingNote] = useState("");
   const [currentRequestId, setCurrentRequestId] = useState<string>(() => "req_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
   const [customizingQty, setCustomizingQty] = useState(1);
@@ -840,6 +842,88 @@ export default function LuxuryCustomerMenu({
       .filter((cat) => cat.items.length > 0);
   }, [data?.categories, dietFilter, searchQuery]);
 
+  // ---- Menu screen presentation: search toggle, photo carousel, category tabs ----
+  const [showSearch, setShowSearch] = useState(false);
+  const [activeCatId, setActiveCatId] = useState<string | null>(null);
+  const [slide, setSlide] = useState(0);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabsBar, setTabsBar] = useState({ width: 100, left: 0 });
+
+  // Up to five distinct dish photos for the top carousel (real uploads first).
+  const heroPhotos = useMemo(() => {
+    const items = (data?.categories ?? []).flatMap((c) => c.items.map((item) => ({ item, cat: c.name })));
+    const uploaded = items.filter(({ item }) => item.imageUrl && item.imageUrl.trim() && !item.imageUrl.includes("null"));
+    const source = uploaded.length >= 2 ? uploaded : items;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const { item, cat } of source) {
+      const src = getDishImage(item, cat);
+      if (!seen.has(src)) {
+        seen.add(src);
+        out.push(src);
+      }
+      if (out.length >= 5) break;
+    }
+    return out;
+  }, [data?.categories]);
+
+  // Auto-advance the carousel every 4 s.
+  useEffect(() => {
+    if (heroPhotos.length < 2 || viewMode !== "MENU") return;
+    const t = setInterval(() => setSlide((s) => (s + 1) % heroPhotos.length), 4000);
+    return () => clearInterval(t);
+  }, [heroPhotos.length, viewMode]);
+
+  // Thin progress bar under the category tabs: how much of the strip is in view.
+  const updateTabsBar = useCallback(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const { scrollWidth, clientWidth, scrollLeft } = el;
+    if (scrollWidth <= clientWidth + 1) {
+      setTabsBar({ width: 100, left: 0 });
+      return;
+    }
+    setTabsBar({ width: (clientWidth / scrollWidth) * 100, left: (scrollLeft / scrollWidth) * 100 });
+  }, []);
+
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => updateTabsBar());
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [updateTabsBar, viewMode, sessionVerified]);
+
+  // Scroll spy: the tab for the section under the sticky bar is active.
+  useEffect(() => {
+    if (viewMode !== "MENU") return;
+    const ids = filteredCategories.map((c) => c.id);
+    const onScroll = () => {
+      let current: string | null = null;
+      for (const id of ids) {
+        const el = document.getElementById(`cat-${id}`);
+        if (el && el.getBoundingClientRect().top <= 180) current = id;
+      }
+      setActiveCatId(current);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [filteredCategories, viewMode]);
+
+  // Keep the active tab centred in the strip.
+  useEffect(() => {
+    const strip = tabsRef.current;
+    if (!strip || !activeCatId) return;
+    const tab = strip.querySelector<HTMLElement>(`[data-cat="${activeCatId}"]`);
+    if (!tab) return;
+    strip.scrollTo({ left: tab.offsetLeft - strip.clientWidth / 2 + tab.clientWidth / 2, behavior: "smooth" });
+  }, [activeCatId]);
+
+  const scrollToCategory = (id: string) => {
+    document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Loading or Error screen
   if (error) {
     // 404 = this QR code does not match any table (wrong, replaced or rotated
@@ -984,7 +1068,7 @@ export default function LuxuryCustomerMenu({
     const totalAmount = activeOrder.totalAmount || "780";
 
     return (
-      <div className="relative min-h-screen bg-background pb-32 font-sans text-foreground px-4 pt-6">
+      <div className="relative mx-auto min-h-screen w-full max-w-[520px] bg-background pb-32 font-sans text-foreground px-5 pt-7">
         {/* Games Arcade Banner for Active Order */}
         {activeOrder && activeOrder.paymentStatus !== "PAID" && (
           <div className="mb-4 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 p-3.5 shadow-sm">
@@ -1364,12 +1448,15 @@ export default function LuxuryCustomerMenu({
     );
   }
 
-  // 3. MAIN MENU SCREEN (Image 3: Dark Luxury Theme with Gold Steppers & Mic)
+  // 3. MAIN MENU SCREEN: narrow editorial column, photo carousel, pill tabs, black dish cards.
+  const LANG_SHORT: Record<string, string> = { en: "EN", hi: "हि", mr: "मर" };
+  const currentCatId = activeCatId ?? filteredCategories[0]?.id ?? null;
+  const slideIndex = heroPhotos.length ? slide % heroPhotos.length : 0;
   return (
-    <div className="relative min-h-screen bg-background pb-32 font-sans text-foreground">
+    <div className="relative mx-auto min-h-screen w-full max-w-[520px] bg-background pb-36 font-sans text-foreground">
       {/* C8: Offline banner */}
       {isOffline && (
-        <div className="fixed top-0 inset-x-0 z-50 bg-red-600 px-4 py-2 text-center text-xs font-bold text-foreground">
+        <div className="fixed top-0 inset-x-0 z-50 bg-red-600 px-4 py-2 text-center text-xs font-bold text-white">
           ⚠ You are offline — ordering is paused. Check your Wi-Fi.
         </div>
       )}
@@ -1379,65 +1466,118 @@ export default function LuxuryCustomerMenu({
         </div>
       )}
 
-      {/* Top Header (Image 3 match) */}
-      <header className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 backdrop-blur-md">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-foreground">
+      {/* Header: restaurant, search, categories menu, language pill */}
+      <header className="px-5 pt-7 pb-2">
+        <div className="ed-enter flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate font-heading text-[26px] leading-tight font-normal tracking-[-0.02em] text-foreground">
               {(data as any)?.restaurantName || data?.branchName || "EasyDine"}
             </h1>
-            <div className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-0.5 text-xs font-semibold text-muted-foreground border border-border">
-              <span className="text-primary font-bold">{isTakeaway ? "Takeaway" : (data?.tableName || "Table")}</span>
-              <span>·</span>
-              <span>{guestName}</span>
+            <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="rounded-full bg-lime px-2.5 py-0.5 font-medium text-lime-foreground">
+                {isTakeaway ? "Takeaway" : (data?.tableName || "Table")}
+              </span>
+              {guestName && <span>· {guestName}</span>}
             </div>
             {data?.loyalty?.enabled && (
-              <div className="mt-1.5">
+              <div className="mt-2">
                 <PointsChip qrToken={qrToken} phone={guestPhone} loyalty={data.loyalty} />
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {activeOrder && (
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <div className="flex items-center">
               <button
                 type="button"
-                onClick={() => setViewMode("TRACKING")}
-                className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground hover:bg-secondary cursor-pointer"
+                aria-label="Search dishes"
+                aria-expanded={showSearch}
+                onClick={() => setShowSearch((v) => !v)}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-black/5"
               >
-                <span>Live Order</span>
+                <Search className="h-[22px] w-[22px]" strokeWidth={2} />
               </button>
-            )}
-            {activeOrder && (
               <button
                 type="button"
-                onClick={() => setShowGamesModal(true)}
-                className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
+                aria-label="All categories"
+                onClick={() => setShowCategorySheet(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors duration-200 hover:bg-black/5"
               >
-                <span>🎮 Games</span>
+                <MenuIcon className="h-6 w-6" strokeWidth={1.75} />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowWaiterModal(true)}
-              className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground shadow-md hover:bg-[var(--primary-hover)] transition-all"
-            >
-              <Phone className="h-3.5 w-3.5" />
-              Call waiter
-            </button>
+            </div>
+            <div role="group" aria-label="Language" className="flex rounded-full border border-foreground p-0.5 text-[12px]">
+              {LOCALES.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  lang={l}
+                  aria-pressed={locale === l}
+                  onClick={() => setLocale(l)}
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 transition-colors duration-200",
+                    locale === l ? "bg-foreground text-background" : "text-foreground hover:bg-black/5"
+                  )}
+                >
+                  {LANG_SHORT[l] ?? l.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Search bar with voice mic (Image 3 match) */}
-        <div className="relative mt-3">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder='Search "paneer"'
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 w-full rounded-xl border border-border bg-card/90 pl-10 pr-4 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all"
-          />
+        {(showSearch || searchQuery) && (
+          <div className="ed-enter relative mt-4">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              autoFocus={showSearch}
+              placeholder='Search "paneer"'
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-11 w-full rounded-full border border-border bg-white pl-11 pr-10 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-foreground focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Service actions */}
+        <div className="ed-enter mt-4 flex flex-wrap items-center gap-2" style={{ ["--delay" as string]: "80ms" }}>
+          <button
+            type="button"
+            onClick={() => setShowWaiterModal(true)}
+            className="flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background transition-all duration-200 hover:-translate-y-px hover:bg-foreground/85"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            Call waiter
+          </button>
+          {activeOrder && (
+            <button
+              type="button"
+              onClick={() => setViewMode("TRACKING")}
+              className="flex items-center gap-1 rounded-full border border-foreground px-4 py-2 text-xs font-medium text-foreground transition-colors duration-200 hover:bg-foreground hover:text-background cursor-pointer"
+            >
+              <span>Live Order</span>
+            </button>
+          )}
+          {activeOrder && (
+            <button
+              type="button"
+              onClick={() => setShowGamesModal(true)}
+              className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-700 hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
+            >
+              <span>🎮 Games</span>
+            </button>
+          )}
         </div>
 
         {/* Voice ordering: speak a whole order, review it, then add to cart */}
@@ -1450,179 +1590,238 @@ export default function LuxuryCustomerMenu({
             if (hit) openItemOptions(hit.item, hit.categoryName);
           }}
         />
-
-        {/* Filter chips: [🟢 Veg], Popular, Spicy, Breads (Image 3 match) */}
-        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
-          <button
-            onClick={() => setDietFilter(dietFilter === "VEG" ? "ALL" : "VEG")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold transition-all border",
-              dietFilter === "VEG"
-                ? "border-emerald-500 bg-success/10 text-success"
-                : "border-border bg-card text-foreground/85 hover:text-foreground"
-            )}
-          >
-            <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-emerald-400 p-[1.5px]">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            </span>
-            Veg
-          </button>
-
-          <button
-            onClick={() => setDietFilter(dietFilter === "POPULAR" ? "ALL" : "POPULAR")}
-            className={cn(
-              "rounded-full px-3.5 py-1 font-semibold transition-all border",
-              dietFilter === "POPULAR"
-                ? "border-primary bg-primary/15 text-primary"
-                : "border-border bg-card text-foreground/85 hover:text-foreground"
-            )}
-          >
-            Popular
-          </button>
-
-          <button
-            onClick={() => setDietFilter(dietFilter === "SPICY" ? "ALL" : "SPICY")}
-            className={cn(
-              "rounded-full px-3.5 py-1 font-semibold transition-all border",
-              dietFilter === "SPICY"
-                ? "border-primary bg-primary/15 text-primary"
-                : "border-border bg-card text-foreground/85 hover:text-foreground"
-            )}
-          >
-            Spicy
-          </button>
-
-          <button
-            onClick={() => setDietFilter(dietFilter === "BREADS" ? "ALL" : "BREADS")}
-            className={cn(
-              "rounded-full px-3.5 py-1 font-semibold transition-all border",
-              dietFilter === "BREADS"
-                ? "border-primary bg-primary/15 text-primary"
-                : "border-border bg-card text-foreground/85 hover:text-foreground"
-            )}
-          >
-            Breads
-          </button>
-        </div>
       </header>
+
+      {/* Auto-rotating dish photo carousel */}
+      {heroPhotos.length > 0 && !searchQuery && (
+        <div className="ed-enter px-5 pt-3" style={{ ["--delay" as string]: "140ms" }}>
+          <div
+            className="relative aspect-[16/10] overflow-hidden rounded-[20px] bg-muted"
+            aria-roledescription="carousel"
+            aria-label="Dish photos"
+          >
+            <div
+              className="flex h-full transition-transform duration-700 ease-[cubic-bezier(0.65,0,0.35,1)]"
+              style={{ transform: `translateX(-${slideIndex * 100}%)` }}
+            >
+              {heroPhotos.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  aria-hidden={i !== slideIndex}
+                  className="h-full w-full shrink-0 object-cover"
+                  onError={(e) => {
+                    const fb = DISH_IMAGE_FALLBACKS.default;
+                    if (e.currentTarget.src !== fb) e.currentTarget.src = fb;
+                  }}
+                />
+              ))}
+            </div>
+            {heroPhotos.length > 1 && (
+              <div className="absolute inset-x-0 bottom-2 flex justify-center gap-0.5">
+                {heroPhotos.map((src, i) => (
+                  <button
+                    key={src}
+                    type="button"
+                    aria-label={`Photo ${i + 1}`}
+                    onClick={() => setSlide(i)}
+                    className="flex items-center justify-center p-1"
+                  >
+                    <span
+                      className={cn(
+                        "block h-1.5 rounded-full bg-white transition-all duration-300",
+                        i === slideIndex ? "w-5 opacity-100" : "w-1.5 opacity-60"
+                      )}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Filter chips */}
+      <div className="ed-no-scrollbar mt-4 flex items-center gap-2 overflow-x-auto px-5 text-xs">
+        <button
+          onClick={() => setDietFilter(dietFilter === "VEG" ? "ALL" : "VEG")}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors duration-200",
+            dietFilter === "VEG"
+              ? "border-success bg-success/10 text-success"
+              : "border-border bg-white text-foreground/80 hover:border-foreground/40 hover:text-foreground"
+          )}
+        >
+          <span className="flex h-3 w-3 items-center justify-center rounded-[2px] border border-emerald-600 p-[1.5px]">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+          </span>
+          Veg
+        </button>
+        {(["POPULAR", "SPICY", "BREADS"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setDietFilter(dietFilter === f ? "ALL" : f)}
+            className={cn(
+              "shrink-0 rounded-full border px-3.5 py-1.5 transition-colors duration-200",
+              dietFilter === f
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-white text-foreground/80 hover:border-foreground/40 hover:text-foreground"
+            )}
+          >
+            {f === "POPULAR" ? "Popular" : f === "SPICY" ? "Spicy" : "Breads"}
+          </button>
+        ))}
+      </div>
+
+      {/* Sticky category pill tabs + scroll-progress bar */}
+      {filteredCategories.length > 0 && (
+        <div className="sticky top-0 z-30 mt-3 bg-background/90 px-5 pt-3 pb-2 backdrop-blur-md">
+          <div ref={tabsRef} onScroll={updateTabsBar} className="ed-no-scrollbar overflow-x-auto">
+            <div className="flex w-max gap-1">
+              {filteredCategories.map((cat) => {
+                const active = cat.id === currentCatId;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    data-cat={cat.id}
+                    aria-current={active ? "true" : undefined}
+                    onClick={() => scrollToCategory(cat.id)}
+                    className={cn(
+                      "shrink-0 rounded-full px-4 py-2 text-[15px] transition-colors duration-200",
+                      active ? "bg-[#111] text-white" : "text-foreground/80 hover:bg-black/5 hover:text-foreground"
+                    )}
+                  >
+                    {cat.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-2 h-[3px] rounded-full bg-black/[0.06]" aria-hidden>
+            <div
+              className="h-full rounded-full bg-black/35 transition-[margin,width] duration-150"
+              style={{ width: `${tabsBar.width}%`, marginLeft: `${tabsBar.left}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <DeliveryRedirectBanner qrToken={qrToken} redirect={data?.deliveryRedirect} />
 
-      {/* DISH SECTIONS (Image 3 match) */}
-      <main className="px-4 py-4 space-y-6">
+      {/* DISH SECTIONS */}
+      <main className="space-y-10 px-5 pt-4">
+        {filteredCategories.length === 0 && (
+          <p className="py-16 text-center text-sm text-muted-foreground">No dishes match.</p>
+        )}
         {filteredCategories.map((cat) => (
-          <section key={cat.id} id={`cat-${cat.id}`}>
-            <div className="flex items-center justify-between border-b border-border pb-2">
-              <h2 className="text-lg font-bold text-foreground">
-                {cat.name.includes("Starters") ? "Recommended" : cat.name}
-              </h2>
-            </div>
+          <section key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-24">
+            <h2 className="mb-4 font-heading text-[20px] font-normal tracking-[-0.01em] text-foreground">
+              {cat.name.includes("Starters") ? "Recommended" : cat.name}
+            </h2>
 
-            <div className="divide-y divide-border">
+            <div className="flex flex-col gap-3">
               {cat.items.map((item) => {
                 const qtyInCart = getItemQuantityInCart(item.id);
                 const dishImg = getDishImage(item, cat.name);
 
                 return (
-                  <div key={item.id} className="flex items-start justify-between gap-3 py-4">
-                    {/* Left: Dish Info */}
-                    <div className="flex-1 pr-2">
-                      <div className="flex items-center gap-2">
-                        {item.isVeg ? (
-                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-emerald-500 p-[1px]">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                          </span>
-                        ) : (
-                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-rose-500 p-[1px]">
-                            <span className="h-2 w-2 rounded-full bg-rose-500" />
-                          </span>
-                        )}
-                        <span className="text-[11px] font-semibold text-primary">
-                          ― Highly reordered
-                        </span>
-                      </div>
+                  <article
+                    key={item.id}
+                    className="group flex min-h-[150px] overflow-hidden rounded-2xl bg-[#111] text-white shadow-[0_16px_30px_-22px_rgba(0,0,0,0.7)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_40px_-22px_rgba(0,0,0,0.8)]"
+                  >
+                    {/* Photo (opens the dish detail) */}
+                    <button
+                      type="button"
+                      onClick={() => openItemOptions(item, cat.name)}
+                      aria-label={`View ${item.name}`}
+                      className="relative w-[38%] shrink-0 overflow-hidden bg-neutral-800"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={dishImg}
+                        alt={item.name}
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                          const t = e.currentTarget;
+                          const fb = getDishImage({ ...item, imageUrl: null }, cat.name);
+                          if (t.src !== fb) t.src = fb;
+                        }}
+                      />
+                    </button>
 
-                      <h3 className="mt-1 text-sm font-bold text-foreground leading-snug">
-                        {item.name}
-                      </h3>
-                      {item.isCombo && (
-                        <div className="mt-1 flex flex-col gap-0.5">
-                          <span className="inline-flex w-fit items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                            Combo Meal
+                    <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 p-4">
+                      <button type="button" onClick={() => openItemOptions(item, cat.name)} className="text-left">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border bg-white p-[1px]",
+                              item.isVeg ? "border-emerald-500" : "border-rose-500"
+                            )}
+                            role="img"
+                            aria-label={item.isVeg ? "Veg" : "Non-veg"}
+                          >
+                            <span className={cn("h-2 w-2 rounded-full", item.isVeg ? "bg-emerald-500" : "bg-rose-500")} />
                           </span>
-                          {item.comboComponents && item.comboComponents.length > 0 && (
-                            <p className="text-[11px] text-muted-foreground leading-tight">
-                              Serves {item.comboComponents.reduce((acc, c) => acc + (c.quantity || 1), 0)} · Includes: {item.comboComponents.map((c) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
-                            </p>
-                          )}
+                          <span className="text-[10px] text-lime/80">― Highly reordered</span>
                         </div>
-                      )}
-                      <div className="mt-1 text-sm font-bold text-foreground">
-                        {formatCurrency(item.price)}
-                      </div>
+                        <h3 className="mt-1.5 text-[15px] leading-snug font-normal text-white">{item.name}</h3>
+                        {item.isCombo && (
+                          <div className="mt-1 flex flex-col gap-0.5">
+                            <span className="inline-flex w-fit items-center rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                              Combo Meal
+                            </span>
+                            {item.comboComponents && item.comboComponents.length > 0 && (
+                              <p className="text-[11px] leading-tight text-white/55">
+                                Serves {item.comboComponents.reduce((acc, c) => acc + (c.quantity || 1), 0)} · Includes: {item.comboComponents.map((c) => `${c.quantity}× ${c.componentItem?.name || "Item"}`).join(", ")}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {item.description && (
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/55">{item.description}</p>
+                        )}
+                      </button>
 
-                      {item.description && (
-                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                          {item.description}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Right: Dish Photo & Gold Stepper (Image 3 match) */}
-                    <div className="relative shrink-0 flex flex-col items-center">
-                      <div className="h-24 w-24 overflow-hidden rounded-2xl bg-secondary shadow-md">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={dishImg}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
-                            const t = e.currentTarget;
-                            const fb = getDishImage({ ...item, imageUrl: null }, cat.name);
-                            if (t.src !== fb) t.src = fb;
-                          }}
-                        />
-                      </div>
-
-                      <div className="-mt-3.5">
+                      <div className="flex items-end justify-between gap-2">
+                        <div className="flex flex-col">
+                          <span className="tabular text-[15px] text-white">{formatCurrency(item.price)}</span>
+                          <span className="text-[10px] text-white/40">customisable</span>
+                        </div>
                         {qtyInCart > 0 ? (
-                          <div className="flex h-8 items-center gap-3 rounded-xl bg-primary px-3 shadow-lg text-primary-foreground font-extrabold text-xs">
+                          <div className="flex h-10 items-center rounded-full bg-lime text-lime-foreground">
                             <button
+                              type="button"
+                              aria-label={`Remove one ${item.name}`}
                               onClick={() => removeSimpleItem(item.id)}
-                              className="px-1 text-sm hover:opacity-80"
+                              className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/10"
                             >
-                              −
+                              <Minus className="h-4 w-4" />
                             </button>
-                            <span className="w-3 text-center">{qtyInCart}</span>
+                            <span className="tabular w-5 text-center text-sm font-semibold">{qtyInCart}</span>
                             <button
+                              type="button"
+                              aria-label={`Add one ${item.name}`}
                               onClick={() => addSimpleItem(item, cat.name)}
-                              className="px-1 text-sm hover:opacity-80"
+                              className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/10"
                             >
-                              +
+                              <Plus className="h-4 w-4" />
                             </button>
                           </div>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => {
-                              const defaultMods = (item.modifierGroups || [])
-                                .flatMap((g) => g.modifierGroup.modifiers)
-                                .filter((m) => m.isDefault)
-                                .map((m) => m.id);
-                              setCustomizingItem({ item, categoryName: cat.name });
-                              setCustomizingQty(1);
-                              setCookingNote("");
-                              setSelectedModifierIds(defaultMods);
-                            }}
-                            className="flex h-8 items-center rounded-xl bg-primary px-3.5 text-xs font-bold text-primary-foreground shadow-lg hover:bg-[var(--primary-hover)]"
+                            onClick={() => openItemOptions(item, cat.name)}
+                            className="flex h-10 items-center gap-1 rounded-full bg-white px-4 text-xs font-semibold text-[#1A1A1A] transition-all duration-200 hover:bg-lime active:scale-95"
                           >
-                            ADD +
+                            ADD <Plus className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </div>
-                      <span className="mt-1 text-[10px] text-muted-foreground">customisable</span>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>
@@ -1631,34 +1830,33 @@ export default function LuxuryCustomerMenu({
         <PoweredByEasyDine tone="light" className="mt-8" />
       </main>
 
-      {/* Floating Category Menu Button (Image 3 match: [ ☰ Menu ]) */}
-      <div className="fixed bottom-20 left-1/2 z-30 -translate-x-1/2">
+      {/* Floating category menu button */}
+      <div className={cn("fixed left-1/2 z-30 -translate-x-1/2 transition-[bottom] duration-300", cartTotalDishes > 0 ? "bottom-24" : "bottom-6")}>
         <button
           onClick={() => setShowCategorySheet(true)}
-          className="flex items-center gap-2 rounded-full border border-border bg-card/90 px-4 py-2 text-xs font-bold text-foreground shadow-2xl backdrop-blur-md hover:bg-secondary"
+          className="flex items-center gap-2 rounded-full border border-black/10 bg-white/85 px-4 py-2 text-xs font-medium text-foreground shadow-[0_10px_30px_-12px_rgba(0,0,0,0.3)] backdrop-blur-md transition-all duration-200 hover:-translate-y-px hover:bg-white"
         >
-          <span>☰ Menu</span>
+          <MenuIcon className="h-3.5 w-3.5" />
+          <span>Menu</span>
         </button>
       </div>
 
-      {/* Sticky Bottom Bar (Image 3 match: 3 dishes · ₹620   View order >) */}
+      {/* Sticky cart bar */}
       {cartTotalDishes > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-background via-background/80 to-transparent">
-          <div
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-gradient-to-t from-background via-background/80 to-transparent px-4 pt-6 pb-4">
+          <button
+            type="button"
             onClick={() => setShowCartDrawer(true)}
-            className="flex cursor-pointer items-center justify-between rounded-2xl bg-primary p-4 font-bold text-primary-foreground shadow-xl hover:bg-[var(--primary-hover)]"
+            className="mx-auto flex w-full max-w-[488px] items-center justify-between rounded-full bg-[#111] py-2.5 pr-2.5 pl-6 text-white shadow-[0_20px_40px_-20px_rgba(0,0,0,0.7)] transition-all duration-300 hover:-translate-y-0.5"
           >
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-primary-foreground/80">
-                {cartTotalDishes} {cartTotalDishes === 1 ? "dish" : "dishes"} · ₹{cartTotalPrice.toFixed(0)}
-              </span>
-              <span className="text-base font-black">View order</span>
-            </div>
-
-            <div className="flex items-center gap-1 text-base font-extrabold">
-              <span>›</span>
-            </div>
-          </div>
+            <span className="tabular text-sm">
+              {cartTotalDishes} {cartTotalDishes === 1 ? "dish" : "dishes"} · ₹{cartTotalPrice.toFixed(0)}
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-lime px-5 py-2.5 text-sm font-semibold text-lime-foreground">
+              View order
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          </button>
         </div>
       )}
 
@@ -1703,21 +1901,54 @@ export default function LuxuryCustomerMenu({
       {/* CUSTOMISE MODAL WITH AUDIO MIC & EXTRAS */}
       {customizingItem && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-border bg-card p-5 text-foreground shadow-2xl">
-            <div className="flex items-start justify-between border-b border-border pb-3">
-              <div>
-                <h3 className="text-base font-bold text-foreground">{customizingItem.item.name}</h3>
-                <p className="text-sm font-black text-primary">
-                  {formatCurrency(customizingItem.item.price)}
-                </p>
-              </div>
+          <div className="ed-enter max-h-[94vh] w-full max-w-[520px] overflow-y-auto rounded-t-[28px] bg-background p-4 text-foreground shadow-2xl sm:rounded-[28px]">
+            {/* Dish detail: large photo, name, price, ingredients */}
+            <div className="relative overflow-hidden rounded-[20px] bg-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={getDishImage(customizingItem.item, customizingItem.categoryName)}
+                alt={customizingItem.item.name}
+                className="aspect-[16/10] w-full object-cover"
+                onError={(e) => {
+                  const fb = getDishImage({ ...customizingItem.item, imageUrl: null }, customizingItem.categoryName);
+                  if (e.currentTarget.src !== fb) e.currentTarget.src = fb;
+                }}
+              />
               <button
+                type="button"
+                aria-label="Close"
                 onClick={() => setCustomizingItem(null)}
-                className="rounded-full bg-secondary p-1 text-muted-foreground hover:text-foreground"
+                className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-foreground backdrop-blur transition-colors hover:bg-white"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
+            <div className="mt-4 flex items-start justify-between gap-4 px-1">
+              <div className="min-w-0">
+                <h3 className="font-heading text-[26px] leading-tight font-normal tracking-[-0.02em] text-foreground">
+                  {customizingItem.item.name}
+                </h3>
+                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span
+                    className={cn(
+                      "flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border bg-white p-[1px]",
+                      customizingItem.item.isVeg ? "border-emerald-500" : "border-rose-500"
+                    )}
+                  >
+                    <span className={cn("h-2 w-2 rounded-full", customizingItem.item.isVeg ? "bg-emerald-500" : "bg-rose-500")} />
+                  </span>
+                  <span>{customizingItem.item.isVeg ? "Veg" : "Non-veg"}</span>
+                  {customizingItem.item.isCombo && <span>· Combo Meal</span>}
+                </div>
+              </div>
+              <p className="tabular shrink-0 pt-1 text-[20px] font-light text-foreground">
+                {formatCurrency(customizingItem.item.price)}
+              </p>
+            </div>
+            {customizingItem.item.description && (
+              <p className="mt-3 px-1 text-[15px] leading-relaxed text-foreground/80">{customizingItem.item.description}</p>
+            )}
+            <div className="mt-4 border-t border-border" />
 
             {/* Cooking Request input + Audio Voice Mic */}
             <div className="mt-4">
@@ -1838,7 +2069,7 @@ export default function LuxuryCustomerMenu({
 
                   {/* Quantity Stepper & Add Button */}
                   <div className="mt-5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-sm font-bold">
+                    <div className="flex items-center gap-3 rounded-full border border-foreground/20 bg-white px-4 py-2 text-sm font-semibold">
                       <button
                         type="button"
                         onClick={() => setCustomizingQty((q) => Math.max(1, q - 1))}
@@ -1895,7 +2126,7 @@ export default function LuxuryCustomerMenu({
                         toast.success(`Added ${customizingItem.item.name}`);
                         setCustomizingItem(null);
                       }}
-                      className="flex-1 rounded-xl bg-primary py-3 text-sm font-black text-primary-foreground hover:bg-[var(--primary-hover)]"
+                      className="flex-1 rounded-full bg-lime py-3.5 text-sm font-semibold text-lime-foreground transition-all duration-200 hover:bg-lime-hover active:scale-[0.98]"
                     >
                       Add item · ₹{(lineUnitPrice * customizingQty).toFixed(0)}
                     </button>
@@ -1903,6 +2134,16 @@ export default function LuxuryCustomerMenu({
                 </>
               );
             })()}
+
+            <div className="mt-5 flex justify-center pb-1">
+              <button
+                type="button"
+                onClick={() => setCustomizingItem(null)}
+                className="rounded-full border border-foreground px-5 py-2.5 text-sm text-foreground transition-colors duration-200 hover:bg-foreground hover:text-background"
+              >
+                Go back to {customizingItem.categoryName}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1910,7 +2151,7 @@ export default function LuxuryCustomerMenu({
       {/* CART / YOUR ORDER DRAWER */}
       {showCartDrawer && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-border bg-card p-5 text-foreground max-h-[90vh] overflow-y-auto">
+          <div className="ed-enter w-full max-w-[520px] rounded-t-[28px] sm:rounded-[28px] border border-border bg-background p-5 text-foreground max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-base font-bold text-foreground">
                 Your order ({isTakeaway ? "Takeaway" : (data?.tableName || "Table")})
