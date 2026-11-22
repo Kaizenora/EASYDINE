@@ -10,5 +10,6 @@ import { PublicMenuService } from './public-menu.service';
   imports: [OrdersModule, NotificationsModule],
   controllers: [PublicMenuController, PublicKioskController],
   providers: [PublicMenuService, PublicKioskService],
+  exports: [PublicMenuService],
 })
 export class PublicModule {}

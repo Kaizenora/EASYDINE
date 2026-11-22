@@ -140,6 +140,25 @@ export class PublicMenuService {
   }
 
   /**
+   * The same dishes the guest sees on this QR's menu, flattened to what voice
+   * ordering needs (id, name, price). Resolved exactly like getMenuByQrToken,
+   * so it is always this restaurant's branch only.
+   */
+  async voiceMenu(qrToken: string) {
+    const { isTakeaway, branch, table } = await this.resolveTarget(qrToken);
+    if (!isTakeaway && table?.status === 'OUT_OF_SERVICE') {
+      throw new NotFoundException(OUT_OF_SERVICE_MESSAGE);
+    }
+    const categories = await this.menuCategoriesForBranch(branch.id);
+    return {
+      branchId: branch.id,
+      items: categories.flatMap((c) =>
+        c.items.map((i) => ({ id: i.id, name: i.name, price: Number(i.price) })),
+      ),
+    };
+  }
+
+  /**
    * A guest's points balance for the phone they typed. Needs the QR token (so
    * it is scoped to that restaurant's branch) and only ever returns the
    * number; never a name, history or any other detail.
