@@ -1,7 +1,7 @@
 "use client";
 
 // Records one short utterance with MediaRecorder (webm/opus where supported).
-// Tap to start; it stops on tap, after 3 s of silence once speech was heard,
+// Tap to start; it stops on tap, after ~2 s of silence once speech was heard,
 // or at 25 s. Audio stays in memory only and is handed to `onAudio` once.
 
 import { useEffect, useRef, useState } from "react";
@@ -9,7 +9,7 @@ import { MAX_RECORDING_MS } from "@/lib/voice-order";
 
 export type RecorderError = "denied" | "unsupported" | "silence";
 
-const SILENCE_AFTER_SPEECH_MS = 3_000;
+const SILENCE_AFTER_SPEECH_MS = 1_800;
 /** Before the first word, give a little longer to start speaking. */
 const SILENCE_BEFORE_SPEECH_MS = 6_000;
 const LOUD_RMS = 0.02;

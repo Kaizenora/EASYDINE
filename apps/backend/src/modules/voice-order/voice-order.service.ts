@@ -10,10 +10,12 @@ import {
   labelOf,
   orderLlmSchema,
   orderSystemPrompt,
+  quickCashierCommand,
   resolveCashier,
   resolveOrder,
   type CashierCommand,
   type ParsedOrder,
+  type VoiceMenuRow,
   type VoiceTableRow,
 } from './voice-order.logic';
 
@@ -69,9 +71,11 @@ export class VoiceOrderService {
     );
   }
 
-  async guestParse(qrToken: string, transcript: string): Promise<ParsedOrder> {
-    const { items } = await this.publicMenu.voiceMenu(qrToken);
-    if (items.length === 0) return { items: [], unmatched: [] };
+  private async parseWithMenu(
+    items: VoiceMenuRow[],
+    transcript: string,
+  ): Promise<ParsedOrder> {
+    if (items.length === 0 || !transcript) return { items: [], unmatched: [] };
     const out = await this.sarvam.chatJson(
       orderSystemPrompt(items),
       transcript,
@@ -79,6 +83,24 @@ export class VoiceOrderService {
       orderLlmSchema,
     );
     return resolveOrder(items, out);
+  }
+
+  async guestParse(qrToken: string, transcript: string): Promise<ParsedOrder> {
+    const { items } = await this.publicMenu.voiceMenu(qrToken);
+    return this.parseWithMenu(items, transcript);
+  }
+
+  /** STT + parse in one request: one round trip from the guest's phone. */
+  async guestAudio(
+    qrToken: string,
+    audio: VoiceAudio | undefined,
+  ): Promise<ParsedOrder & Transcription> {
+    const { items } = await this.publicMenu.voiceMenu(qrToken);
+    const stt = await this.transcribeAndDiscard(
+      audio,
+      buildKeyterms(items.map((i) => i.name)),
+    );
+    return { ...stt, ...(await this.parseWithMenu(items, stt.transcript)) };
   }
 
   // ---------------------------------------------------------------- cashier
@@ -91,29 +113,36 @@ export class VoiceOrderService {
     });
   }
 
+  private cashierKeyterms(tables: VoiceTableRow[]): string[] {
+    return buildKeyterms([...CASHIER_COMMAND_WORDS, ...tables.map(labelOf)]);
+  }
+
   async staffTranscribe(
     branchId: string,
     audio: VoiceAudio | undefined,
   ): Promise<Transcription> {
     const tables = await this.tablesFor(branchId);
-    return this.transcribeAndDiscard(
-      audio,
-      buildKeyterms([...CASHIER_COMMAND_WORDS, ...tables.map(labelOf)]),
-    );
+    return this.transcribeAndDiscard(audio, this.cashierKeyterms(tables));
   }
 
   async cashierCommand(
     branchId: string,
     transcript: string,
+    known?: VoiceTableRow[],
   ): Promise<CashierCommandResult> {
-    const tables = await this.tablesFor(branchId);
-    const out = await this.sarvam.chatJson(
-      cashierSystemPrompt(tables),
-      transcript,
-      'cashier_command',
-      cashierLlmSchema,
-    );
-    const cmd = resolveCashier(tables, out);
+    const tables = known ?? (await this.tablesFor(branchId));
+    // Plain commands skip the LLM entirely; the rest go to it.
+    const cmd =
+      quickCashierCommand(transcript, tables) ??
+      resolveCashier(
+        tables,
+        await this.sarvam.chatJson(
+          cashierSystemPrompt(tables),
+          transcript,
+          'cashier_command',
+          cashierLlmSchema,
+        ),
+      );
     if (!cmd.table) return { ...cmd, heard: transcript, order: null };
 
     const select = { id: true, orderNumber: true, status: true } as const;
@@ -131,5 +160,21 @@ export class VoiceOrderService {
       });
     }
     return { ...cmd, heard: transcript, order };
+  }
+
+  /** STT + command in one request, for the always-listening cashier mic. */
+  async cashierAudio(
+    branchId: string,
+    audio: VoiceAudio | undefined,
+  ): Promise<CashierCommandResult> {
+    const tables = await this.tablesFor(branchId);
+    const { transcript } = await this.transcribeAndDiscard(
+      audio,
+      this.cashierKeyterms(tables),
+    );
+    if (!transcript) {
+      return { action: 'unknown', table: null, heard: '', order: null };
+    }
+    return this.cashierCommand(branchId, transcript, tables);
   }
 }

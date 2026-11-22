@@ -10,11 +10,9 @@ import { ChevronLeft, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { BranchNotice } from "@/components/layout/branch-notice";
-import { CashierVoice } from "@/components/pos/cashier-voice";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBranch } from "@/hooks/use-branch";
-import { useFloors } from "@/hooks/use-tables";
 import { api, ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -37,7 +35,6 @@ const localDay = (d: Date) =>
 
 export default function BestsellersPage() {
   const { branchId } = useBranch();
-  const tables = useFloors(branchId).data?.flatMap((f) => f.tables) ?? [];
   const [range, setRange] = useState<RangeKey>("today");
   const [today] = useState(() => new Date());
   const days = RANGES.find((r) => r.key === range)?.days ?? 1;
@@ -66,7 +63,6 @@ export default function BestsellersPage() {
           <ChevronLeft className="h-4 w-4" />
           Back to POS
         </Link>
-        <CashierVoice branchId={branchId} tables={tables} />
       </div>
       <div>
         <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Best selling dishes</h1>

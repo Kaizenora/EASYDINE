@@ -60,6 +60,17 @@ export class PublicVoiceOrderController {
     return this.voice.guestTranscribe(qrToken, audio);
   }
 
+  /** STT + parse in one round trip (what the guest mic uses). */
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Post('audio')
+  @UseInterceptors(audioUpload)
+  audio(
+    @Param('qrToken') qrToken: string,
+    @UploadedFile() audio?: Express.Multer.File,
+  ) {
+    return this.voice.guestAudio(qrToken, audio);
+  }
+
   @Throttle({ default: { limit: 12, ttl: 60_000 } })
   @Post('parse')
   parse(
@@ -90,6 +101,23 @@ export class StaffVoiceOrderController {
   ) {
     await this.branchAccess.assertAccess(user.restaurantId, branchId);
     return this.voice.staffTranscribe(branchId, audio);
+  }
+
+  /**
+   * STT + command in one round trip, for the always-on cashier mic. Higher
+   * limit: it sends every utterance it hears, most of them not commands.
+   */
+  @Auth('orders.create')
+  @Throttle({ default: { limit: 40, ttl: 60_000 } })
+  @Post('cashier-audio')
+  @UseInterceptors(audioUpload)
+  async cashierAudio(
+    @CurrentUser() user: SessionUser,
+    @Query('branchId') branchId: string,
+    @UploadedFile() audio?: Express.Multer.File,
+  ) {
+    await this.branchAccess.assertAccess(user.restaurantId, branchId);
+    return this.voice.cashierAudio(branchId, audio);
   }
 
   @Auth('orders.create')

@@ -95,9 +95,8 @@ export function VoiceOrder({
     return t("voice.network");
   };
 
-  const parse = async (transcript: string) => {
+  const apply = (transcript: string, res: ParsedVoiceOrder) => {
     setHeard((h) => (h ? `${h} · ${transcript}` : transcript));
-    const res = await api.post<ParsedVoiceOrder>(`${base}/parse`, { transcript });
     if (res.items.length === 0 && res.unmatched.length === 0) {
       setMessage(t("voice.nothingMatched"));
       return;
@@ -118,22 +117,26 @@ export function VoiceOrder({
     setUnmatched((prev) => [...prev, ...res.unmatched.map((u) => ({ key: ++nextKey, ...u }))]);
   };
 
+  const parse = async (transcript: string) => apply(transcript, await api.post<ParsedVoiceOrder>(`${base}/parse`, { transcript }));
+
   const onAudio = async (blob: Blob) => {
     setBusy(true);
     setMessage(null);
     try {
-      const stt = await api.postForm<Transcription>(`${base}/stt`, audioForm(blob));
-      if (!stt.transcript) {
-        setMessage(t("voice.nothingHeard"));
-        return;
-      }
       if (target.kind === "qty") {
+        const stt = await api.postForm<Transcription>(`${base}/stt`, audioForm(blob));
         const qty = spokenQuantity(stt.transcript);
         if (qty === null) setMessage(t("voice.nothingHeard"));
         else setQty(target.key, qty);
         return;
       }
-      await parse(stt.transcript);
+      // Transcribe and understand in one request: one round trip.
+      const res = await api.postForm<ParsedVoiceOrder & Transcription>(`${base}/audio`, audioForm(blob));
+      if (!res.transcript) {
+        setMessage(t("voice.nothingHeard"));
+        return;
+      }
+      apply(res.transcript, res);
     } catch (err) {
       setMessage(failMessage(err));
     } finally {
