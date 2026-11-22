@@ -150,5 +150,9 @@
   "voice.nothingHeard": "कळले नाही. पुन्हा सांगा.",
   "voice.nothingMatched": "या डिश मेनूमध्ये सापडल्या नाहीत. पुन्हा सांगा किंवा मेनूमधून निवडा.",
   "voice.notePlaceholder": "स्वयंपाक सूचना",
-  "voice.resolveFirst": "पुढे जाण्यासाठी वरील प्रश्नांची उत्तरे द्या"
+  "voice.resolveFirst": "पुढे जाण्यासाठी वरील प्रश्नांची उत्तरे द्या",
+  "nav.bills": "बिले",
+  "nav.group.service": "सेवा",
+  "nav.group.restaurant": "रेस्टॉरंट",
+  "nav.group.admin": "ॲडमिन"
 }

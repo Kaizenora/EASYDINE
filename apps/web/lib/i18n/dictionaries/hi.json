@@ -150,5 +150,9 @@
   "voice.nothingHeard": "समझ नहीं आया। फिर से बोलें।",
   "voice.nothingMatched": "ये डिश मेन्यू में नहीं मिलीं। फिर से बोलें या मेन्यू से चुनें।",
   "voice.notePlaceholder": "कुकिंग नोट",
-  "voice.resolveFirst": "आगे बढ़ने के लिए ऊपर के सवालों का जवाब दें"
+  "voice.resolveFirst": "आगे बढ़ने के लिए ऊपर के सवालों का जवाब दें",
+  "nav.bills": "बिल",
+  "nav.group.service": "सर्विस",
+  "nav.group.restaurant": "रेस्टोरेंट",
+  "nav.group.admin": "एडमिन"
 }
