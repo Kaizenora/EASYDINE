@@ -1,5 +1,6 @@
 import {
   buildKeyterms,
+  quickCashierCommand,
   cashierLlmSchema,
   orderLlmSchema,
   resolveCashier,
@@ -129,5 +130,51 @@ describe('buildKeyterms', () => {
     expect(out[0]).toBe('Naan');
     expect(out[1]).toHaveLength(64);
     expect(out).toHaveLength(50);
+  });
+});
+
+describe('quickCashierCommand (no LLM)', () => {
+  const tables: VoiceTableRow[] = [
+    { id: 't1', number: '1', name: null },
+    { id: 't2', number: '2', name: null },
+    { id: 't3', number: '3', name: null },
+  ];
+  const q = (s: string) => quickCashierCommand(s, tables);
+  const T2 = { id: 't2', label: 'T2' };
+
+  it.each([
+    ['table 2', 'openTable'],
+    ['Table 2 ka order', 'openTable'],
+    ['T2', 'openTable'],
+    ['table 2 paid', 'markPaid'],
+    ['टेबल 2 पेड', 'markPaid'],
+    ['टेबल दो पेमेंट हो गया', 'markPaid'],
+    ['टेबल दोन पेड', 'markPaid'],
+    ['टेबल २ चे पैसे मिळाले', 'markPaid'],
+    ['table do KOT reprint', 'reprintKOT'],
+    ['टेबल दोनचा के ओ टी परत काढा', 'reprintKOT'],
+    ['table 2 bill reprint karo', 'reprintBill'],
+    ['टेबल दोनचे बिल काढा', 'reprintBill'],
+  ])('"%s" -> %s', (said, action) => {
+    expect(q(said)).toEqual({ action, table: T2 });
+  });
+
+  it('best sellers in any language, no table', () => {
+    for (const s of [
+      'best selling dish',
+      'aaj ka best seller',
+      'सबसे ज्यादा बिकने वाली डिश',
+      'आजची सर्वात जास्त विकली गेलेली डिश',
+    ]) {
+      expect(q(s)).toEqual({ action: 'bestSellers', table: null });
+    }
+  });
+
+  it('leaves unclear speech to the LLM', () => {
+    expect(q('hello kaise ho')).toBeNull(); // no table
+    expect(q('table 2 abhi paid nahi hua')).toBeNull(); // negation
+    expect(q('table 9 paid')).toBeNull(); // not a table here
+    expect(q('table 2 se table 3 me shift karo')).toBeNull(); // two tables
+    expect(q('table 2 wale ko pani do')).toBeNull(); // not a command word
   });
 });

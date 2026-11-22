@@ -10,7 +10,6 @@ import {
   Layers,
   PhoneCall,
   Plus,
-  Printer,
   QrCode,
   Receipt,
   RotateCcw,
@@ -35,20 +34,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
-import { getCashierPaperSize, openReceiptPrint } from "@/lib/print";
-import { printKotInFrame, reserveKotPrintFrame } from "@/lib/kot-print-dialog";
-import { settleReceiptHtml } from "@/lib/settle-receipt";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BillTableDialog } from "./bill-table-dialog";
 import { TableQrDialog } from "./table-qr-dialog";
 import {
   useRotateTakeawayQrToken,
@@ -65,20 +61,6 @@ interface ModernTableGridProps {
   tables: RestaurantTable[];
   branchId: string | null;
   onRefresh?: () => void;
-}
-
-interface SettleReceipt {
-  /** Set by servers that return it: then the full receipt page is printed. */
-  orderId?: string | null;
-  billNumber: string;
-  tableNumber: string;
-  tableName: string;
-  customerName: string;
-  paymentMethod: "CASH" | "UPI" | "CARD";
-  date: string;
-  subtotal: string;
-  tax: string;
-  totalAmount: string;
 }
 
 function timeAgo(iso?: string): string {
@@ -111,7 +93,6 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [qrTable, setQrTable] = useState<RestaurantTable | null>(null);
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
-  const [settlePaymentMethod, setSettlePaymentMethod] = useState<"CASH" | "UPI" | "CARD">("UPI");
   const [takeawayQrOpen, setTakeawayQrOpen] = useState(false);
   // Takeaway QR = /order/takeaway-<opaque token>; never the branch id.
   const takeawayQr = useTakeawayQrToken(branchId, takeawayQrOpen);
@@ -126,65 +107,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
       ? `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}${takeawayPath}`
       : null;
 
-  // Post-settle Bill Receipt Dialog (User demanded: after confirming, bill must be visible then print option)
-  const [receiptData, setReceiptData] = useState<SettleReceipt | null>(null);
-  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [dispatchedTables, setDispatchedTables] = useState<Record<string, boolean>>({});
-
-  // Settle table mutation
-  const settleMutation = useMutation({
-    mutationFn: ({ tableId, method }: { tableId: string; method: "CASH" | "UPI" | "CARD" }) =>
-      api.post<{
-        success: boolean;
-        orderId?: string | null;
-        billNumber?: string;
-        orderNumber?: string;
-        subtotal?: string;
-        tax?: string;
-        totalAmount?: string;
-        customerName?: string;
-        tableName?: string;
-        tableNumber?: string;
-        date?: string;
-        paymentMethod?: "CASH" | "UPI" | "CARD";
-      }>(`/tables/${tableId}/settle?branchId=${branchId || ""}`, { method }),
-    onSuccess: (res, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-
-      if (selectedTable) {
-        if (!res?.billNumber || !res?.totalAmount) {
-          toast.error("Settlement completed but server did not return valid receipt values.");
-          setSettleDialogOpen(false);
-          return;
-        }
-        const receipt: SettleReceipt = {
-          orderId: res.orderId ?? null,
-          billNumber: res.billNumber,
-          tableNumber: res.tableNumber || String(selectedTable.number),
-          tableName: res.tableName || selectedTable.name || `Table ${selectedTable.number}`,
-          customerName: res.customerName || selectedTable.customerName || "Guest",
-          paymentMethod: res.paymentMethod || vars.method,
-          // This PC's clock: the server's own time string is in its zone (UTC).
-          date: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-          subtotal: res.subtotal ?? "0.00",
-          tax: res.tax ?? "0.00",
-          totalAmount: res.totalAmount,
-        };
-        setReceiptData(receipt);
-        setReceiptDialogOpen(true);
-      }
-
-      setSettleDialogOpen(false);
-      toast.success("Bill confirmed paid! Table is now reset to FREE.");
-      if (onRefresh) onRefresh();
-    },
-    onError: (err) => {
-      toast.error(err instanceof ApiError ? err.message : "Could not settle table");
-    },
-  });
 
   // Acknowledge waiter call / bill request
   const resolveRequest = useMutation({
@@ -718,7 +641,7 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
 
       {/* 4. TABLE DETAILS & ACTIONS MODAL */}
       <Dialog
-        open={!!selectedTable && !settleDialogOpen && !receiptDialogOpen}
+        open={!!selectedTable && !settleDialogOpen}
         onOpenChange={(open) => {
           if (!open) setSelectedTable(null);
         }}
@@ -815,173 +738,21 @@ export function ModernTableGrid({ tables, branchId, onRefresh }: ModernTableGrid
         </DialogContent>
       </Dialog>
 
-      {/* 5. SETTLE BILL CONFIRMATION DIALOG */}
-      <Dialog open={settleDialogOpen} onOpenChange={setSettleDialogOpen}>
-        <DialogContent className="border-neutral-800 bg-[#161619] text-white sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white">
-              <Receipt className="h-5 w-5 text-amber-400" />
-              Settle Bill & Free Table {selectedTable?.number}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-neutral-400">
-              Confirm payment receipt. Table will be reset to FREE and customer name will be cleared.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedTable && (
-            <div className="flex flex-col gap-4 py-2">
-              <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-                <div className="flex justify-between text-xs text-neutral-400">
-                  <span>Customer:</span>
-                  <span className="font-semibold text-white">
-                    {selectedTable.customerName || (selectedTable as any).guestName || "Walk-in Guest"}
-                  </span>
-                </div>
-                <div className="mt-2 flex justify-between text-sm font-semibold text-white">
-                  <span>Total Amount Due:</span>
-                  <span className="text-lg font-black text-amber-400">
-                    ₹{(selectedTable as any).totalAmount || "0.00"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs font-semibold text-neutral-300">Select Payment Method</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["UPI", "CASH", "CARD"] as const).map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setSettlePaymentMethod(method)}
-                      className={cn(
-                        "rounded-xl border py-2.5 text-xs font-bold transition-all",
-                        settlePaymentMethod === method
-                          ? "border-amber-500 bg-amber-500/20 text-amber-300 shadow-sm"
-                          : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white"
-                      )}
-                    >
-                      {method === "UPI" ? "📱 UPI" : method === "CASH" ? "💵 Cash" : "💳 Card"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              className="rounded-xl border-neutral-700 bg-neutral-900 text-xs font-semibold text-white hover:bg-neutral-800"
-              onClick={() => setSettleDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
-              disabled={settleMutation.isPending}
-              onClick={() => {
-                if (selectedTable) {
-                  settleMutation.mutate({ tableId: selectedTable.id, method: settlePaymentMethod });
-                }
-              }}
-            >
-              {settleMutation.isPending ? "Settling..." : "✔ Confirm Paid & Free Table"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 6. POST-SETTLEMENT BILL RECEIPT DIALOG WITH PRINT OPTION */}
-      {receiptData && (
-        <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-          <DialogContent className="border-neutral-800 bg-[#141416] text-white sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center justify-between text-base font-bold text-white">
-                <span className="flex items-center gap-2">
-                  <Receipt className="h-5 w-5 text-amber-400" />
-                  Bill Receipt · Table {receiptData.tableNumber}
-                </span>
-                <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                  PAID & FREED
-                </span>
-              </DialogTitle>
-              <DialogDescription className="text-xs text-neutral-400">
-                Invoice #{receiptData.billNumber} · {receiptData.date}
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Printable Receipt Card */}
-            <div className="rounded-xl border border-neutral-800 bg-[#111113] p-4 text-xs space-y-3 font-mono">
-              <div className="text-center border-b border-dashed border-neutral-800 pb-2">
-                <h4 className="font-sans font-black text-sm text-white">{receiptData.tableName} · Tax Invoice</h4>
-                <p className="text-neutral-500 text-[10px]">EasyDine POS</p>
-              </div>
-
-              <div className="flex justify-between text-neutral-400 text-[11px]">
-                <span>Customer: <strong className="text-white font-sans">{receiptData.customerName}</strong></span>
-                <span>Mode: <strong className="text-amber-400 font-sans">{receiptData.paymentMethod}</strong></span>
-              </div>
-
-              <div className="border-t border-b border-dashed border-neutral-800 py-2 space-y-1">
-                <div className="flex justify-between text-neutral-400 text-[11px]">
-                  <span>Subtotal:</span>
-                  <span>₹{receiptData.subtotal}</span>
-                </div>
-                <div className="flex justify-between text-neutral-400 text-[11px]">
-                  <span>{settingsData?.branch?.taxLabel || "Tax"}:</span>
-                  <span>₹{receiptData.tax}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center text-sm font-black text-white pt-1">
-                <span>TOTAL PAID:</span>
-                <span className="text-base text-amber-400 font-mono">₹{receiptData.totalAmount}</span>
-              </div>
-
-              <p className="text-center text-[10px] text-neutral-600 pt-1">
-                Table {receiptData.tableNumber} is now FREE · Thank you for dining with us!
-              </p>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                variant="outline"
-                className="rounded-xl border-neutral-700 bg-neutral-900 text-xs font-semibold text-white hover:bg-neutral-800"
-                onClick={() => setReceiptDialogOpen(false)}
-              >
-                Close
-              </Button>
-              <Button
-                className="rounded-xl bg-amber-500 text-xs font-bold text-black hover:bg-amber-400"
-                onClick={() => {
-                  // Bill-size print, never the whole page (window.print() printed
-                  // the dashboard on A4). With the order id: the full receipt
-                  // through the normal bill route (Print Helper or dialog).
-                  if (receiptData.orderId && branchId) {
-                    openReceiptPrint(receiptData.orderId, branchId);
-                    return;
-                  }
-                  const slot = reserveKotPrintFrame();
-                  void printKotInFrame(slot, "", "", {
-                    html: settleReceiptHtml(
-                      {
-                        ...receiptData,
-                        tableName: receiptData.tableName,
-                        restaurantName: settingsData?.restaurant?.name ?? undefined,
-                      },
-                      getCashierPaperSize(),
-                    ),
-                  }).then((r) => {
-                    if (r.status === "FAILED") toast.error("Could not open the print dialog for the bill.");
-                  });
-                }}
-              >
-                <Printer className="mr-1.5 h-3.5 w-3.5" />
-                Print Bill
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      {/* 5. BILL: the same full bill as the POS (mode, discount, tip, reprint, print) */}
+      {selectedTable && settleDialogOpen && (
+        <BillTableDialog
+          branchId={branchId}
+          table={selectedTable}
+          open
+          onOpenChange={(open) => {
+            if (open) return;
+            setSettleDialogOpen(false);
+            setSelectedTable(null);
+            queryClient.invalidateQueries({ queryKey: ["floors", branchId] });
+            onRefresh?.();
+          }}
+          onFreeTable={() => handleStatusChange(selectedTable.id, "AVAILABLE")}
+        />
       )}
 
       {/* 7. TAKEAWAY QR CODE DIALOG */}

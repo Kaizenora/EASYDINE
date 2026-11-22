@@ -213,12 +213,12 @@ export function cashierSystemPrompt(tables: readonly VoiceTableRow[]): string {
     list || '(none)',
     '',
     'Actions:',
-    '- openTable: show a table\'s live order ("table 2", "table 2 ka order", "T2 order dikhao").',
-    '- markPaid: the table has paid ("table 2 paid", "table 2 ka payment ho gaya", "टेबल 2 पेड").',
-    '- reprintKOT: print the kitchen ticket again ("table 2 KOT reprint", "KOT dobara").',
-    '- reprintBill: print the bill again ("table 2 bill reprint", "bill print karo").',
-    '- bestSellers: today\'s best selling dishes ("best selling dish", "aaj ka best seller", "sabse zyada bikne wali dish"). table is null.',
-    '- unknown: anything else, or if you are not sure.',
+    '- openTable: show a table\'s live order ("table 2", "table 2 ka order", "T2 order dikhao", "टेबल दोनची ऑर्डर दाखवा", "टेबल २ उघडा").',
+    '- markPaid: the table has paid ("table 2 paid", "table 2 ka payment ho gaya", "टेबल 2 पेड", "टेबल दोनचे पैसे मिळाले", "टेबल दोन पेमेंट झाले").',
+    '- reprintKOT: print the kitchen ticket again ("table 2 KOT reprint", "KOT dobara", "टेबल दोनचा KOT परत काढा").',
+    '- reprintBill: print the bill again ("table 2 bill reprint", "bill print karo", "टेबल दोनचे बिल काढा").',
+    '- bestSellers: today\'s best selling dishes ("best selling dish", "aaj ka best seller", "sabse zyada bikne wali dish", "आजची सर्वात जास्त विकली गेलेली डिश"). table is null.',
+    '- unknown: anything else, including normal conversation between people that is not a command for the cashier screen, or if you are not sure.',
     'table: the number from TABLES whose label or table number the cashier said ("table do"/"टेबल दो"/"T2" = label T2). null if no table was said or it is not in TABLES. Never guess a table.',
     'Reply with JSON only.',
   ].join('\n');
@@ -242,4 +242,179 @@ export function resolveCashier(
     return { action: out.action, table: null };
   // Every other action is about one table; table null tells the UI to ask.
   return { action: out.action, table };
+}
+
+// ------------------------------------------------------------ fast path
+// Plain commands ("table 2 paid", "टेबल दोन पेड", "T3 KOT") are recognised
+// here without the LLM, which saves its round trip. Anything less clear
+// returns null and goes to the LLM as before.
+
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  ek: 1,
+  do: 2,
+  teen: 3,
+  char: 4,
+  chaar: 4,
+  paanch: 5,
+  panch: 5,
+  chhe: 6,
+  saat: 7,
+  aath: 8,
+  nau: 9,
+  das: 10,
+  don: 2,
+  tin: 3,
+  pach: 5,
+  paach: 5,
+  saha: 6,
+  daha: 10,
+  एक: 1,
+  दो: 2,
+  दोन: 2,
+  तीन: 3,
+  चार: 4,
+  पांच: 5,
+  पाँच: 5,
+  पाच: 5,
+  छह: 6,
+  सहा: 6,
+  सात: 7,
+  आठ: 8,
+  नौ: 9,
+  नऊ: 9,
+  दस: 10,
+  दहा: 10,
+  अकरा: 11,
+  ग्यारह: 11,
+  बारा: 12,
+  बारह: 12,
+};
+const TABLE_WORDS = new Set([
+  'table',
+  'tables',
+  'टेबल',
+  'टेबलं',
+  'टेबलचा',
+  'टेबलची',
+  'टेबलचे',
+  'टेबलला',
+]);
+const SKIP_WORDS = new Set(['no', 'number', 'नंबर', 'क्रमांक']);
+/** Words that leave "table N" meaning just "open table N". */
+const OPEN_FILLERS = new Set([
+  'order',
+  'ka',
+  'ki',
+  'ke',
+  'ko',
+  'kholo',
+  'khol',
+  'dikhao',
+  'dikha',
+  'open',
+  'show',
+  'please',
+  'ऑर्डर',
+  'का',
+  'की',
+  'के',
+  'खोलो',
+  'दिखाओ',
+  'चा',
+  'ची',
+  'चे',
+  'उघडा',
+  'दाखवा',
+  'प्लीज',
+]);
+const NEGATION =
+  /\b(nahi|nahin|mat|cancel|don'?t|not)\b|नहीं|नही|नाही|मत|कॅन्सल|रद्द/;
+const DEV_DIGITS = '०१२३४५६७८९';
+
+function normalise(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[०-९]/g, (d) => String(DEV_DIGITS.indexOf(d)))
+    .replace(/\bt\s*-?\s*(\d{1,3})\b/g, 'table $1')
+    .replace(/(टेबल)(\d)/g, '$1 $2')
+    .replace(/(\d)(चा|ची|चे|ला|का|की)/g, '$1 $2')
+    .replace(/[.,!?।]/g, ' ');
+}
+
+function numberToken(tok: string): number | null {
+  if (/^\d{1,3}$/.test(tok)) return parseInt(tok, 10);
+  const bare = tok.replace(/(चा|ची|चे|ला|ं)$/u, '');
+  return NUMBER_WORDS[tok] ?? NUMBER_WORDS[bare] ?? null;
+}
+
+export function quickCashierCommand(
+  transcript: string,
+  tables: readonly VoiceTableRow[],
+): CashierCommand | null {
+  const text = normalise(transcript);
+  if (NEGATION.test(text)) return null;
+  if (
+    /best\s*sell|bestseller|बेस्ट\s*सेल|सबसे\s*ज़?्?यादा\s*बिक|sabse\s*zyada\s*bik|सर्वात\s*जास्त\s*विक/.test(
+      text,
+    )
+  ) {
+    return { action: 'bestSellers', table: null };
+  }
+
+  const toks = text.split(/\s+/).filter(Boolean);
+  let tableNo: number | null = null;
+  let tableEnd = -1;
+  for (let i = 0; i < toks.length; i++) {
+    if (!TABLE_WORDS.has(toks[i])) continue;
+    let j = i + 1;
+    while (j < toks.length && SKIP_WORDS.has(toks[j])) j++;
+    const n = j < toks.length ? numberToken(toks[j]) : null;
+    if (n === null) continue;
+    if (tableNo !== null && tableNo !== n) return null; // two tables: let the LLM decide
+    tableNo = n;
+    tableEnd = j;
+  }
+  if (tableNo === null) return null;
+  const hits = tables.filter(
+    (t) =>
+      labelOf(t) === `T${tableNo}` ||
+      t.number.replace(/^[Tt]+/, '') === String(tableNo),
+  );
+  if (hits.length !== 1) return null;
+  const table = { id: hits[0].id, label: labelOf(hits[0]) };
+
+  if (/\bkot\b|के\s*ओ\s*टी|केओटी|\bk\s*o\s*t\b/.test(text))
+    return { action: 'reprintKOT', table };
+  if (
+    /\bpaid\b|\bpay(ment)?\b|पेड|पेमेंट|पैसे\s*(मिळाले|मिल\s*गए|आले)/.test(text)
+  )
+    return { action: 'markPaid', table };
+  if (/\bbill\b|बिल/.test(text)) return { action: 'reprintBill', table };
+
+  const rest = toks.filter(
+    (t, i) => i !== tableEnd && !TABLE_WORDS.has(t) && !SKIP_WORDS.has(t),
+  );
+  if (rest.every((t) => OPEN_FILLERS.has(t)))
+    return { action: 'openTable', table };
+  return null;
 }

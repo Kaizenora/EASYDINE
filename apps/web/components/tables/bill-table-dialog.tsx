@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckoutPanel } from "@/components/pos/checkout-panel";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -16,11 +17,14 @@ export function BillTableDialog({
   table,
   open,
   onOpenChange,
+  onFreeTable,
 }: {
   branchId: string | null;
   table: RestaurantTable;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Offered when the table has no open bill (e.g. a QR check-in that never ordered). */
+  onFreeTable?: () => void;
 }) {
   const { data: orders, isLoading } = useOpenOrdersForTable(branchId, open ? table.id : null);
   const order = orders?.[0];
@@ -35,9 +39,19 @@ export function BillTableDialog({
         {isLoading ? (
           <Skeleton className="h-64 rounded-xl" />
         ) : !order ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            No open order found for this table.
-          </p>
+          <div className="flex flex-col items-center gap-3 py-6">
+            <p className="text-center text-sm text-muted-foreground">No open order found for this table.</p>
+            {onFreeTable && (
+              <Button
+                onClick={() => {
+                  onFreeTable();
+                  onOpenChange(false);
+                }}
+              >
+                Mark table free
+              </Button>
+            )}
+          </div>
         ) : (
           <CheckoutPanel
             order={order}

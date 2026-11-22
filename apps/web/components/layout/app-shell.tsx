@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import { Suspense, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EntityDialogHost } from "@/components/layout/entity-dialog-host";
+import { CashierVoice } from "@/components/pos/cashier-voice";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { useBranch } from "@/hooks/use-branch";
 import { useDisplaySettings } from "@/hooks/use-settings";
@@ -127,6 +128,7 @@ export function AppShell({
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-1">
+            <CashierVoice user={user} />
             <LanguageSwitcher compact />
             <NotificationBell />
             <UserMenu user={user} />

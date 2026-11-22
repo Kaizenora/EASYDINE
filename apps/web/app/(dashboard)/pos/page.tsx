@@ -11,7 +11,6 @@ import { CartPanel, type DeliveryDetails, type PosOrderType } from "@/components
 import { cartLineKey, portionText, setCartLineNote, splitCartLine, type CartLine, type Portion } from "@/components/pos/cart-line";
 import { clearDraft, switchTableDraft, type Drafts } from "@/lib/pos-drafts";
 import { CheckoutPanel } from "@/components/pos/checkout-panel";
-import { CashierVoice } from "@/components/pos/cashier-voice";
 import { KitchenProgressWidget } from "@/components/pos/kitchen-progress-widget";
 import { ModifierPickerDialog } from "@/components/pos/modifier-picker-dialog";
 import { PosTablePicker } from "@/components/pos/pos-table-picker";
@@ -391,7 +390,6 @@ function PosPageInner() {
           <KitchenProgressWidget branchId={branchId} />
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <CashierVoice branchId={branchId} tables={tables} />
           <button
             type="button"
             onClick={() => {
