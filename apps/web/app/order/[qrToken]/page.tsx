@@ -1,10 +1,10 @@
 "use client";
 
 import { PoweredByEasyDine } from "@/components/order/powered-by";
-import { VoiceOrder, type VoiceAddLine } from "@/components/order/voice-order";
+import { VoiceOrder, type VoiceAddLine, type VoiceMenuItem } from "@/components/order/voice-order";
 import { LOCALES, useI18n } from "@/lib/i18n/context";
 import { GamesDialog, getStoredGameSettings } from "@/components/order/games";
-import { RECOGNITION_LANG, type VoiceMenuItem } from "@/lib/voice-order";
+import { RECOGNITION_LANG } from "@/lib/voice-order";
 import {
   ArrowLeft,
   BellRing,
@@ -727,11 +727,8 @@ export default function LuxuryCustomerMenu({
 
   const voiceMenu = useMemo<VoiceMenuItem[]>(
     () =>
-      [...menuIndex.values()].map(({ item, categoryName }) => ({
+      [...menuIndex.values()].map(({ item }) => ({
         id: item.id,
-        name: item.name,
-        price: item.price,
-        category: categoryName,
         // A required option, or options picked by default, must be chosen on screen.
         needsChoice: (item.modifierGroups || []).some(
           (g) => g.modifierGroup.isRequired || g.modifierGroup.minSelect > 0 || g.modifierGroup.modifiers.some((m) => m.isDefault),
@@ -1582,9 +1579,9 @@ export default function LuxuryCustomerMenu({
 
         {/* Voice ordering: speak a whole order, review it, then add to cart */}
         <VoiceOrder
+          qrToken={qrToken}
           menu={voiceMenu}
           onAdd={addVoiceLines}
-          bottomOffset={cart.length > 0 ? 104 : 16}
           onChooseOptions={(id) => {
             const hit = menuIndex.get(id);
             if (hit) openItemOptions(hit.item, hit.categoryName);

@@ -29,6 +29,7 @@ import { RestaurantsModule } from './modules/restaurants/restaurants.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { PublicModule } from './modules/public/public.module';
+import { VoiceOrderModule } from './modules/voice-order/voice-order.module';
 import { DownloadsModule } from './modules/downloads/downloads.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { GiftCardsModule } from './modules/gift-cards/gift-cards.module';
@@ -75,6 +76,7 @@ import { SystemModule } from './system/system.module';
     ReservationsModule,
     WaitlistModule,
     PublicModule,
+    VoiceOrderModule,
     DownloadsModule,
     CustomersModule,
     GiftCardsModule,
