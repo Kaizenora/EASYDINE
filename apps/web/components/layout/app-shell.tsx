@@ -2,7 +2,7 @@
 
 import type { SessionUser } from "@easydine/types";
 import { Menu } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EntityDialogHost } from "@/components/layout/entity-dialog-host";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -55,17 +55,15 @@ function RestaurantBrand() {
           }}
         />
       ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary font-black text-primary-foreground text-xs shadow-sm">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-heading text-xs font-bold text-primary-foreground">
           {initials}
         </div>
       )}
-      <div className="flex flex-col truncate">
-        <span className="truncate text-sm font-bold tracking-tight text-sidebar-foreground">
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate font-heading text-sm font-semibold tracking-[-0.02em] text-sidebar-foreground">
           {brandName}
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">
-          CASHIER POS
-        </span>
+        <span className="truncate text-xs text-muted-foreground">Cashier</span>
       </div>
     </>
   );
@@ -83,15 +81,17 @@ export function AppShell({
   return (
     <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-        <div className="flex h-16 items-center gap-2 px-5">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+        <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
           <RestaurantBrand />
         </div>
-        <div className="px-3 pb-3">
+        <div className="px-3 pt-3">
           <BranchSwitcher />
         </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          <SidebarNav user={user} />
+        <div className="flex-1 overflow-y-auto py-3">
+          <Suspense fallback={null}>
+            <SidebarNav user={user} />
+          </Suspense>
         </div>
         <BrandFooter />
       </aside>
@@ -100,21 +100,23 @@ export function AppShell({
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-72 bg-sidebar p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <div className="flex h-16 items-center gap-2 px-5">
+          <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
             <RestaurantBrand />
           </div>
-          <div className="px-3 pb-3">
+          <div className="px-3 pt-3">
             <BranchSwitcher />
           </div>
-          <div className="flex-1 overflow-y-auto py-2">
-            <SidebarNav user={user} onNavigate={() => setMobileOpen(false)} />
+          <div className="flex-1 overflow-y-auto py-3">
+            <Suspense fallback={null}>
+              <SidebarNav user={user} onNavigate={() => setMobileOpen(false)} />
+            </Suspense>
           </div>
           <BrandFooter />
         </SheetContent>
       </Sheet>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -130,7 +132,7 @@ export function AppShell({
             <UserMenu user={user} />
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8">{children}</main>
+        <main className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24 lg:pb-6">{children}</main>
         <EntityDialogHost />
       </div>
       <MobileBottomNav user={user} onMore={() => setMobileOpen(true)} />

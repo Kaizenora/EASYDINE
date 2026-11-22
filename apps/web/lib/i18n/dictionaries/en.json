@@ -150,5 +150,9 @@
   "voice.nothingHeard": "Didn't catch that. Please try again.",
   "voice.nothingMatched": "Couldn't find those dishes on the menu. Try again or pick from the menu.",
   "voice.notePlaceholder": "Cooking note",
-  "voice.resolveFirst": "Answer the questions above to continue"
+  "voice.resolveFirst": "Answer the questions above to continue",
+  "nav.bills": "Bills",
+  "nav.group.service": "Service",
+  "nav.group.restaurant": "Restaurant",
+  "nav.group.admin": "Admin"
 }
